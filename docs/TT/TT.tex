@@ -1,0 +1,607 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{lmodern}
+\usepackage{mathtext}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage[left=2cm,right=2cm,top=2cm]{geometry}
+
+\usetikzlibrary{positioning}
+\usetikzlibrary{arrows}
+
+% Define JSON language for listings
+\lstdefinelanguage{json}{
+    basicstyle=\ttfamily\small,
+    numbers=left,
+    numberstyle=\tiny,
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    frame=lines,
+    commentstyle=\color{gray}\upshape,
+    stringstyle=\color{purple},
+    keywordstyle=\color{blue},
+    identifierstyle=\color{black},
+    keywords={true, false, null},
+    morestring=[b]",
+    morecomment=[s]{/*}{*/},
+    morecomment=[l]//,
+    morecomment=[s]{/**}{*/},
+    sensitive=true
+}
+
+\usepackage{titlesec}
+\titleformat{\section}
+{\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}
+{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,
+  breaklines=true,
+  commentstyle=\color{gray},
+  keywordstyle=\color{blue},
+  stringstyle=\color{purple},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=5pt,
+  showstringspaces=false,
+  captionpos=b
+}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  filecolor=magenta,
+  urlcolor=cyan,
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \begin{center}
+    \vspace*{5cm}
+    {\Huge \textbf{Индексатор Содержания Видеолекций}}\\
+    \vspace{1.5cm}
+    {\LARGE Техническое Задание \& План Реализации}\\
+    \vspace{3cm}
+    {\large \today}\\
+    \vfill
+  \end{center}
+
+  \begin{flushright}
+    \textit{Подготовил} \\
+    студент 3 курса \\
+    группы Б22-221 \\
+    Сидюк Д.А.
+  \end{flushright}
+  \vspace{1cm}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Краткое Изложение}
+
+Индексатор содержания видеолекций — это система, предназначенная для обработки множества видеолекций с YouTube по различным академическим дисциплинам, создающая единый поисковый индекс концепций. Система позволяет студентам быстро находить соответствующий образовательный контент в большой базе видео, различая мимолётные упоминания и содержательное освещение концепций.
+
+Основным техническим новшеством системы является применение алгоритмов линейного поиска множественной наибольшей общей подпоследовательности (MLCS) в сочетании с методами обработки естественного языка для идентификации, анализа и индексации академических концепций в транскриптах видео. Система будет интегрирована с параллельно разрабатываемой студенческой платформой, построенной на базе Java Spring с TypeScript/React фронтендом.
+
+\section{Обзор Системы}
+
+\subsection{Цели}
+
+\begin{itemize}
+    \item Создание единого индекса академических концепций по нескольким видеолекциям
+    \item Различение между мимолётными упоминаниями и содержательными объяснениями концепций
+    \item Обеспечение эффективного поиска конкретных концепций с точными временными метками видео
+    \item Поддержка автоматизированной обработки нового видеоконтента с минимальным ручным вмешательством
+    \item Обеспечение бесшовной интеграции с существующей образовательной платформой
+\end{itemize}
+
+\subsection{Обзор Архитектуры}
+
+Система следует модульной архитектуре со специализированными компонентами для каждой фазы конвейера обработки:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.6cm,
+    auto,
+    block/.style={rectangle, draw, fill=blue!10, text width=3.1cm, text centered, rounded corners, minimum height=0.8cm},
+    line/.style={draw, -stealth, thick}
+]
+    % Nodes
+    \node [block] (data) {Сбор Данных};
+    \node [block, right=of data] (preproc) {Предобработка Текста};
+    \node [block, right=of preproc] (concept) {Извлечение Концепций};
+    \node [block, right=of concept] (score) {Оценка Релевантности};
+    \node [block, below=of data, yshift=-0.2cm] (index) {Индексация};
+    \node [block, right=of index] (search) {Поиск \& Извлечение};
+    \node [block, right=of search] (integrate) {Интеграционный Слой};
+
+    % Connections
+    \path [line] (data) -- (preproc);
+    \path [line] (preproc) -- (concept);
+    \path [line] (concept) -- (score);
+    \path [line] (score) |- ([yshift=-0.3cm]score.south) -| (index);
+    \path [line] (index) -- (search);
+    \path [line] (search) -- (integrate);
+\end{tikzpicture}
+\caption{Обзор архитектуры системы}
+\end{figure}
+
+\newpage
+\subsection{Ключевые Технологии}
+
+\begin{itemize}
+    \item \textbf{Языки программирования}: C++ (основные алгоритмы), Python (обработка данных, NLP)
+    \item \textbf{Внешние API}: YouTube Data API v3
+    \item \textbf{Библиотеки NLP}: spaCy, NLTK
+    \item \textbf{База данных}: PostgreSQL (прод), SQLite (разработка)
+    \item \textbf{Интеграция}: REST API, обмен данными в формате JSON
+\end{itemize}
+
+\newpage
+\section{Технические Спецификации}
+
+\subsection{Компонент Сбора Данных}
+
+\subsubsection{Функциональность}
+Компонент сбора данных отвечает за получение метаданных видео и транскриптов с YouTube.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Интеграция с YouTube API}
+    \begin{itemize}
+        \item Реализация Python-клиента для YouTube Data API v3
+        \item Поддержка как ручной, так и пакетной отправки видео
+        \item Обработка ограничений квоты API с дросселированием запросов
+    \end{itemize}
+
+    \item \textbf{Извлечение Транскрипта}
+    \begin{itemize}
+        \item Извлечение сегментов транскрипта с синхронизацией по времени
+        \item Поддержка нескольких языковых опций с приоритизацией
+        \item Обработка автоматически созданных субтитров с фильтрацией по уровню достоверности
+    \end{itemize}
+
+    \item \textbf{Обработка Метаданных}
+    \begin{itemize}
+        \item Извлечение заголовка видео, описания, тегов, продолжительности
+        \item Идентификация специфических метаданных лекции при их наличии
+        \item Хранение метаданных в структурированном формате, связанном с ID видео
+    \end{itemize}
+\end{itemize}
+
+\subsection{Компонент Предобработки Текста}
+
+\subsubsection{Функциональность}
+Компонент предобработки текста нормализует и улучшает текст транскрипта для дальнейшего анализа.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Нормализация Текста}
+    \begin{itemize}
+        \item Очистка и нормализация текста транскрипта
+        \item Сегментация текста на предложения
+        \item Сохранение синхронизации с временными метками
+    \end{itemize}
+
+    \item \textbf{Лингвистический Анализ}
+    \begin{itemize}
+        \item Выполнение частеречной разметки
+        \item Применение лемматизации с сохранением исходного текста
+        \item Идентификация академических дискурсивных маркеров
+    \end{itemize}
+
+    \item \textbf{Структурный Анализ}
+    \begin{itemize}
+        \item Обнаружение структуры лекции (введение, основное содержание, заключение)
+        \item Определение границ разделов на основе дискурсивных маркеров
+        \item Создание структурного слоя метаданных
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Конвейер Обработки}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.3cm,
+    auto,
+    block/.style={rectangle, draw, fill=blue!10, text width=4.2cm, text centered, rounded corners, minimum height=0.7cm},
+    line/.style={draw, -stealth, thick}
+]
+    % First row
+    \node [block] (input) {Входные данные: Сегменты транскрипта};
+    \node [block, right=of input] (clean) {Очистка и нормализация текста};
+    \node [block, right=of clean] (segment) {Сегментация предложений};
+
+    % Second row
+    \node [block, below=of input, yshift=-0.2cm] (pos) {Частеречная разметка};
+    \node [block, right=of pos] (marker) {Идентификация дискурсивных маркеров};
+    \node [block, right=of marker] (struct) {Структурный анализ};
+
+    % Output
+    \node [block, below=of pos, xshift=2.5cm, yshift=-0.2cm, text width=9cm] (output) {Выходные данные: Предобработанный транскрипт с аннотациями};
+
+    % Connections
+    \path [line] (input) -- (clean);
+    \path [line] (clean) -- (segment);
+    \path [line] (segment) |- ([yshift=-0.25cm]segment.south) -| (pos);
+    \path [line] (pos) -- (marker);
+    \path [line] (marker) -- (struct);
+    \path [line] (struct) |- ([yshift=-0.45cm]struct.south) -| (output);
+\end{tikzpicture}
+\caption{Конвейер предобработки текста}
+\end{figure}
+
+\subsection{Компонент Извлечения Концепций}
+
+\subsubsection{Функциональность}
+Компонент извлечения концепций идентифицирует академические концепции в предобработанных транскриптах.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Идентификация Концепций по Предметным Областям}
+    \begin{itemize}
+        \item Реализация пользовательского распознавания именованных сущностей для академических областей
+        \item Применение TF-IDF и TextRank для извлечения терминологии
+        \item Обнаружение многословных академических концепций
+    \end{itemize}
+
+    \item \textbf{Алгоритм Linear MLCS}
+    \begin{itemize}
+        \item Реализация оптимизированной версии линейного MLCS на C++
+        \item Определение общих последовательностей концепций в разных лекциях
+        \item Обнаружение зависимостей концепций и предварительных условий
+    \end{itemize}
+
+    \item \textbf{Контекстный Анализ}
+    \begin{itemize}
+        \item Извлечение контекста, окружающего каждую концепцию
+        \item Анализ лингвистических паттернов, указывающих на объяснение
+        \item Измерение стабильности концепции в контексте
+    \end{itemize}
+\end{itemize}
+
+\subsection{Компонент Оценки Релевантности}
+
+\subsubsection{Функциональность}
+Компонент оценки релевантности определяет глубину освещения для каждого вхождения концепции.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Анализ Глубины Освещения}
+    \begin{itemize}
+        \item Реализация анализа скользящего окна
+        \item Расчет плотности концепции в локальном контексте
+        \item Измерение устойчивого внимания к концепциям
+    \end{itemize}
+
+    \item \textbf{Оценка Академической Значимости}
+    \begin{itemize}
+        \item Анализ паттернов акцентирования внимания преподавателем
+        \item Обнаружение педагогических структур
+        \item Измерение центральности в структуре лекции
+    \end{itemize}
+
+    \item \textbf{Расчет Композитной Релевантности}
+    \begin{itemize}
+        \item Объединение нескольких факторов оценки
+        \item Применение нормализации по всему корпусу видео
+        \item Классификация вхождений по категориям релевантности
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Категории Релевантности}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{8cm}@{}}
+\toprule
+\textbf{Категория} & \textbf{Диапазон Оценки} & \textbf{Описание} \\
+\midrule
+Содержательное Освещение & 70-100 & Подробное объяснение с определениями, примерами и применениями \\
+Умеренное Освещение & 40-69 & Предоставляется некоторое объяснение, но не исчерпывающее \\
+Краткое Упоминание & 10-39 & Концепция упоминается с минимальным контекстом \\
+Мимолетное Упоминание & 0-9 & Концепция упоминается без объяснения \\
+\bottomrule
+\end{tabular}
+\caption{Категории оценки релевантности}
+\end{table}
+
+\subsection{Компонент Индексации}
+
+\subsubsection{Функциональность}
+Компонент индексации создает эффективный поисковый индекс концепций по всем видео.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Построение Инвертированного Индекса}
+    \begin{itemize}
+        \item Реализация оптимизированного инвертированного индекса на C++
+        \item Создание списков вхождений с временными метками и релевантностью
+        \item Применение сжатия для эффективного хранения
+    \end{itemize}
+
+    \item \textbf{Сохранение Индекса}
+    \begin{itemize}
+        \item Реализация сериализации/десериализации
+        \item Поддержка дифференциальных обновлений для нового контента
+        \item Обеспечение потокобезопасного параллельного доступа
+    \end{itemize}
+
+    \item \textbf{Интеграция Графа Знаний}
+    \begin{itemize}
+        \item Преобразование взаимосвязей концепций в структуру графа
+        \item Реализация возможностей навигации по концепциям
+        \item Поддержка семантических запросов отношений
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Структура Индекса}
+\begin{lstlisting}[language=json, caption=Структура инвертированного индекса]
+ConceptIndex {
+  "concept_id": {
+    "canonical_name": "weierstrass theorem",
+    "variants": ["weierstrass theorem", "extreme value theorem"],
+    "concept_type": "theorem",
+    "domain": "mathematical_analysis",
+    "occurrence_count": 42,
+    "postings": [
+      {
+        "video_id": "abc123",
+        "relevance_score": 89,
+        "coverage_type": "substantive",
+        "timestamp_start": 1250.5,
+        "timestamp_end": 1380.2,
+        "segment_id": "abc123_seg42"
+      },
+      // More occurrences...
+    ]
+  },
+  // More concepts...
+}
+\end{lstlisting}
+
+\subsection{Компонент Поиска и Извлечения}
+
+\subsubsection{Функциональность}
+Компонент поиска и извлечения обрабатывает пользовательские запросы и возвращает релевантные сегменты видео.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Обработка Запросов}
+    \begin{itemize}
+        \item Реализация нормализации и расширения запросов
+        \item Преобразование естественного языка в структурированные запросы
+        \item Поддержка запросов взаимосвязей концепций
+    \end{itemize}
+
+    \item \textbf{Поиск по Индексу}
+    \begin{itemize}
+        \item Оптимизация операций булева поиска
+        \item Реализация близостного поиска для запросов с несколькими концепциями
+        \item Применение фильтрации по релевантности
+    \end{itemize}
+
+    \item \textbf{Ранжирование Результатов}
+    \begin{itemize}
+        \item Применение сложного алгоритма ранжирования
+        \item Извлечение точных сегментов видео
+        \item Генерация фрагментов результатов
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Конвейер Обработки Запросов}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.3cm,
+    auto,
+    block/.style={rectangle, draw, fill=blue!10, text width=3.7cm, text centered, rounded corners, minimum height=0.7cm},
+    line/.style={draw, -stealth, thick}
+]
+    % First row
+    \node [block] (input) {Пользовательский запрос};
+    \node [block, right=of input] (norm) {Нормализация запроса};
+    \node [block, right=of norm] (expand) {Расширение запроса};
+
+    % Second row
+    \node [block, below=of input, yshift=-0.2cm] (struct) {Создание структурированного запроса};
+    \node [block, right=of struct] (index) {Поиск по индексу};
+    \node [block, right=of index] (rank) {Ранжирование результатов};
+
+    % Third row
+    \node [block, below=of struct, yshift=-0.2cm] (context) {Извлечение контекста};
+    \node [block, right=of context, text width=8cm] (output) {Ранжированный список сегментов видео с временными метками};
+
+    % Connections
+    \path [line] (input) -- (norm);
+    \path [line] (norm) -- (expand);
+    \path [line] (expand) |- ([yshift=-0.3cm]expand.south) -| (struct);
+    \path [line] (struct) -- (index);
+    \path [line] (index) -- (rank);
+    \path [line] (rank) |- ([yshift=-0.3cm]rank.south) -| (context);
+    \path [line] (context) -- (output);
+\end{tikzpicture}
+\caption{Конвейер обработки запросов}
+\end{figure}
+
+\subsection{Компонент Интеграции}
+
+\subsubsection{Функциональность}
+Компонент интеграции предоставляет API для подключения к существующей платформе.
+
+\subsubsection{Технические Детали}
+\begin{itemize}
+    \item \textbf{Конечные Точки REST API}
+    \begin{itemize}
+        \item Реализация конечной точки отправки видео
+        \item Создание интерфейса поисковых запросов
+        \item Предоставление возможностей мониторинга статуса
+    \end{itemize}
+
+    \item \textbf{Асинхронная Обработка}
+    \begin{itemize}
+        \item Реализация управления очередью обработки
+        \item Предоставление обновлений статуса в реальном времени
+        \item Обработка восстановления после сбоев
+    \end{itemize}
+
+    \item \textbf{Интеграция с Фронтендом}
+    \begin{itemize}
+        \item Определение структурированного формата ответов
+        \item Поддержка расширенных параметров запроса
+        \item Реализация стратегии кэширования на стороне клиента
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Спецификации API}
+\begin{lstlisting}[language=json, caption=Формат ответа поискового API]
+{
+  "query": "Weierstrass theorem",
+  "total_results": 24,
+  "results": [
+    {
+      "video_id": "abcd1234",
+      "title": "Advanced Calculus - Lecture 5",
+      "concept": "Weierstrass theorem",
+      "relevance_score": 89,
+      "coverage_type": "substantive",
+      "timestamp_start": 1250.5,
+      "timestamp_end": 1380.2,
+      "context_snippet": "Today we're going to prove the Weierstrass theorem which states that...",
+      "thumbnail_url": "https://...",
+      "related_concepts": ["uniform convergence", "continuous functions"]
+    },
+    // More results...
+  ],
+}
+\end{lstlisting}
+
+\section{План Реализации}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Фаза} & \textbf{Продолжительность} & \textbf{Результаты} \\
+\midrule
+1. Базовая Инфраструктура & неделя 1 &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Интеграция с YouTube API
+    \item Конвейер извлечения транскриптов
+    \item Реализация алгоритма MLCS на C++
+  \end{itemize} \\
+\midrule
+2. Анализ Контента & неделя 2 &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Конвейер предобработки NLP
+    \item Система извлечения концепций
+    \item Реализация контекстного анализа
+  \end{itemize} \\
+\midrule
+3. Система Индексации & недели 3-4 &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Реализация инвертированного индекса
+    \item Алгоритмы оценки релевантности
+    \item Слой сохранения индекса
+  \end{itemize} \\
+\midrule
+4. Поисковая Система & недели 5-6 &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Реализация обработки запросов
+    \item Алгоритм ранжирования результатов
+    \item Конечные точки поискового API
+    \item Реализация демонстративного консольного интерфейса
+  \end{itemize} \\
+\midrule
+5. Интеграция & в будущем &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Интеграция с бэкендом Spring
+    \item Компоненты фронтенда React
+    \item Система асинхронной обработки
+  \end{itemize} \\
+\midrule
+6. Тестирование \& Оптимизация & в будущем &
+  \begin{itemize}[leftmargin=*, nosep]
+    \item Тестирование производительности
+    \item Настройка релевантности
+    \item Исправление ошибок и оптимизация
+  \end{itemize} \\
+\bottomrule
+\end{tabular}
+\caption{Фазы разработки}
+\end{table}
+
+\section{Технические Требования}
+
+\subsection{Требования к Производительности}
+
+\begin{itemize}
+    \item \textbf{Эффективность Обработки}
+    \begin{itemize}
+        \item Обработка часовой видеолекции < 5 минут
+        \item Поддержка пакетной обработки нескольких видео
+        \item Максимальное использование ОЗУ < 4 ГБ
+    \end{itemize}
+
+    \item \textbf{Производительность Поиска}
+    \begin{itemize}
+        \item Время отклика запроса < 200 мс для 95\% запросов
+        \item Поддержка не менее 50 одновременных пользователей
+        \item Размер индекса растет сублинейно с объемом контента
+    \end{itemize}
+
+    \item \textbf{Качество Релевантности}
+    \begin{itemize}
+        \item Точность > 0.8 для классификации содержательного освещения
+        \item Полнота > 0.9 для идентификации концепций
+    \end{itemize}
+\end{itemize}
+
+\section{Заключение}
+
+Разработанный ''Индексатор содержания видеолекций'' позволит студентам быстро находить нужные концепции в массиве видеоматериалов, четко различая случайные упоминания и полноценные объяснения тем.
+
+В основе системы лежит применение алгоритма Linear MLCS в сочетании с методами обработки естественного языка. Модульная структура проекта обеспечивает его последовательную реализацию с четкими промежуточными результатами. Использование C++ для высокопроизводительных компонентов и Python для обработки данных создает оптимальный баланс между быстродействием и гибкостью разработки.
+
+По завершении проект интегрируется с параллельно разрабатываемой студенческой платформой, существенно расширяя её функциональность за счет интеллектуального поиска по видеоконтенту.
+
+\appendix
+\section{Глоссарий}
+
+\begin{itemize}
+    \item \textbf{Linear MLCS (Множественная Наибольшая Общая Подпоследовательность)} - Алгоритм для нахождения наибольшей общей подпоследовательности в нескольких последовательностях.
+
+    \item \textbf{Инвертированный Индекс} - Структура данных, отображающая контент (концепции) на их расположение (видео, временные метки).
+
+    \item \textbf{Глубина Освещения} - Мера того, насколько тщательно объяснена или обсуждена концепция.
+
+    \item \textbf{Стабильность Концепции} - То, как долго концепция остается в центре внимания обсуждения в видео.
+
+    \item \textbf{Дискурсивные Маркеры} - Лингвистические сигналы, указывающие на объяснение, определение или ссылку.
+
+    \item \textbf{Распознавание Сущностей (NER)} - Техника NLP для идентификации именованных сущностей в тексте.
+\end{itemize}
+
+\end{document}
