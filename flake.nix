@@ -142,13 +142,15 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = [
+          buildInputs = with pkgs; [
             pythonEnv
-            pkgs.sqlite
+            pyright
+
+            sqlite
 
             # Development tools
-            pkgs.pre-commit
-            pkgs.git
+            pre-commit
+            git
           ];
 
           shellHook = ''

@@ -77,9 +77,33 @@ async def startup_event():
     global config, task_manager, youtube_extractor
 
     try:
+        # Log the current working directory to help with debugging
+        logger.info(f"Current working directory: {os.getcwd()}")
+
+        # Check if config files exist
+        api_config_path = "config/api.yaml"
+        logger.info(f"Checking for API config at: {api_config_path}")
+        if os.path.exists(api_config_path):
+            logger.info(f"API config file found at: {api_config_path}")
+        else:
+            logger.warning(f"API config file NOT FOUND at: {api_config_path}")
+            # Try parent directory
+            api_config_path = "../config/api.yaml"
+            logger.info(f"Trying parent directory: {api_config_path}")
+            if os.path.exists(api_config_path):
+                logger.info(f"API config file found at: {api_config_path}")
+
         # Load configuration
-        config = load_config("config/api.yaml")
-        logger.info("Loaded API configuration")
+        config = load_config(api_config_path)
+        logger.info(f"Loaded API configuration: {list(config.keys())}")
+
+        # Extract YouTube API key (first few and last few chars for security)
+        api_key = config.get("youtube_api_key", "")
+        if api_key:
+            key_prefix = api_key[:4] + "..." + api_key[-4:] if len(api_key) > 8 else "[redacted]"
+            logger.info(f"Using YouTube API key: {key_prefix}")
+        else:
+            logger.warning("No YouTube API key found in config")
 
         # Initialize task manager
         task_manager = TaskManager(config)

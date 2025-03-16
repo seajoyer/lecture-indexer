@@ -43,6 +43,25 @@ class TaskManager:
         os.makedirs(self.task_dir, exist_ok=True)
         os.makedirs(self.result_dir, exist_ok=True)
 
+        # Log the current working directory to help with debugging
+        logger.info(f"Current working directory: {os.getcwd()}")
+
+        # Check if config files exist
+        pipeline_config_path = "config/pipeline.yaml"
+        search_config_path = "config/search.yaml"
+
+        logger.info(f"Checking for pipeline config at: {pipeline_config_path}")
+        if os.path.exists(pipeline_config_path):
+            logger.info(f"Pipeline config file found at: {pipeline_config_path}")
+        else:
+            logger.warning(f"Pipeline config file NOT FOUND at: {pipeline_config_path}")
+
+        logger.info(f"Checking for search config at: {search_config_path}")
+        if os.path.exists(search_config_path):
+            logger.info(f"Search config file found at: {search_config_path}")
+        else:
+            logger.warning(f"Search config file NOT FOUND at: {search_config_path}")
+
         # Initialize components
         self._init_components()
 
@@ -59,6 +78,19 @@ class TaskManager:
         try:
             # Load pipeline configuration
             pipeline_config = load_config("config/pipeline.yaml")
+
+            # Log pipeline configuration for debugging
+            logger.info(f"Loaded pipeline config: {pipeline_config}")
+
+            # Ensure YouTube API key is set
+            if "youtube_api_key" not in pipeline_config or not pipeline_config["youtube_api_key"]:
+                logger.warning("YouTube API key not found in pipeline config, using from main config")
+                # Use API key from main config if available
+                if "youtube_api_key" in self.config and self.config["youtube_api_key"]:
+                    pipeline_config["youtube_api_key"] = self.config["youtube_api_key"]
+                    logger.info("Using YouTube API key from main config")
+                else:
+                    logger.warning("No YouTube API key found in any config, using test key")
 
             # Initialize data pipeline
             self.data_pipeline = DataPipeline(pipeline_config)
