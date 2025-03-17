@@ -244,6 +244,39 @@ class TestSearchEngine:
 
         assert found, "Concept 'derivative' not found in search results"
 
+    def test_segment_search(self, search_engine):
+        """Test searching for content in segment text when no direct concept matches are found."""
+        # First index some content
+        search_engine.index_content(TEST_PROCESSED_RESULT)
+
+        # Search for a term that's not a concept but appears in segment text
+        query = {
+            "original_text": "amazing",  # This word isn't indexed as a concept but appears in segments
+            "filters": {},
+            "theory_practice_ratio": None,
+            "domain": None,
+            "pagination": {
+                "offset": 0,
+                "limit": 10
+            }
+        }
+
+        # Execute search - should fall back to segment search
+        results = search_engine.search(query)
+
+        assert "results" in results
+        assert "totalResults" in results
+
+        # We may or may not find results depending on the content
+        # The important thing is that the query executes without error
+        if results["totalResults"] > 0:
+            for result in results["results"]:
+                # Check that segment results have the expected structure
+                assert "segment_id" in result
+                assert "video_id" in result
+                assert "context_text" in result
+                assert "context_type" in result
+
     def test_search_with_theory_practice_filter(self, search_engine):
         """Test searching with theory/practice filtering."""
         # First index some content

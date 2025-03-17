@@ -1,19 +1,20 @@
 """
 Configuration loader for the Lecture Video Content Indexer.
-Loads configuration from YAML files.
+Loads configuration from YAML files and environment variables for secure credential handling.
 """
 
 import os
 import yaml
 import logging
 from typing import Dict, Any
+import re
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """
-    Load configuration from a YAML file.
+    Load configuration from a YAML file with environment variable support.
 
     Args:
         config_path: Path to the configuration file
@@ -58,6 +59,13 @@ def load_config(config_path: str) -> Dict[str, Any]:
         # Load YAML file
         with open(config_path, 'r') as f:
             content = f.read()
+
+            # Process environment variable placeholders in the format ${ENV_VAR}
+            def replace_env_vars(match):
+                env_var = match.group(1)
+                return os.environ.get(env_var, f"${{{env_var}}}")
+
+            content = re.sub(r'\${([A-Za-z0-9_]+)}', replace_env_vars, content)
             logger.debug(f"Config file content (first 100 chars): {content[:100]}...")
 
             config = yaml.safe_load(content)
@@ -65,6 +73,14 @@ def load_config(config_path: str) -> Dict[str, Any]:
         if not config:
             logger.warning(f"Empty configuration file: {config_path}")
             return {}
+
+        # Check for environment variables that can override config
+        # For sensitive data like API keys
+        if 'youtube_api_key' in config and not config['youtube_api_key']:
+            env_api_key = os.environ.get('YOUTUBE_API_KEY')
+            if env_api_key:
+                config['youtube_api_key'] = env_api_key
+                logger.info("Using YouTube API key from environment variable")
 
         # Log key names from the loaded config for verification
         logger.info(f"Loaded configuration from {config_path} with keys: {list(config.keys())}")

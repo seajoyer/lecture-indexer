@@ -8,6 +8,7 @@ import json
 import logging
 import time
 import uuid
+import re
 from typing import Dict, List, Any, Optional, Tuple
 import sqlite3
 from pathlib import Path
@@ -141,6 +142,25 @@ class SearchEngine:
             )
             ''')
 
+            # Create a segments table that includes timestamps
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS segments (
+                segment_id TEXT PRIMARY KEY,
+                video_id TEXT,
+                start_time REAL,
+                end_time REAL,
+                text TEXT,
+                domain TEXT,
+                context_type TEXT,
+                FOREIGN KEY (video_id) REFERENCES videos (video_id)
+            )
+            ''')
+
+            # Create index on segments
+            cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_segments_video_id ON segments(video_id)
+            ''')
+
             # Create index on occurrences
             cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_occurrences_concept_id ON occurrences(concept_id)
@@ -158,6 +178,28 @@ class SearchEngine:
             ''')
             cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_patterns_pattern_type ON theory_practice_patterns(pattern_type)
+            ''')
+
+            # Create a trigger to automatically update the FTS table when concepts are inserted/updated
+            cursor.execute('''
+            CREATE TRIGGER IF NOT EXISTS concepts_ai AFTER INSERT ON concepts BEGIN
+                INSERT INTO concepts_fts(concept_id, text, normalized_text, domain)
+                VALUES (new.concept_id, new.text, new.normalized_text, new.domain);
+            END;
+            ''')
+
+            cursor.execute('''
+            CREATE TRIGGER IF NOT EXISTS concepts_ad AFTER DELETE ON concepts BEGIN
+                DELETE FROM concepts_fts WHERE concept_id = old.concept_id;
+            END;
+            ''')
+
+            cursor.execute('''
+            CREATE TRIGGER IF NOT EXISTS concepts_au AFTER UPDATE ON concepts BEGIN
+                DELETE FROM concepts_fts WHERE concept_id = old.concept_id;
+                INSERT INTO concepts_fts(concept_id, text, normalized_text, domain)
+                VALUES (new.concept_id, new.text, new.normalized_text, new.domain);
+            END;
             ''')
 
             conn.commit()
@@ -191,6 +233,21 @@ class SearchEngine:
             if not video_id or not metadata:
                 logger.error("Missing required fields for indexing")
                 return False
+
+            # Log domain features
+            key_concepts = domain_features.get("key_concepts", [])
+            logger.info(f"Indexing video {video_id} with {len(key_concepts)} key concepts")
+
+            # If no key concepts were found, try to extract them from domain keywords
+            if not key_concepts and metadata.get("domain"):
+                logger.warning(f"No key concepts found for video {video_id}, attempting domain-based extraction")
+                key_concepts = self._extract_fallback_concepts(
+                    transcript.get("segments", []),
+                    metadata.get("domain"),
+                    metadata.get("language", "en")
+                )
+                domain_features["key_concepts"] = key_concepts
+                logger.info(f"Extracted {len(key_concepts)} fallback concepts based on domain keywords")
 
             # Lock database for thread safety
             with self.db_lock:
@@ -267,6 +324,9 @@ class SearchEngine:
                     "query": query
                 }
 
+            # Log search parameters
+            logger.info(f"Searching for '{query_text}' with theory/practice ratio: {theory_practice_ratio}, domain: {domain}")
+
             # Lock database for thread safety
             with self.db_lock:
                 conn = sqlite3.connect(self.db_path)
@@ -274,8 +334,8 @@ class SearchEngine:
                 cursor = conn.cursor()
 
                 try:
-                    # Prepare SQL query
-                    sql_query, params = self._build_search_query(
+                    # Try direct concept search first
+                    sql_query, params = self._build_concept_search_query(
                         query_text, filters, theory_practice_ratio, domain
                     )
 
@@ -284,39 +344,78 @@ class SearchEngine:
                     cursor.execute(count_sql, params)
                     total_results = cursor.fetchone()[0]
 
-                    # Get counts by context type
-                    theoretical_sql = f"SELECT COUNT(*) FROM ({sql_query}) WHERE context_type = 'theoretical'"
-                    cursor.execute(theoretical_sql, params)
-                    theoretical_results = cursor.fetchone()[0]
+                    # If no direct concept matches, try segment text search
+                    segment_search_used = False
+                    if total_results == 0:
+                        logger.info(f"No direct concept matches for '{query_text}', trying segment text search")
+                        try:
+                            sql_query, params = self._build_segment_search_query(
+                                query_text, filters, theory_practice_ratio, domain
+                            )
+                            segment_search_used = True
 
-                    practical_sql = f"SELECT COUNT(*) FROM ({sql_query}) WHERE context_type = 'practical'"
-                    cursor.execute(practical_sql, params)
-                    practical_results = cursor.fetchone()[0]
+                            # Get total count again
+                            count_sql = f"SELECT COUNT(*) FROM ({sql_query})"
+                            cursor.execute(count_sql, params)
+                            total_results = cursor.fetchone()[0]
+                        except Exception as e:
+                            logger.error(f"Error in segment search: {e}")
+                            # Fallback to empty results
+                            total_results = 0
+                            segment_search_used = False
+                            sql_query = "SELECT 1 WHERE 0"  # Empty query
+
+                    # Get counts by context type
+                    theoretical_results = 0
+                    practical_results = 0
+
+                    if total_results > 0:
+                        theoretical_sql = f"SELECT COUNT(*) FROM ({sql_query}) WHERE context_type = 'theoretical'"
+                        try:
+                            cursor.execute(theoretical_sql, params)
+                            theoretical_results = cursor.fetchone()[0]
+                        except Exception as e:
+                            logger.warning(f"Error counting theoretical results: {e}")
+
+                        practical_sql = f"SELECT COUNT(*) FROM ({sql_query}) WHERE context_type = 'practical'"
+                        try:
+                            cursor.execute(practical_sql, params)
+                            practical_results = cursor.fetchone()[0]
+                        except Exception as e:
+                            logger.warning(f"Error counting practical results: {e}")
 
                     # Add pagination
-                    paginated_sql = f"{sql_query} LIMIT ? OFFSET ?"
-                    paginated_params = params + [limit, offset]
+                    if total_results > 0:
+                        paginated_sql = f"{sql_query} LIMIT ? OFFSET ?"
+                        paginated_params = params + [limit, offset]
 
-                    # Execute query
-                    cursor.execute(paginated_sql, paginated_params)
-                    rows = cursor.fetchall()
+                        # Execute query
+                        cursor.execute(paginated_sql, paginated_params)
+                        rows = cursor.fetchall()
+                    else:
+                        rows = []
 
                     # Convert to list of dicts
                     results = []
                     for row in rows:
                         result = dict(row)
 
-                        # Enhance with related concepts
-                        result["related_concepts"] = self._get_related_concepts(
-                            cursor, result.get("concept_id")
-                        )
+                        # Enhance with related concepts if this is a concept result
+                        if not segment_search_used and result.get("concept_id"):
+                            result["related_concepts"] = self._get_related_concepts(
+                                cursor, result.get("concept_id")
+                            )
 
-                        # Get video title
-                        video_id = result.get("video_id")
-                        cursor.execute("SELECT title FROM videos WHERE video_id = ?", (video_id,))
-                        video_row = cursor.fetchone()
-                        if video_row:
-                            result["video_title"] = video_row[0]
+                        # Get video title if needed
+                        if "video_title" not in result and result.get("video_id"):
+                            video_id = result.get("video_id")
+                            try:
+                                cursor.execute("SELECT title FROM videos WHERE video_id = ?", (video_id,))
+                                video_row = cursor.fetchone()
+                                if video_row:
+                                    result["video_title"] = video_row[0]
+                            except Exception as e:
+                                logger.warning(f"Error getting video title: {e}")
 
                         results.append(result)
 
@@ -333,6 +432,7 @@ class SearchEngine:
                         "query": query
                     }
 
+                    logger.info(f"Search for '{query_text}' returned {total_results} results in {execution_time_ms}ms")
                     return response
 
                 finally:
@@ -340,6 +440,10 @@ class SearchEngine:
 
         except Exception as e:
             logger.error(f"Error executing search query: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                import traceback
+                logger.debug(traceback.format_exc())
+
             execution_time_ms = int((time.time() - start_time) * 1000)
 
             return {
@@ -452,8 +556,7 @@ class SearchEngine:
             logger.error(f"Error getting concept details: {e}")
             return None
 
-    def get_video_concepts(
-        self,
+    def get_video_concepts(self,
         video_id: str,
         context_type: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
@@ -802,6 +905,7 @@ class SearchEngine:
         """
         # Clear previous segments for this video
         cursor.execute("DELETE FROM segments_fts WHERE video_id = ?", (video_id,))
+        cursor.execute("DELETE FROM segments WHERE video_id = ?", (video_id,))
 
         # Insert new segments
         for segment in segments:
@@ -809,10 +913,13 @@ class SearchEngine:
             text = segment.get("text", "")
             context_type = segment.get("content_type", "mixed")
             domain = segment.get("domain", "unknown")
+            start_time = segment.get("start_time", 0)
+            end_time = segment.get("end_time", 0)
 
             if not segment_id or not text:
                 continue
 
+            # Insert into segments_fts for full-text search
             cursor.execute(
                 """
                 INSERT INTO segments_fts (
@@ -820,6 +927,16 @@ class SearchEngine:
                 ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (segment_id, video_id, text, domain, context_type)
+            )
+
+            # Insert into segments table with timestamps
+            cursor.execute(
+                """
+                INSERT INTO segments (
+                    segment_id, video_id, start_time, end_time, text, domain, context_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (segment_id, video_id, start_time, end_time, text, domain, context_type)
             )
 
     def _index_concepts(
@@ -844,6 +961,9 @@ class SearchEngine:
         # Clear previous occurrences for this video
         cursor.execute("DELETE FROM occurrences WHERE video_id = ?", (video_id,))
 
+        # Log the number of concepts being indexed
+        logger.info(f"Indexing {len(key_concepts)} concepts for video {video_id}")
+
         # Index each concept
         for concept in key_concepts:
             concept_text = concept.get("text", "")
@@ -852,7 +972,7 @@ class SearchEngine:
             theoretical = concept.get("theoretical", False)
 
             # Skip empty concepts
-            if not concept_text:
+            if not concept_text or len(concept_text) < 2:
                 continue
 
             # Generate concept ID based on text and domain
@@ -866,14 +986,19 @@ class SearchEngine:
             occurrences = []
             for segment in segments:
                 segment_text = segment.get("text", "").lower()
-                if normalized_text in segment_text:
+                # Use word boundary to ensure we're matching the whole concept, not part of a word
+                pattern = r'\b' + re.escape(normalized_text) + r'\b'
+                if re.search(pattern, segment_text, re.IGNORECASE):
                     segment_id = segment.get("id")
                     start_time = segment.get("start_time", 0)
                     end_time = segment.get("end_time", 0)
                     context_type = segment.get("content_type", "mixed")
 
-                    # Relevance score - simple matching for now
-                    relevance_score = 1.0
+                    # Calculate relevance score based on concept frequency in segment
+                    matches = re.findall(pattern, segment_text, re.IGNORECASE)
+                    match_count = len(matches)
+                    word_count = len(segment_text.split())
+                    relevance_score = min(1.0, (match_count / max(1, word_count / 10)) * 0.3 + 0.7)
 
                     occurrences.append({
                         "segment_id": segment_id,
@@ -907,16 +1032,6 @@ class SearchEngine:
                     total_occurrences, theoretical_occurrences, practical_occurrences,
                     indexed_at
                 )
-            )
-
-            # Insert into FTS
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO concepts_fts (
-                    concept_id, text, normalized_text, domain
-                ) VALUES (?, ?, ?, ?)
-                """,
-                (concept_id, concept_text, normalized_text, domain)
             )
 
             # Insert occurrences
@@ -1015,6 +1130,30 @@ class SearchEngine:
             )
 
     def _build_search_query(
+            self,
+            query_text: str,
+            filters: Dict[str, Any],
+            theory_practice_ratio: Optional[float],
+            domain: Optional[str]
+        ) -> Tuple[str, List[Any]]:
+            """
+            Build SQL query for searching.
+
+            Note: This method exists for backward compatibility with tests.
+
+            Args:
+                query_text: Search query text
+                filters: Additional filters
+                theory_practice_ratio: Theory/practice ratio filter
+                domain: Domain filter
+
+            Returns:
+                Tuple of (SQL query, parameters)
+            """
+            # For test compatibility, call the concept search query builder
+            return self._build_concept_search_query(query_text, filters, theory_practice_ratio, domain)
+
+    def _build_concept_search_query(
         self,
         query_text: str,
         filters: Dict[str, Any],
@@ -1033,10 +1172,11 @@ class SearchEngine:
         Returns:
             Tuple of (SQL query, parameters)
         """
+
         # Base query
         sql = """
         SELECT c.*, o.video_id, o.segment_id, o.start_time, o.end_time,
-               o.context_type, o.context_text, o.relevance_score
+               o.context_type, o.context_text, o.relevance_score, o.occurrence_id
         FROM concepts c
         JOIN concepts_fts f ON c.concept_id = f.concept_id
         JOIN occurrences o ON c.concept_id = o.concept_id
@@ -1059,13 +1199,72 @@ class SearchEngine:
                 sql += " AND (o.context_type = 'practical' OR c.concept_class = 'practical')"
             elif theory_practice_ratio < 0.5:
                 # Favor practical
-                sql += " ORDER BY CASE WHEN o.context_type = 'practical' THEN 1 ELSE 2 END"
+                sql += " ORDER BY CASE WHEN o.context_type = 'practical' THEN 1 ELSE 2 END, o.relevance_score DESC"
             else:
                 # Favor theoretical
-                sql += " ORDER BY CASE WHEN o.context_type = 'theoretical' THEN 1 ELSE 2 END"
+                sql += " ORDER BY CASE WHEN o.context_type = 'theoretical' THEN 1 ELSE 2 END, o.relevance_score DESC"
         else:
             # Default ordering by relevance
             sql += " ORDER BY o.relevance_score DESC"
+
+        return sql, params
+
+    def _build_segment_search_query(
+        self,
+        query_text: str,
+        filters: Dict[str, Any],
+        theory_practice_ratio: Optional[float],
+        domain: Optional[str]
+    ) -> Tuple[str, List[Any]]:
+        """
+        Build SQL query for searching segments.
+
+        Args:
+            query_text: Search query text
+            filters: Additional filters
+            theory_practice_ratio: Theory/practice ratio filter
+            domain: Domain filter
+
+        Returns:
+            Tuple of (SQL query, parameters)
+        """
+        # Build a query that uses the segments table (with timestamps)
+        # but searches through segments_fts
+        sql = """
+            SELECT s.segment_id, s.video_id, s.text AS context_text,
+                s.context_type, v.title, v.domain,
+                NULL as concept_id, NULL as text, NULL as normalized_text,
+                NULL as concept_class, NULL as occurrence_id,
+                0.8 as relevance_score, s.start_time, s.end_time
+            FROM segments s
+            JOIN segments_fts fts ON s.segment_id = fts.segment_id
+            JOIN videos v ON s.video_id = v.video_id
+            WHERE segments_fts MATCH ?
+            """
+        params = [query_text]
+
+        # Apply domain filter
+        if domain:
+            sql += " AND s.domain = ?"
+            params.append(domain)
+
+        # Apply theory/practice filter
+        if theory_practice_ratio is not None:
+            if theory_practice_ratio > 0.8:
+                # Mostly theoretical
+                sql += " AND s.context_type = 'theoretical'"
+            elif theory_practice_ratio < 0.2:
+                # Mostly practical
+                sql += " AND s.context_type = 'practical'"
+            elif theory_practice_ratio < 0.5:
+                # Favor practical
+                sql += " ORDER BY CASE WHEN s.context_type = 'practical' THEN 1 ELSE 2 END"
+            else:
+                # Favor theoretical
+                sql += " ORDER BY CASE WHEN s.context_type = 'theoretical' THEN 1 ELSE 2 END"
+        else:
+            # No specific ordering
+            sql += " ORDER BY fts.rowid"
 
         return sql, params
 
@@ -1080,6 +1279,9 @@ class SearchEngine:
         Returns:
             List of related concept dictionaries
         """
+        if not concept_id:
+            return []
+
         cursor.execute(
             """
             SELECT c.*, COUNT(*) AS co_occurrence
@@ -1096,3 +1298,114 @@ class SearchEngine:
 
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+    def _extract_fallback_concepts(
+        self,
+        segments: List[Dict[str, Any]],
+        domain: str,
+        language: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract fallback concepts based on domain keywords when no concepts were extracted.
+
+        Args:
+            segments: List of transcript segments
+            domain: Content domain (mathematics, programming, physics)
+            language: Language of content (en, ru)
+
+        Returns:
+            List of extracted concepts
+        """
+        # Domain-specific keywords to look for
+        domain_keywords = {
+            "mathematics": {
+                "en": [
+                    "theorem", "lemma", "proof", "equation", "function", "calculus",
+                    "derivative", "integral", "algebra", "geometry", "matrix",
+                    "vector", "set", "topology", "analysis", "group", "field"
+                ],
+                "ru": [
+                    "теорема", "лемма", "доказательство", "уравнение", "функция",
+                    "анализ", "производная", "интеграл", "алгебра", "геометрия",
+                    "матрица", "вектор", "множество", "топология", "группа", "поле"
+                ]
+            },
+            "programming": {
+                "en": [
+                    "algorithm", "function", "method", "class", "object", "variable",
+                    "array", "list", "tree", "graph", "stack", "queue", "heap", "sort"
+                ],
+                "ru": [
+                    "алгоритм", "функция", "метод", "класс", "объект", "переменная",
+                    "массив", "список", "дерево", "граф", "стек", "очередь", "куча",
+                    "сортировка"
+                ]
+            },
+            "physics": {
+                "en": [
+                    "force", "energy", "momentum", "mass", "velocity", "acceleration",
+                    "gravity", "field", "wave", "particle", "quantum", "relativity",
+                    "electron", "proton", "neutron", "photon", "atomic", "nuclear",
+                    "state", "entanglement", "superposition", "spin", "collapse"
+                ],
+                "ru": [
+                    "сила", "энергия", "импульс", "масса", "скорость", "ускорение",
+                    "гравитация", "поле", "волна", "частица", "квант", "относительность",
+                    "электрон", "протон", "нейтрон", "фотон", "атомный", "ядерный",
+                    "состояние", "запутанность", "суперпозиция", "спин", "коллапс",
+                    "квантовый", "квантовая", "квантовое", "состояние", "измерение",
+                    "квантовая механика"
+                ]
+            }
+        }
+
+        # Use keywords for specific domain and language
+        keywords = domain_keywords.get(domain, {}).get(language, [])
+        if not keywords and language == "ru":
+            # Fallback to English if no Russian keywords
+            keywords = domain_keywords.get(domain, {}).get("en", [])
+
+        if not keywords:
+            logger.warning(f"No keywords found for domain {domain} and language {language}")
+            return []
+
+        # Combine all segment texts
+        full_text = " ".join([s.get("text", "") for s in segments])
+
+        # Find all occurrences of each keyword
+        concepts = []
+        for keyword in keywords:
+            pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+            matches = re.findall(pattern, full_text.lower())
+            frequency = len(matches)
+
+            if frequency > 0:
+                # Determine if theoretical based on segments where it appears
+                theoretical = self._is_concept_theoretical_in_segments(keyword, segments)
+
+                concepts.append({
+                    "text": keyword,
+                    "domain": domain,
+                    "frequency": frequency,
+                    "theoretical": theoretical
+                })
+
+        # Return top concepts by frequency
+        return sorted(concepts, key=lambda x: x["frequency"], reverse=True)[:20]
+
+    def _is_concept_theoretical_in_segments(self, concept: str, segments: List[Dict[str, Any]]) -> bool:
+        """Determine if a concept is predominantly theoretical based on the segments it appears in."""
+        theoretical_count = 0
+        practical_count = 0
+
+        for segment in segments:
+            text = segment.get("text", "").lower()
+            if re.search(r'\b' + re.escape(concept.lower()) + r'\b', text):
+                content_type = segment.get("content_type", "")
+                if content_type == "theoretical":
+                    theoretical_count += 1
+                elif content_type == "practical":
+                    practical_count += 1
+
+        # If the concept appears more in theoretical segments, classify it as theoretical
+        return theoretical_count >= practical_count

@@ -142,19 +142,26 @@
         };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
+          buildInputs = [
             pythonEnv
-            pyright
-
-            sqlite
+            pkgs.sqlite
 
             # Development tools
-            pre-commit
-            git
+            pkgs.pre-commit
+            pkgs.git
           ];
 
           shellHook = ''
             export PYTHONPATH="$PWD:$PYTHONPATH"
+
+            # Pass through YouTube API key from host environment if available
+            if [ -n "$YOUTUBE_API_KEY" ]; then
+              echo "Found YOUTUBE_API_KEY in environment, using it for configuration"
+            else
+              echo "Warning: YOUTUBE_API_KEY is not set in environment"
+              # You can set a default key for development here if needed
+              # export YOUTUBE_API_KEY="your-default-key-for-dev"
+            fi
 
             # Create data directories if they don't exist
             mkdir -p data/processed
@@ -169,7 +176,7 @@
             if [ ! -f config/api.yaml ]; then
               echo "Creating default API config..."
               cat > config/api.yaml <<EOF
-            youtube_api_key: ""
+            youtube_api_key: "\${YOUTUBE_API_KEY}"
             task_dir: "data/tasks"
             result_dir: "data/results"
             max_workers: 4
@@ -179,7 +186,7 @@
             if [ ! -f config/pipeline.yaml ]; then
               echo "Creating default pipeline config..."
               cat > config/pipeline.yaml <<EOF
-            youtube_api_key: ""
+            youtube_api_key: "\${YOUTUBE_API_KEY}"
             output_dir: "data/processed"
             EOF
             fi
@@ -191,10 +198,40 @@
             EOF
             fi
 
+            # Check if configs exist but have empty API keys, and the env var is available
+            if [ -n "$YOUTUBE_API_KEY" ]; then
+              # Update api.yaml if it exists but has empty API key
+              if [ -f config/api.yaml ] && ! grep -q "youtube_api_key: \"\\$\{YOUTUBE_API_KEY\}\"" config/api.yaml; then
+                echo "Updating API key in config/api.yaml..."
+                # Use sed to replace the API key line with the environment variable reference
+                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\${YOUTUBE_API_KEY}\"|" config/api.yaml
+              fi
+
+              # Update pipeline.yaml if it exists but has empty API key
+              if [ -f config/pipeline.yaml ] && ! grep -q "youtube_api_key: \"\\$\{YOUTUBE_API_KEY\}\"" config/pipeline.yaml; then
+                echo "Updating API key in config/pipeline.yaml..."
+                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\${YOUTUBE_API_KEY}\"|" config/pipeline.yaml
+              fi
+            fi
+
             echo "Development environment ready!"
             echo "Run 'nix run .#download-spacy-models' to download required spaCy models"
             echo "Run 'nix run .#download-nltk-data' to download required NLTK data"
             echo "Run 'nix run .#lecture-indexer-api' to start the API server"
+
+            # Display a helpful message about the YouTube API key
+            if [ -z "$YOUTUBE_API_KEY" ]; then
+              echo ""
+              echo "************************************************************"
+              echo "IMPORTANT: Set your YouTube API key before running the application:"
+              echo "export YOUTUBE_API_KEY='your-api-key'"
+              echo "************************************************************"
+            else
+              echo ""
+              echo "************************************************************"
+              echo "Using YOUTUBE_API_KEY from environment"
+              echo "************************************************************"
+            fi
           '';
         };
       }
