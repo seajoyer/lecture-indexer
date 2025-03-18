@@ -1,0 +1,313 @@
+lecture-indexer/                 # Root project directory
+│
+├── data_acquisition/            # Handles YouTube API integration and transcript processing
+│   ├── youtube_api/             # YouTube data extraction components
+│   │   ├── python/              # Python implementation of YouTube API integration
+│   │   │   ├── __init__.py
+│   │   │   ├── youtube_data_extractor.py   ✅ # Core class for extracting video data and transcripts
+│   │   │   ├── data_pipeline.py            ✅ # Coordinates the end-to-end process of video acquisition and analysis
+│   │   │   ├── api_client.py               # YouTube API client with rate limiting
+│   │   │   ├── language_detector.py        # Russian/English language detection
+│   │   │   └── error_handlers.py           # Error handling for API issues
+│   │   └── interfaces/          # Interface definitions for YouTube API components
+│   │       └── youtube_api_interfaces.py
+│   │
+│   └── transcript_processor/    # Text processing of extracted transcripts
+│       ├── python/              # Python implementation of transcript processing
+│       │   ├── __init__.py
+│       │   ├── transcript_processor.py     ✅ # Main processor class
+│       │   ├── russian_processor.py        # Russian-specific text processing
+│       │   ├── english_processor.py        # English-specific text processing
+│       │   ├── normalizer.py               # Cleans and normalizes transcript text
+│       │   ├── sentence_segmenter.py       # Splits transcript into sentences
+│       │   ├── section_detector.py         # Identifies lecture sections/topics
+│       │   ├── domain_classifier.py        # Classifies into math/programming/physics
+│       │   ├── theory_practice_classifier.py  # Classifies content as theoretical/practical
+│       │   └── nlp_enhancer.py             # Adds NLP metadata to transcript
+│       └── interfaces/          # Interface definitions for transcript processing
+│           └── transcript_processor_interfaces.py
+│
+├── concept_analysis/            # Identifies and analyzes academic concepts in transcripts
+│   ├── concept_extractor/       # Domain-specific concept identification
+│   │   ├── cpp/                 # High-performance C++ implementation
+│   │   │   ├── ConceptExtractor.h          # Header for concept extraction
+│   │   │   ├── ConceptExtractor.cpp        # Implementation of concept extraction
+│   │   │   ├── ConceptRelationship.h       # Header for concept relationships
+│   │   │   ├── TheoryPracticeClassifier.h  # Header for theory/practice classification
+│   │   │   └── TheoryPracticeClassifier.cpp # Implementation of theory/practice classification
+│   │   ├── python/              # Python wrapper and additional functionality
+│   │   │   ├── __init__.py
+│   │   │   ├── domain_concept_extractor.py ✅ # Domain-specific extractors
+│   │   │   ├── math_concept_extractor.py   # Mathematics-specific concept extraction
+│   │   │   ├── programming_concept_extractor.py # Programming-specific concept extraction
+│   │   │   ├── physics_concept_extractor.py # Physics-specific concept extraction
+│   │   │   ├── russian_concept_patterns.py # Russian language concept patterns
+│   │   │   ├── english_concept_patterns.py # English language concept patterns
+│   │   │   ├── concept_extraction_utils.py # Utility functions
+│   │   │   └── cpp_wrapper.py              # Python wrapper for C++ implementation
+│   │   └── interfaces/          # Interface definitions
+│   │       └── concept_extractor_interfaces.py
+│   │
+│   ├── linear_mlcs/             # Linear Multiple Longest Common Subsequence implementation
+│   │   ├── cpp/                 # High-performance C++ implementation
+│   │   │   ├── LinearMLCS.h                # Header for MLCS algorithm
+│   │   │   ├── LinearMLCS.cpp              # Implementation of MLCS algorithm
+│   │   │   ├── ConceptGraph.h              # Header for concept dependency graph
+│   │   │   ├── ConceptGraph.cpp            # Implementation of concept dependency graph
+│   │   │   ├── TheoryPracticePattern.h     # Header for theory/practice patterns
+│   │   │   └── TheoryPracticePattern.cpp   # Implementation of theory/practice patterns
+│   │   └── interfaces/          # Interface definitions
+│   │       └── linear_mlcs_interfaces.py
+│   │
+│   └── relevance_analyzer/      # Analyzes context to determine concept coverage depth
+│       ├── cpp/                 # Performance-critical C++ implementation
+│       │   ├── ContextualRelevance.h       # Header for contextual relevance
+│       │   ├── ContextualRelevance.cpp     # Implementation of contextual relevance
+│       │   ├── TheoryPracticeRelevance.h   # Header for theory/practice relevance
+│       │   └── TheoryPracticeRelevance.cpp # Implementation of theory/practice relevance
+│       ├── python/              # Python wrapper and pattern detection
+│       │   ├── __init__.py
+│       │   ├── theory_practice_classifier.py  ✅ # Theory vs. practice classification
+│       │   ├── contextual_relevance_analyzer.py  # Main analyzer class
+│       │   ├── context_patterns.py         # Pattern detection for explanations
+│       │   ├── theory_patterns.py          # Theoretical context patterns
+│       │   ├── practice_patterns.py        # Practical context patterns
+│       │   ├── russian_patterns.py         # Russian language patterns
+│       │   ├── english_patterns.py         # English language patterns
+│       │   ├── domain_specific_patterns.py # Domain-specific patterns
+│       │   └── cpp_wrapper.py              # Python wrapper for C++ implementation
+│       └── interfaces/          # Interface definitions
+│           └── relevance_analyzer_interfaces.py
+│
+├── indexing/                    # Manages indexing and storage of concepts
+│   ├── inverted_index/          # Efficient inverted index for concept retrieval
+│   │   ├── cpp/                 # High-performance C++ implementation
+│   │   │   ├── InvertedIndexGenerator.h    # Header for index generation
+│   │   │   ├── InvertedIndexGenerator.cpp  # Implementation of index generation
+│   │   │   ├── PostingList.h               # Header for posting lists
+│   │   │   ├── PostingList.cpp             # Implementation of posting lists
+│   │   │   ├── TheoryPracticeIndex.h       # Header for theory/practice index
+│   │   │   └── TheoryPracticeIndex.cpp     # Implementation of theory/practice index
+│   │   └── interfaces/          # Interface definitions
+│   │       └── inverted_index_interfaces.py
+│   │
+│   ├── persistence_manager/     # Manages persistent storage of index
+│   │   ├── cpp/                 # C++ implementation of storage manager
+│   │   │   ├── IndexPersistenceManager.h   # Header for persistence manager
+│   │   │   ├── IndexPersistenceManager.cpp # Implementation of persistence manager
+│   │   │   ├── IndexTransaction.h          # Header for transaction management
+│   │   │   └── IndexTransaction.cpp        # Implementation of transaction management
+│   │   └── interfaces/          # Interface definitions
+│   │       └── persistence_manager_interfaces.py
+│   │
+│   └── knowledge_graph/         # Knowledge graph for concept relationships
+│       ├── python/              # Python implementation
+│       │   ├── __init__.py
+│       │   ├── knowledge_graph_generator.py # Graph generation
+│       │   ├── theory_practice_graph.py    # Theory/practice relationships
+│       │   ├── learning_path_generator.py  # Learning path generation
+│       │   ├── neo4j_exporter.py           # Neo4j database integration
+│       │   └── graph_query.py              # Query capabilities for the graph
+│       └── interfaces/          # Interface definitions
+│           └── knowledge_graph_interfaces.py
+│
+├── search_retrieval/            # Handles search queries and retrieval
+│   ├── query_processor/         # Processes user queries into structured operations
+│   │   ├── python/              # Python implementation
+│   │   │   ├── __init__.py
+│   │   │   ├── query_processor.py          # Main processor class
+│   │   │   ├── query_expander.py           # Query expansion using related concepts
+│   │   │   ├── query_optimizer.py          # Query optimization for performance
+│   │   │   ├── theory_practice_intent.py   # Detect theory/practice intent in queries
+│   │   │   ├── russian_query_processor.py  # Russian query processing
+│   │   │   ├── english_query_processor.py  # English query processing
+│   │   │   └── domain_intent_detector.py   # Detect domain intent in queries
+│   │   └── interfaces/          # Interface definitions
+│   │       └── query_processor_interfaces.py
+│   │
+│   ├── search_engine/           # Executes search against the inverted index
+│   │   ├── cpp/                 # High-performance C++ implementation
+│   │   │   ├── SearchEngine.h              # Header for search engine
+│   │   │   ├── SearchEngine.cpp            # Implementation of search engine
+│   │   │   ├── TheoryPracticeFilter.h      # Header for theory/practice filtering
+│   │   │   ├── TheoryPracticeFilter.cpp    # Implementation of theory/practice filtering
+│   │   │   ├── DomainFilter.h              # Header for domain filtering
+│   │   │   ├── DomainFilter.cpp            # Implementation of domain filtering
+│   │   │   ├── SearchResults.h             # Header for search results
+│   │   │   └── SearchResults.cpp           # Implementation of search results
+│   │   ├── python/              # Python implementation
+│   │   │   ├── __init__.py
+│   │   │   └── search_engine.py            ✅ # SearchEngine implementation
+│   │   └── interfaces/          # Interface definitions
+│   │       └── search_engine_interfaces.py
+│   │
+│   └── result_ranker/           # Ranks search results for relevance
+│       ├── cpp/                 # C++ implementation for performance
+│       │   ├── ResultRanker.h              # Header for result ranking
+│       │   ├── ResultRanker.cpp            # Implementation of result ranking
+│       │   ├── TheoryPracticeRanker.h      # Header for theory/practice ranking
+│       │   ├── TheoryPracticeRanker.cpp    # Implementation of theory/practice ranking
+│       │   ├── DomainRanker.h              # Header for domain-specific ranking
+│       │   ├── DomainRanker.cpp            # Implementation of domain-specific ranking
+│       │   ├── RankingModel.h              # Header for ranking model
+│       │   └── RankingModel.cpp            # Implementation of ranking model
+│       └── interfaces/          # Interface definitions
+│           └── result_ranker_interfaces.py
+│
+├── integration/                 # System integration and external interfaces
+│   ├── api_service/             # RESTful API for integration with frontend
+│   │   ├── python/              # Python implementation using FastAPI
+│   │   │   ├── __init__.py
+│   │   │   ├── api_service.py              ✅ # Main API service
+│   │   │   ├── routes.py                   # API route definitions
+│   │   │   ├── theory_practice_routes.py   # Theory/practice specific endpoints
+│   │   │   ├── domain_routes.py            # Domain-specific endpoints
+│   │   │   ├── learning_path_routes.py     # Learning path generation endpoints
+│   │   │   ├── auth.py                     # Authentication handling
+│   │   │   └── validators.py               # Request validation
+│   │   └── interfaces/          # Interface definitions
+│   │       └── api_service_interfaces.py
+│   │
+│   ├── task_manager/            # Manages asynchronous processing tasks
+│   │   ├── python/              # Python implementation using Celery
+│   │   │   ├── __init__.py
+│   │   │   ├── task_manager.py             ✅ # Main task manager
+│   │   │   ├── celery_config.py            # Celery configuration
+│   │   │   ├── tasks.py                    # Task definitions
+│   │   │   ├── video_processing_tasks.py   # Video processing tasks
+│   │   │   ├── domain_specific_tasks.py    # Domain-specific processing tasks
+│   │   │   └── status_tracker.py           # Task status tracking
+│   │   └── interfaces/          # Interface definitions
+│   │       └── task_manager_interfaces.py
+│   │
+│   └── monitoring_service/      # System monitoring and health checks
+│       ├── python/              # Python implementation
+│       │   ├── __init__.py
+│       │   ├── monitoring_service.py       # Main monitoring service
+│       │   ├── metrics_collector.py        # Performance metrics collection
+│       │   ├── theory_practice_metrics.py  # Theory/practice classification metrics
+│       │   ├── domain_accuracy_metrics.py  # Domain classification accuracy metrics
+│       │   ├── language_metrics.py         # Language processing metrics
+│       │   ├── health_checker.py           # System health checking
+│       │   └── alert_manager.py            # Alert generation and notification
+│       └── interfaces/          # Interface definitions
+│           └── monitoring_service_interfaces.py
+│
+├── common/                      # Shared utilities and models
+│   ├── models/                  # Data models used across the system
+│   │   ├── __init__.py
+│   │   ├── video.py                        # Video data model
+│   │   ├── concept.py                      # Concept data model
+│   │   ├── transcript.py                   # Transcript data model
+│   │   ├── theory_practice.py              # Theory/practice model
+│   │   ├── domain_specific.py              # Domain-specific models
+│   │   ├── index.py                        # Index data model
+│   │   └── search.py                       # Search data model
+│   │
+│   ├── utils/                   # Utility functions
+│   │   ├── __init__.py
+│   │   ├── config_loader.py                ✅ # Configuration loading
+│   │   ├── logging_setup.py                # Logging configuration
+│   │   ├── error_handling.py               ✅ # Common error handling
+│   │   ├── language_utils.py               # Language-specific utilities
+│   │   ├── russian_utils.py                # Russian language utilities
+│   │   ├── english_utils.py                # English language utilities
+│   │   ├── math_utils.py                   # Mathematics-specific utilities
+│   │   ├── programming_utils.py            # Programming-specific utilities
+│   │   ├── physics_utils.py                # Physics-specific utilities
+│   │   └── performance_metrics.py          # Performance tracking
+│   │
+│   └── interfaces/              # Common interface definitions
+│       ├── __init__.py
+│       └── base_interfaces.py              # Base interface classes
+│
+├── tests/                       # Test suite
+│   ├── unit/                    # Unit tests for individual components
+│   │   ├── data_acquisition/    # Tests for data acquisition components
+│   │   │   ├── test_youtube_data_extractor.py   ✅ # Tests for YouTube data extractor
+│   │   │   ├── test_transcript_processor.py     ✅ # Tests for transcript processor
+│   │   │   └── test_data_pipeline.py            ✅ # Tests for data pipeline
+│   │   ├── concept_analysis/    # Tests for concept analysis components
+│   │   │   ├── test_domain_classifier.py        ✅ # Tests for domain classifier
+│   │   │   └── test_theory_practice_classifier.py  ✅ # Tests for theory/practice classifier
+│   │   ├── search_retrieval/    # Tests for search components
+│   │   │   └── test_search_engine.py            ✅ # Tests for search engine
+│   │   └── integration/         # Tests for integration components
+│   │       └── test_api_task_manager.py         ✅ # Tests for API and task manager
+│   │
+│   ├── integration/             # Tests for component integration
+│   │   └── test_full_workflow.py           ✅ # Tests for complete integration
+│   │
+│   ├── conftest.py              ✅ # Pytest configuration and fixtures
+│   └── README.md                ✅ # Test documentation
+│
+├── config/                      # Configuration files
+│   ├── development.yaml         # Development environment configuration
+│   ├── production.yaml          # Production environment configuration
+│   ├── russian_config.yaml      # Russian language processing configuration
+│   ├── english_config.yaml      # English language processing configuration
+│   ├── mathematics_config.yaml  # Mathematics domain configuration
+│   ├── programming_config.yaml  # Programming domain configuration
+│   ├── physics_config.yaml      # Physics domain configuration
+│   ├── logging.yaml             # Logging configuration
+│   ├── api.yaml                 ✅ # API service configuration
+│   ├── pipeline.yaml            ✅ # Pipeline configuration
+│   └── search.yaml              # Search engine configuration
+│
+├── scripts/                     # Utility scripts
+│   ├── setup/                   # Setup scripts
+│   │   ├── install_dependencies.sh         # Installs dependencies
+│   │   ├── setup_environment.sh            # Sets up development environment
+│   │   ├── setup_russian_support.sh        # Sets up Russian language support
+│   │   └── setup_domain_models.sh          # Sets up domain-specific models
+│   │
+│   ├── build/                   # Build scripts
+│   │   ├── build_cpp.sh                    # Builds C++ components
+│   │   └── generate_bindings.sh            # Generates Python bindings
+│   │
+│   └── deploy/                  # Deployment scripts
+│       ├── deploy_services.sh              # Deploys services
+│       └── update_services.sh              # Updates deployed services
+│
+├── docker/                      # Docker configuration
+│   ├── development/             # Development environment
+│   │   ├── Dockerfile.python    # Dockerfile for Python components
+│   │   ├── Dockerfile.cpp       # Dockerfile for C++ components
+│   │   └── docker-compose.yml   # Compose file for development
+│   │
+│   └── production/              # Production environment
+│       ├── Dockerfile.python    # Dockerfile for Python components
+│       ├── Dockerfile.cpp       # Dockerfile for C++ components
+│       └── docker-compose.yml   # Compose file for production
+│
+├── docs/                        # Documentation
+│   ├── architecture/            # Architecture documentation
+│   │   ├── overview.md          # System overview
+│   │   ├── data_flow.md         # Data flow diagrams
+│   │   ├── theory_practice_classification.md  # Theory/practice classification details
+│   │   ├── domain_specific_processing.md   # Domain-specific processing details
+│   │   └── component_design.md  # Component design details
+│   │
+│   ├── api/                     # API documentation
+│   │   ├── api_reference.md     # API reference
+│   │   ├── theory_practice_api.md  # Theory/practice filtering API
+│   │   ├── domain_api.md        # Domain-specific API endpoints
+│   │   └── integration_guide.md # Integration guide
+│   │
+│   ├── languages/               # Language support documentation
+│   │   ├── russian_support.md   # Russian language support details
+│   │   └── english_support.md   # English language support details
+│   │
+│   └── user_guide/              # User documentation
+│       ├── installation.md      # Installation instructions
+│       ├── configuration.md     # Configuration guide
+│       ├── theory_vs_practice.md  # Using theory/practice filtering
+│       └── usage.md             # Usage instructions
+│
+├── flake.nix                    ✅ # Nix package definition
+├── README.md                    # Project README
+├── setup.py                     # Python package setup
+├── demo.py                     ✅ # Python package setup
+├── requirements.txt             # Python dependencies
+├── CMakeLists.txt               # CMake build configuration
+└── Makefile                     # Make targets for common tasks
