@@ -238,12 +238,12 @@ class TestDomainClassifier:
         # Check if Python is detected
         assert "python" in [lang.lower() for lang in features["languages_mentioned"]]
 
-    def test_extract_key_concepts(self, domain_classifier):
-        """Test extracting key concepts from a transcript."""
+    def test_extract_domain_concepts(self, domain_classifier):
+        """Test extracting domain concepts from a transcript."""
         with patch.object(domain_classifier, '_count_concept_occurrences', return_value=3), \
              patch.object(domain_classifier, '_is_concept_theoretical', return_value=True):
 
-            concepts = domain_classifier._extract_key_concepts(MATH_TRANSCRIPT, "mathematics", "en")
+            concepts = domain_classifier._extract_domain_concepts(MATH_TRANSCRIPT, "mathematics", "en")
 
             assert isinstance(concepts, list)
             assert len(concepts) <= 10  # Should return at most 10 concepts

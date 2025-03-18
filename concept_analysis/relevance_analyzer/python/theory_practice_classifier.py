@@ -2,14 +2,18 @@
 Enhanced Theory/Practice Classifier module for the Lecture Video Content Indexer.
 Classifies content as theoretical or practical based on linguistic markers and content analysis,
 with improved pattern recognition and additional domain-specific rules.
+Integrated with database persistence, caching, and performance monitoring.
 """
 
 import re
 import logging
 import json
 import os
+import pickle
 from pathlib import Path
 import numpy as np
+import hashlib
+import time
 from typing import Dict, List, Tuple, Any, Optional, Set
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -17,6 +21,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import VotingClassifier
+
+# Import new components
+from database.db_init import get_db_context
+from common.utils.cache_manager import CacheRegion
+from common.utils.performance_utils import measure_time, time_function, measure_memory
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -27,110 +36,76 @@ class TheoryPracticeClassifier:
     Classifies educational content as theoretical or practical,
     distinguishing between abstract explanations and concrete problem-solving.
     Supports Russian and English language content.
+    Integrated with database persistence, caching, and performance monitoring.
     """
 
     def __init__(self):
-        """Initialize the Theory Practice Classifier."""
-        logger.info("Initializing Theory Practice Classifier")
+        """Initialize the Theory Practice Classifier with database and caching support."""
+        with measure_time("theory_practice_classifier_init"):
+            logger.info("Initializing Theory Practice Classifier with database integration")
 
-        # Initialize rule-based classification patterns
-        self._init_classification_patterns()
+            # Initialize rule-based classification patterns
+            self._init_classification_patterns()
 
-        # Initialize ML model
-        self.ml_model = None
+            # Initialize ML model
+            self.ml_model = None
 
-        # Load cached model if available
-        self._try_load_model()
+            # Get database context
+            self.db_context = get_db_context()
+            if self.db_context:
+                logger.info("Connected to database context")
+                # Get cache regions
+                self.cache = self.db_context.get_cache_region("theory_practice_classifier")
+            else:
+                # Create a standalone cache if DB context is not available
+                from common.utils.cache_manager import CacheManager
+                cache_manager = CacheManager()
+                self.cache = cache_manager.region("theory_practice_classifier")
+                logger.info("Using standalone cache")
 
-        # Initialize semantic features extraction
-        self._init_semantic_features()
+            # Load cached model if available
+            self._try_load_model()
 
-        # Improved classification with domain-specific scoring
-        self._init_domain_specific_scoring()
+            # Initialize semantic features extraction
+            self._init_semantic_features()
+
+            # Improved classification with domain-specific scoring
+            self._init_domain_specific_scoring()
+
+            logger.info("Theory Practice Classifier initialized with database integration")
 
     def _try_load_model(self):
         """Attempt to load a cached ML model if available."""
+        # First try to get from cache
+        cached_model = self.cache.get("ml_model")
+        if cached_model:
+            self.ml_model = cached_model
+            logger.info("Loaded cached theory/practice classification model from cache")
+            return
+
         try:
+            # Try to load from file (backward compatibility)
             model_path = os.path.join('data', 'models', 'theory_practice_classifier.pkl')
             if os.path.exists(model_path):
-                import pickle
                 with open(model_path, 'rb') as f:
                     self.ml_model = pickle.load(f)
-                logger.info("Loaded cached theory/practice classification model")
-            else:
-                logger.info("No cached model found, will use rule-based classification")
+                logger.info("Loaded cached theory/practice classification model from file")
+                # Cache the model for future use
+                self.cache.set("ml_model", self.ml_model, ttl=86400)  # Cache for 24 hours
+                return
         except Exception as e:
-            logger.warning(f"Error loading cached model: {e}")
+            logger.warning(f"Error loading cached model from file: {e}")
 
-    def _init_domain_specific_scoring(self):
-        """Initialize domain-specific scoring rules for improved classification."""
-        # Programming-specific patterns that strongly indicate practical content
-        self.programming_practical_indicators = {
-            "en": [
-                # Common tutorial imperatives and code demonstrations
-                r'let\'s (create|build|make|write|implement|run|execute|initialize|setup|add)',
-                r'(create|initialize|setup|run) (a|the|your) (project|file|class|object|function|server)',
-                r'using (the|this|our) (framework|library|module|function|class|method)',
-                r'(write|implement|create) (the|a|this) (function|method|class|code|script)',
-                r'(print|display|output|return|show|console.log)',
-                r'(try|test|run) (this|the|your) (code|function|script)',
-                r'(save|update|modify) (the|your|this) (file|code|function|class)',
-                r'(install|pip install|npm install|download)',
-                r'(open|create) (a|the) (file|terminal|console|editor)',
-                r'(import|from\s+\w+\s+import|require)',
-                # Code samples and results
-                r'(```.+?```)',
-                r'(console|terminal|output|\$>)',
-                r'(syntax|error|warning|exception|bug|issue)',
-                r'(filename|filepath|directory|path)'
-            ],
-            "ru": [
-                # Russian programming practical patterns
-                r'давайте (создадим|напишем|сделаем|реализуем|запустим|выполним|инициализируем|установим|добавим)',
-                r'(создаем|инициализируем|устанавливаем|запускаем) (проект|файл|класс|объект|функцию|сервер)',
-                r'используя (этот|наш) (фреймворк|библиотеку|модуль|функцию|класс|метод)',
-                r'(напишем|реализуем|создадим) (функцию|метод|класс|код|скрипт)',
-                r'(печатаем|выводим|возвращаем|показываем)',
-                r'(пробуем|тестируем|запускаем) (этот|наш) (код|функцию|скрипт)',
-                r'(сохраняем|обновляем|изменяем) (файл|код|функцию|класс)',
-                r'(устанавливаем|pip install|npm install|скачиваем)',
-                r'(открываем|создаем) (файл|терминал|консоль|редактор)',
-                r'(импортируем|from\s+\w+\s+import|require)',
-                # Code indicators
-                r'(```.+?```)',
-                r'(консоль|терминал|вывод|результат)',
-                r'(синтаксис|ошибка|предупреждение|исключение|баг|проблема)',
-                r'(имя файла|путь к файлу|директория)'
-            ]
-        }
+        # If not in cache or file, try to load from the database
+        if self.db_context and hasattr(self.db_context, 'concept_repository'):
+            try:
+                # In a real implementation, this would query the database for the model
+                # For now, we just log a message
+                logger.info("Model not available in database, will train on demand")
+            except Exception as e:
+                logger.warning(f"Error loading model from database: {e}")
 
-        # Programming-specific patterns that might indicate theoretical content
-        self.programming_theoretical_indicators = {
-            "en": [
-                # Higher-level conceptual discussions
-                r'(computer science|computational|algorithmic) (theory|concept|principle)',
-                r'(object-oriented|functional|procedural) (programming|paradigm|approach)',
-                r'(abstractions?|concepts?|principles?|philosophy|methodology|architecture)',
-                r'(design patterns?|architectural patterns?|software engineering principles)',
-                r'(time complexity|space complexity|big O notation|computational complexity)',
-                r'(compiler theory|interpreter|language design|type system)',
-                r'(abstract data types?|conceptual model|logical model)',
-                r'(encapsulation|inheritance|polymorphism|abstraction) (principle|concept)',
-                r'(theory|concept|principle) (of|behind|underlying)'
-            ],
-            "ru": [
-                # Russian programming theoretical patterns
-                r'(теория|концепция|принцип) (информатики|вычислений|алгоритмов)',
-                r'(объектно-ориентированная|функциональная|процедурная) (парадигма|подход)',
-                r'(абстракции|концепции|принципы|философия|методология|архитектура)',
-                r'(шаблоны проектирования|архитектурные шаблоны|принципы разработки)',
-                r'(временная сложность|пространственная сложность|O-нотация|вычислительная сложность)',
-                r'(теория компиляторов|интерпретатор|дизайн языка|система типов)',
-                r'(абстрактные типы данных|концептуальная модель|логическая модель)',
-                r'(инкапсуляция|наследование|полиморфизм|абстракция) (принцип|концепция)',
-                r'(теория|концепция|принцип) (о|относительно|лежащий в основе)'
-            ]
-        }
+        logger.info("No cached model found, will use rule-based classification")
 
     def _init_classification_patterns(self):
         """Initialize patterns for rule-based classification."""
@@ -332,7 +307,7 @@ class TheoryPracticeClassifier:
 
         # "Stop phrases" - common phrases that should be ignored in classification
         # because they're ambiguous or too generic
-        self.stop_phrases = {
+        self.stopwords = {
             "en": [
                 "i think", "i believe", "thank you", "next video", "next time",
                 "see you", "if you like", "please subscribe", "let me know",
@@ -342,6 +317,76 @@ class TheoryPracticeClassifier:
                 "я думаю", "я полагаю", "спасибо", "следующее видео", "в следующий раз",
                 "увидимся", "если вам нравится", "подписывайтесь", "дайте мне знать",
                 "в этом видео", "в прошлом видео", "добро пожаловать", "привет всем"
+            ]
+        }
+
+    def _init_domain_specific_scoring(self):
+        """Initialize domain-specific scoring rules for improved classification."""
+        # Programming-specific patterns that strongly indicate practical content
+        self.programming_practical_indicators = {
+            "en": [
+                # Common tutorial imperatives and code demonstrations
+                r'let\'s (create|build|make|write|implement|run|execute|initialize|setup|add)',
+                r'(create|initialize|setup|run) (a|the|your) (project|file|class|object|function|server)',
+                r'using (the|this|our) (framework|library|module|function|class|method)',
+                r'(write|implement|create) (the|a|this) (function|method|class|code|script)',
+                r'(print|display|output|return|show|console.log)',
+                r'(try|test|run) (this|the|your) (code|function|script)',
+                r'(save|update|modify) (the|your|this) (file|code|function|class)',
+                r'(install|pip install|npm install|download)',
+                r'(open|create) (a|the) (file|terminal|console|editor)',
+                r'(import|from\s+\w+\s+import|require)',
+                # Code samples and results
+                r'(```.+?```)',
+                r'(console|terminal|output|\$>)',
+                r'(syntax|error|warning|exception|bug|issue)',
+                r'(filename|filepath|directory|path)'
+            ],
+            "ru": [
+                # Russian programming practical patterns
+                r'давайте (создадим|напишем|сделаем|реализуем|запустим|выполним|инициализируем|установим|добавим)',
+                r'(создаем|инициализируем|устанавливаем|запускаем) (проект|файл|класс|объект|функцию|сервер)',
+                r'используя (этот|наш) (фреймворк|библиотеку|модуль|функцию|класс|метод)',
+                r'(напишем|реализуем|создадим) (функцию|метод|класс|код|скрипт)',
+                r'(печатаем|выводим|возвращаем|показываем)',
+                r'(пробуем|тестируем|запускаем) (этот|наш) (код|функцию|скрипт)',
+                r'(сохраняем|обновляем|изменяем) (файл|код|функцию|класс)',
+                r'(устанавливаем|pip install|npm install|скачиваем)',
+                r'(открываем|создаем) (файл|терминал|консоль|редактор)',
+                r'(импортируем|from\s+\w+\s+import|require)',
+                # Code indicators
+                r'(```.+?```)',
+                r'(консоль|терминал|вывод|результат)',
+                r'(синтаксис|ошибка|предупреждение|исключение|баг|проблема)',
+                r'(имя файла|путь к файлу|директория)'
+            ]
+        }
+
+        # Programming-specific patterns that might indicate theoretical content
+        self.programming_theoretical_indicators = {
+            "en": [
+                # Higher-level conceptual discussions
+                r'(computer science|computational|algorithmic) (theory|concept|principle)',
+                r'(object-oriented|functional|procedural) (programming|paradigm|approach)',
+                r'(abstractions?|concepts?|principles?|philosophy|methodology|architecture)',
+                r'(design patterns?|architectural patterns?|software engineering principles)',
+                r'(time complexity|space complexity|big O notation|computational complexity)',
+                r'(compiler theory|interpreter|language design|type system)',
+                r'(abstract data types?|conceptual model|logical model)',
+                r'(encapsulation|inheritance|polymorphism|abstraction) (principle|concept)',
+                r'(theory|concept|principle) (of|behind|underlying)'
+            ],
+            "ru": [
+                # Russian programming theoretical patterns
+                r'(теория|концепция|принцип) (информатики|вычислений|алгоритмов)',
+                r'(объектно-ориентированная|функциональная|процедурная) (парадигма|подход)',
+                r'(абстракции|концепции|принципы|философия|методология|архитектура)',
+                r'(шаблоны проектирования|архитектурные шаблоны|принципы разработки)',
+                r'(временная сложность|пространственная сложность|O-нотация|вычислительная сложность)',
+                r'(теория компиляторов|интерпретатор|дизайн языка|система типов)',
+                r'(абстрактные типы данных|концептуальная модель|логическая модель)',
+                r'(инкапсуляция|наследование|полиморфизм|абстракция) (принцип|концепция)',
+                r'(теория|концепция|принцип) (о|относительно|лежащий в основе)'
             ]
         }
 
@@ -379,9 +424,10 @@ class TheoryPracticeClassifier:
             }
         }
 
+    @time_function(threshold_ms=5000)
     def train_model(self, training_data: List[Dict[str, Any]]):
         """
-        Train a machine learning model for theory/practice classification.
+        Train a machine learning model for theory/practice classification with caching.
 
         Args:
             training_data: List of training examples with "text" and "classification" fields
@@ -414,12 +460,18 @@ class TheoryPracticeClassifier:
                 ], voting='soft'))
             ])
 
-            self.ml_model.fit(texts, labels)
+            with measure_time("train_ml_model"):
+                self.ml_model.fit(texts, labels)
+
             logger.info("Theory/practice classifier trained successfully")
 
-            # Save the model for future use
+            # Cache the model for future use
+            if hasattr(self, 'cache'):
+                self.cache.set("ml_model", self.ml_model, ttl=86400)  # Cache for 24 hours
+                logger.info("Cached trained model in memory")
+
+            # Save the model to disk for backward compatibility
             try:
-                import pickle
                 os.makedirs('data/models', exist_ok=True)
                 with open('data/models/theory_practice_classifier.pkl', 'wb') as f:
                     pickle.dump(self.ml_model, f)
@@ -427,13 +479,19 @@ class TheoryPracticeClassifier:
             except Exception as e:
                 logger.warning(f"Could not save model to disk: {e}")
 
+            # Save to database if repository is available
+            if self.db_context and hasattr(self.db_context, 'concept_repository'):
+                # In a real implementation, this would save the model to the database
+                logger.info("Would save model to database in a real implementation")
+
         except Exception as e:
             logger.error(f"Error training theory/practice classifier: {e}")
             self.ml_model = None
 
+    @time_function(threshold_ms=500)
     def classify_text(self, text: str, language: str = "en", domain: str = None) -> Tuple[str, float]:
         """
-        Classify text as theoretical or practical.
+        Classify text as theoretical or practical with caching.
 
         Args:
             text: Text to classify
@@ -443,6 +501,14 @@ class TheoryPracticeClassifier:
         Returns:
             Tuple of (classification, confidence)
         """
+        # Generate cache key
+        if hasattr(self, 'cache'):
+            cache_key = f"classify_{hashlib.md5(text.encode()).hexdigest()}_{language}_{domain}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.debug(f"Using cached classification result")
+                return cached_result
+
         # Clean text before classification
         text = self._preprocess_text(text, language)
 
@@ -451,12 +517,20 @@ class TheoryPracticeClassifier:
             # Check for strong programming practical indicators
             practical_score = self._check_programming_practical_indicators(text, language)
             if practical_score > 2.0:  # Strong practical indicator
-                return "practical", min(0.8, 0.6 + practical_score * 0.1)
+                result = ("practical", min(0.8, 0.6 + practical_score * 0.1))
+                # Cache the result
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                return result
 
             # Check for strong programming theoretical indicators
             theoretical_score = self._check_programming_theoretical_indicators(text, language)
             if theoretical_score > 2.0:  # Strong theoretical indicator
-                return "theoretical", min(0.8, 0.6 + theoretical_score * 0.1)
+                result = ("theoretical", min(0.8, 0.6 + theoretical_score * 0.1))
+                # Cache the result
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                return result
 
         # Use ML model if available
         if self.ml_model is not None:
@@ -470,26 +544,45 @@ class TheoryPracticeClassifier:
 
                 # If confidence is high enough, return ML result
                 if confidence > 0.7:
-                    return prediction, confidence
+                    result = (prediction, confidence)
+                    # Cache the result
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                    return result
 
                 # Otherwise, combine with rule-based method
                 rule_classification, rule_confidence = self._rule_based_classification(text, language, domain)
 
                 # Weight ML higher than rule-based
                 if prediction == rule_classification:
-                    return prediction, max(confidence, rule_confidence)
+                    result = (prediction, max(confidence, rule_confidence))
+                    # Cache the result
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                    return result
                 else:
                     # If they disagree, take the one with higher confidence
                     if confidence >= rule_confidence:
-                        return prediction, confidence
+                        result = (prediction, confidence)
                     else:
-                        return rule_classification, rule_confidence
+                        result = (rule_classification, rule_confidence)
+
+                    # Cache the result
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                    return result
 
             except Exception as e:
                 logger.warning(f"Error in ML classification: {e}")
 
         # Rule-based classification
-        return self._rule_based_classification(text, language, domain)
+        result = self._rule_based_classification(text, language, domain)
+
+        # Cache the result
+        if hasattr(self, 'cache'):
+            self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+
+        return result
 
     def _preprocess_text(self, text: str, language: str) -> str:
         """
@@ -513,7 +606,7 @@ class TheoryPracticeClassifier:
         text = re.sub(r'https?://\S+', ' URL ', text)
 
         # Remove stop phrases that could bias classification
-        for phrase in self.stop_phrases.get(language, []):
+        for phrase in self.stopwords.get(language, []):
             text = text.replace(phrase, '')
 
         # Remove extra whitespace
@@ -792,9 +885,10 @@ class TheoryPracticeClassifier:
 
         return features
 
+    @time_function(threshold_ms=1000)
     def classify_segment(self, segment: Dict[str, Any], domain: str = None) -> Tuple[str, float]:
         """
-        Classify a transcript segment as theoretical or practical.
+        Classify a transcript segment as theoretical or practical with caching.
 
         Args:
             segment: Transcript segment dictionary
@@ -806,6 +900,14 @@ class TheoryPracticeClassifier:
         text = segment.get("text", "")
         language = segment.get("language", "en")
 
+        # Generate cache key
+        if hasattr(self, 'cache') and 'id' in segment:
+            cache_key = f"segment_{segment['id']}_{domain}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.debug(f"Using cached segment classification result")
+                return cached_result
+
         # Use NLP data if available
         nlp_data = segment.get("nlp_data", {})
         sentence_type = nlp_data.get("sentence_type", "")
@@ -815,14 +917,28 @@ class TheoryPracticeClassifier:
             # Still do classification but with a bias
             classification, confidence = self.classify_text(text, language, domain)
             if classification == "mixed":
-                return "theoretical", max(confidence, 0.7)
+                result = ("theoretical", max(confidence, 0.7))
+                # Cache the result
+                if hasattr(self, 'cache') and 'id' in segment:
+                    self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+                return result
+            # Cache the result
+            if hasattr(self, 'cache') and 'id' in segment:
+                self.cache.set(cache_key, (classification, confidence), ttl=3600)
             return classification, confidence
 
         elif sentence_type == "problem_statement" or sentence_type == "solution":
             # Still do classification but with a bias
             classification, confidence = self.classify_text(text, language, domain)
             if classification == "mixed":
-                return "practical", max(confidence, 0.7)
+                result = ("practical", max(confidence, 0.7))
+                # Cache the result
+                if hasattr(self, 'cache') and 'id' in segment:
+                    self.cache.set(cache_key, result, ttl=3600)
+                return result
+            # Cache the result
+            if hasattr(self, 'cache') and 'id' in segment:
+                self.cache.set(cache_key, (classification, confidence), ttl=3600)
             return classification, confidence
 
         # Check for formulas and code snippets
@@ -833,22 +949,44 @@ class TheoryPracticeClassifier:
         if formulas and not code_snippets:
             classification, confidence = self.classify_text(text, language, domain)
             if classification == "mixed":
-                return "theoretical", max(confidence, 0.6)
+                result = ("theoretical", max(confidence, 0.6))
+                # Cache the result
+                if hasattr(self, 'cache') and 'id' in segment:
+                    self.cache.set(cache_key, result, ttl=3600)
+                return result
+            # Cache the result
+            if hasattr(self, 'cache') and 'id' in segment:
+                self.cache.set(cache_key, (classification, confidence), ttl=3600)
             return classification, confidence
 
         # If segment has code snippets, it's more likely to be practical
         if code_snippets:
             classification, confidence = self.classify_text(text, language, domain)
             if classification == "mixed":
-                return "practical", max(confidence, 0.7)
+                result = ("practical", max(confidence, 0.7))
+                # Cache the result
+                if hasattr(self, 'cache') and 'id' in segment:
+                    self.cache.set(cache_key, result, ttl=3600)
+                return result
+            # Cache the result
+            if hasattr(self, 'cache') and 'id' in segment:
+                self.cache.set(cache_key, (classification, confidence), ttl=3600)
             return classification, confidence
 
         # Otherwise, do standard classification
-        return self.classify_text(text, language, domain)
+        result = self.classify_text(text, language, domain)
 
+        # Cache the result
+        if hasattr(self, 'cache') and 'id' in segment:
+            self.cache.set(cache_key, result, ttl=3600)
+
+        return result
+
+    @time_function(threshold_ms=5000)
+    @measure_memory(threshold_mb=100)
     def classify_transcript(self, transcript: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Classify an entire transcript and provide theory/practice statistics.
+        Classify an entire transcript and provide theory/practice statistics with caching.
 
         Args:
             transcript: Transcript dictionary
@@ -856,13 +994,21 @@ class TheoryPracticeClassifier:
         Returns:
             Dictionary with classification results
         """
+        # Generate cache key if video_id is available
+        if hasattr(self, 'cache') and 'video_id' in transcript:
+            cache_key = f"transcript_classification_{transcript['video_id']}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.info(f"Using cached transcript classification result")
+                return cached_result
+
         language = transcript.get("language", "en")
         domain = transcript.get("domain", None)
         segments = transcript.get("segments", [])
 
         if not segments:
             logger.warning("Empty transcript provided for classification")
-            return {
+            result = {
                 "classification": "unknown",
                 "confidence": 0.0,
                 "theoretical_segments": 0,
@@ -870,6 +1016,7 @@ class TheoryPracticeClassifier:
                 "mixed_segments": 0,
                 "theory_practice_ratio": 0.5
             }
+            return result
 
         # Classify each segment
         theoretical_segments = 0
@@ -877,6 +1024,20 @@ class TheoryPracticeClassifier:
         mixed_segments = 0
 
         for segment in segments:
+            # Skip segments that are already classified
+            if "content_type" in segment and segment["content_type"] in ["theoretical", "practical", "mixed"]:
+                content_type = segment["content_type"]
+
+                # Update counts based on existing classification
+                if content_type == "theoretical":
+                    theoretical_segments += 1
+                elif content_type == "practical":
+                    practical_segments += 1
+                else:
+                    mixed_segments += 1
+
+                continue
+
             classification, confidence = self.classify_segment(segment, domain)
 
             # Update segment with classification
@@ -924,8 +1085,8 @@ class TheoryPracticeClassifier:
 
             # Check a sample of segments for these indicators
             for segment in sample_segments:
-                text = segment.get("text", "").lower()
-                if any(indicator in text for indicator in tutorial_indicators):
+                segment_text = segment.get("text", "").lower()
+                if any(indicator in segment_text for indicator in tutorial_indicators):
                     programming_tutorial_score += 1
 
             # If it looks like a programming tutorial, ensure it's classified as practical
@@ -938,7 +1099,7 @@ class TheoryPracticeClassifier:
                 theory_practice_ratio = min(0.3, theory_practice_ratio * 0.7)
 
         # Compile results
-        results = {
+        result = {
             "classification": overall_classification,
             "confidence": confidence,
             "theoretical_segments": theoretical_segments,
@@ -949,11 +1110,31 @@ class TheoryPracticeClassifier:
 
         logger.info(f"Classified transcript: {overall_classification} (ratio: {theory_practice_ratio:.2f})")
 
-        return results
+        # Store in cache if available
+        if hasattr(self, 'cache') and 'video_id' in transcript:
+            self.cache.set(cache_key, result, ttl=3600*12)  # Cache for 12 hours
 
+        # Store in database if available
+        if self.db_context and hasattr(self.db_context, 'video_repository') and 'video_id' in transcript:
+            try:
+                # Update video in database with classification results
+                video_data = {
+                    "video_id": transcript['video_id'],
+                    "theory_practice_ratio": theory_practice_ratio,
+                    "theoretical_segments": theoretical_segments,
+                    "practical_segments": practical_segments
+                }
+                self.db_context.video_repository.save_video(video_data)
+                logger.info(f"Updated video {transcript['video_id']} with classification results")
+            except Exception as e:
+                logger.error(f"Error storing classification results in database: {e}")
+
+        return result
+
+    @time_function(threshold_ms=2000)
     def extract_theory_practice_patterns(self, transcript: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Extract theory-practice sequence patterns from a transcript.
+        Extract theory-practice sequence patterns from a transcript with caching.
 
         Args:
             transcript: Transcript dictionary
@@ -961,17 +1142,27 @@ class TheoryPracticeClassifier:
         Returns:
             Dictionary with theory-practice sequence patterns
         """
+        # Generate cache key if video_id is available
+        if hasattr(self, 'cache') and 'video_id' in transcript:
+            cache_key = f"theory_practice_patterns_{transcript['video_id']}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.info(f"Using cached theory-practice patterns")
+                return cached_result
+
         segments = transcript.get("segments", [])
         domain = transcript.get("domain", None)
+        video_id = transcript.get("video_id", None)
 
         if not segments:
-            return {
+            result = {
                 "theory_to_practice_sequences": [],
                 "practice_to_theory_sequences": [],
                 "theory_practice_alternations": 0,
                 "max_theory_sequence": 0,
                 "max_practice_sequence": 0
             }
+            return result
 
         # Extract segment classifications
         segment_types = []
@@ -982,13 +1173,14 @@ class TheoryPracticeClassifier:
             segment_types.append(content_type)
 
         if not segment_types:
-            return {
+            result = {
                 "theory_to_practice_sequences": [],
                 "practice_to_theory_sequences": [],
                 "theory_practice_alternations": 0,
                 "max_theory_sequence": 0,
                 "max_practice_sequence": 0
             }
+            return result
 
         # Find theory-to-practice transitions
         theory_to_practice = []
@@ -1111,7 +1303,7 @@ class TheoryPracticeClassifier:
             practice_to_theory_sequences.append(sequence)
 
         # Compile results
-        patterns = {
+        result = {
             "theory_to_practice_sequences": theory_to_practice_sequences,
             "practice_to_theory_sequences": practice_to_theory_sequences,
             "theory_practice_alternations": alternations,
@@ -1119,8 +1311,22 @@ class TheoryPracticeClassifier:
             "max_practice_sequence": max_practice_sequence
         }
 
-        return patterns
+        # Store in cache if available
+        if hasattr(self, 'cache') and video_id:
+            self.cache.set(cache_key, result, ttl=3600*12)  # Cache for 12 hours
 
+        # Store in database if available
+        if self.db_context and hasattr(self.db_context, 'video_repository') and video_id:
+            try:
+                # Save theory-practice patterns to database
+                self.db_context.video_repository.save_theory_practice_patterns(video_id, result)
+                logger.info(f"Saved theory-practice patterns to database for video {video_id}")
+            except Exception as e:
+                logger.error(f"Error saving theory-practice patterns to database: {e}")
+
+        return result
+
+    # Type detection helper methods
     def _is_math_definition(self, segment: Dict[str, Any]) -> bool:
         """Check if segment is a mathematical definition."""
         text = segment.get("text", "").lower()

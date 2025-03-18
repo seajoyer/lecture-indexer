@@ -107,7 +107,7 @@ def main():
     try:
         from data_acquisition.youtube_api.python.youtube_data_extractor import YouTubeDataExtractor
         from data_acquisition.youtube_api.python.data_pipeline import DataPipeline
-        from search_retrieval.search_engine.python.search_engine import SearchEngine
+        from search_retrieval.python.search_engine import SearchEngine
     except ImportError as e:
         print(f"{Fore.RED}Error importing required modules: {e}{Style.RESET_ALL}")
         print("Make sure you have installed the project and activated the correct Python environment.")

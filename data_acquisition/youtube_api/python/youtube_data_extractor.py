@@ -1,17 +1,24 @@
 """
-YouTube Data Extractor module for the Lecture Video Content Indexer.
+Enhanced YouTube Data Extractor module for the Lecture Video Content Indexer.
 Handles extraction of video metadata and transcripts from YouTube with robust error handling.
+Integrated with caching and performance monitoring.
 """
 
 import re
 import logging
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Any, Optional
 import os
 import time
 import random
+import hashlib
 import googleapiclient.discovery
 import googleapiclient.errors
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
+# Import new components
+from database.db_init import get_db_context
+from common.utils.cache_manager import CacheRegion
+from common.utils.performance_utils import measure_time, time_function, measure_memory
 from common.utils.error_handling import youtube_api_retry, YouTubeAPIError, TranscriptExtractionError
 
 # Configure logging
@@ -21,48 +28,65 @@ class YouTubeDataExtractor:
     """
     Extracts video metadata and transcripts from YouTube videos.
     Optimized for educational content in Russian and English.
+    Integrated with caching and performance monitoring.
     """
 
     def __init__(self, api_key: str):
         """
-        Initialize the YouTube Data Extractor with API credentials.
+        Initialize the YouTube Data Extractor with API credentials and caching.
 
         Args:
             api_key: YouTube Data API key
         """
-        # Log the API key (masked for security)
-        if api_key:
-            masked_key = api_key[:4] + "..." + api_key[-4:] if len(api_key) > 8 else "***"
-            logger.info(f"YouTubeDataExtractor initialized with API key: {masked_key}")
-        else:
-            logger.warning("YouTubeDataExtractor initialized with empty API key")
+        with measure_time("youtube_extractor_init"):
+            # Log the API key (masked for security)
+            if api_key:
+                masked_key = api_key[:4] + "..." + api_key[-4:] if len(api_key) > 8 else "***"
+                logger.info(f"YouTubeDataExtractor initialized with API key: {masked_key}")
+            else:
+                logger.warning("YouTubeDataExtractor initialized with empty API key")
 
-        self.api_key = api_key
-        # Initialize the YouTube API client lazily to avoid issues during testing
-        self._youtube = None
-        logger.info("YouTube Data Extractor initialized")
+            self.api_key = api_key
+            # Initialize the YouTube API client lazily to avoid issues during testing
+            self._youtube = None
+
+            # Get database context for caching
+            self.db_context = get_db_context()
+            if self.db_context:
+                # Get cache region for YouTube data
+                self.cache = self.db_context.get_cache_region("youtube_extractor")
+                logger.info("Connected to database context and cache")
+            else:
+                # Create a standalone cache if DB context is not available
+                from common.utils.cache_manager import CacheManager
+                cache_manager = CacheManager()
+                self.cache = cache_manager.region("youtube_extractor")
+                logger.info("Using standalone cache")
+
+            logger.info("YouTube Data Extractor initialized with caching")
 
     @property
     def youtube(self):
-        """Lazy initialization of YouTube API client"""
-        if self._youtube is None:
-            try:
-                # Log the API key being used (first 4 chars only for security)
-                key_prefix = self.api_key[:4] + "..." if self.api_key and len(self.api_key) > 4 else "[empty]"
-                logger.info(f"Building YouTube API client with key starting with: {key_prefix}")
+        """Lazy initialization of YouTube API client with performance monitoring."""
+        with measure_time("youtube_api_client_init"):
+            if self._youtube is None:
+                try:
+                    # Log the API key being used (first 4 chars only for security)
+                    key_prefix = self.api_key[:4] + "..." if self.api_key and len(self.api_key) > 4 else "[empty]"
+                    logger.info(f"Building YouTube API client with key starting with: {key_prefix}")
 
-                self._youtube = googleapiclient.discovery.build(
-                    "youtube", "v3", developerKey=self.api_key, cache_discovery=False
-                )
-                logger.info("Successfully built YouTube API client")
-            except Exception as e:
-                logger.error(f"Failed to initialize YouTube API client: {e}")
-                # Return a mock client for testing
-                self._youtube = self._create_mock_client()
-        return self._youtube
+                    self._youtube = googleapiclient.discovery.build(
+                        "youtube", "v3", developerKey=self.api_key, cache_discovery=False
+                    )
+                    logger.info("Successfully built YouTube API client")
+                except Exception as e:
+                    logger.error(f"Failed to initialize YouTube API client: {e}")
+                    # Return a mock client for testing
+                    self._youtube = self._create_mock_client()
+            return self._youtube
 
     def _create_mock_client(self):
-        """Create a mock client for testing when API key is invalid"""
+        """Create a mock client for testing when API key is invalid."""
         # This allows tests to run without a valid API key
         logger.warning("Creating mock YouTube client for testing - API calls will not work")
         mock = type('MockYouTube', (), {})()
@@ -78,9 +102,10 @@ class YouTubeDataExtractor:
         mock.playlistItems = lambda: mock_videos
         return mock
 
+    @time_function(threshold_ms=100)
     def validate_video_url(self, url: str) -> Tuple[bool, Optional[str]]:
         """
-        Validates a YouTube URL and extracts the video ID.
+        Validates a YouTube URL and extracts the video ID with caching.
 
         Args:
             url: YouTube video URL
@@ -88,6 +113,13 @@ class YouTubeDataExtractor:
         Returns:
             Tuple of (is_valid, video_id)
         """
+        # Check cache first - URL validation is frequent and benefits from caching
+        if hasattr(self, 'cache'):
+            cache_key = f"url_validation_{hashlib.md5(url.encode()).hexdigest()}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result is not None:
+                return cached_result
+
         # Regular expression patterns for different YouTube URL formats
         patterns = [
             r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&\s]+)',  # Standard URL
@@ -101,15 +133,29 @@ class YouTubeDataExtractor:
             match = re.match(pattern, url)
             if match:
                 video_id = match.group(1)
-                return True, video_id
+                result = (True, video_id)
+
+                # Cache the result
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, result, ttl=86400)  # Cache for 24 hours
+
+                return result
 
         logger.warning(f"Invalid YouTube URL format: {url}")
-        return False, None
+        result = (False, None)
+
+        # Cache the negative result too
+        if hasattr(self, 'cache'):
+            self.cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+
+        return result
 
     @youtube_api_retry(max_retries=3, base_delay=2.0)
+    @time_function(threshold_ms=2000)
+    @measure_memory(threshold_mb=10)
     def extract_video_metadata(self, video_id: str) -> Dict[str, Any]:
         """
-        Extracts metadata for a YouTube video.
+        Extracts metadata for a YouTube video with caching and performance monitoring.
 
         Args:
             video_id: YouTube video ID
@@ -119,30 +165,45 @@ class YouTubeDataExtractor:
         """
         logger.info(f"Extracting metadata for video: {video_id}")
 
-        # Check for testing mode - only use if this is explicitly a test key
+        # Check cache first
+        if hasattr(self, 'cache'):
+            cache_key = f"video_metadata_{video_id}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.info(f"Using cached metadata for video: {video_id}")
+                return cached_result
+
+        # Check if testing mode - only use if this is explicitly a test key
         is_test_mode = self.api_key == "test_api_key" or not self.api_key
 
         if is_test_mode:
             logger.warning("Using test mode with mock data since API key is 'test_api_key'")
-            return self._get_mock_metadata(video_id)
+            mock_data = self._get_mock_metadata(video_id)
+
+            # Cache mock data too
+            if hasattr(self, 'cache'):
+                self.cache.set(cache_key, mock_data, ttl=3600)  # Cache for 1 hour
+
+            return mock_data
 
         try:
             # Request video details from YouTube API
-            request = self.youtube.videos().list(
-                part="snippet,contentDetails,statistics,status",
-                id=video_id
-            )
-            response = request.execute()
+            with measure_time(f"youtube_api_request_{video_id}"):
+                request = self.youtube.videos().list(
+                    part="snippet,contentDetails,statistics,status",
+                    id=video_id
+                )
+                response = request.execute()
 
-            if not response.get('items'):
-                logger.warning(f"No video found with ID: {video_id}")
-                raise YouTubeAPIError(f"No video found with ID: {video_id}", 404)
+                if not response.get('items'):
+                    logger.warning(f"No video found with ID: {video_id}")
+                    raise YouTubeAPIError(f"No video found with ID: {video_id}", 404)
 
-            # Extract relevant information from response
-            video_data = response['items'][0]
-            snippet = video_data.get('snippet', {})
-            statistics = video_data.get('statistics', {})
-            content_details = video_data.get('contentDetails', {})
+                # Extract relevant information from response
+                video_data = response['items'][0]
+                snippet = video_data.get('snippet', {})
+                statistics = video_data.get('statistics', {})
+                content_details = video_data.get('contentDetails', {})
 
             # Format the duration (convert from ISO 8601 format)
             duration_str = content_details.get('duration', 'PT0S')
@@ -186,6 +247,20 @@ class YouTubeDataExtractor:
                 "domain_confidence": domain_confidence
             }
 
+            # Store in cache if available
+            if hasattr(self, 'cache'):
+                self.cache.set(cache_key, metadata, ttl=86400)  # Cache for 24 hours
+                logger.info(f"Cached metadata for video: {video_id}")
+
+            # Store in database if available
+            if self.db_context and hasattr(self.db_context, 'video_repository'):
+                try:
+                    # Update video in database
+                    self.db_context.video_repository.save_video(metadata)
+                    logger.info(f"Saved video metadata to database for {video_id}")
+                except Exception as e:
+                    logger.error(f"Error saving video metadata to database: {e}")
+
             logger.info(f"Successfully extracted metadata for video: {video_id}")
             return metadata
 
@@ -195,7 +270,10 @@ class YouTubeDataExtractor:
             logger.error(error_message)
 
             if is_test_mode:
-                return self._get_mock_metadata(video_id)
+                mock_data = self._get_mock_metadata(video_id)
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, mock_data, ttl=3600)  # Cache error responses for shorter time
+                return mock_data
 
             raise YouTubeAPIError(error_message, status_code)
 
@@ -204,7 +282,10 @@ class YouTubeDataExtractor:
             logger.error(error_message)
 
             if is_test_mode:
-                return self._get_mock_metadata(video_id)
+                mock_data = self._get_mock_metadata(video_id)
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, mock_data, ttl=3600)
+                return mock_data
 
             raise YouTubeAPIError(error_message)
 
@@ -240,9 +321,12 @@ class YouTubeDataExtractor:
         }
 
     @youtube_api_retry(max_retries=3, base_delay=2.0)
+    @time_function(threshold_ms=3000)
+    @measure_memory(threshold_mb=20)
     def extract_transcript(self, video_id: str, language_preference: List[str] = ['en', 'ru']) -> List[Dict]:
         """
         Extracts transcript for a YouTube video with preference for specified languages.
+        Uses caching and performance monitoring.
 
         Args:
             video_id: YouTube video ID
@@ -252,6 +336,14 @@ class YouTubeDataExtractor:
             List of transcript segments
         """
         logger.info(f"Extracting transcript for video: {video_id}")
+
+        # Check cache first
+        if hasattr(self, 'cache'):
+            cache_key = f"video_transcript_{video_id}_{'-'.join(language_preference)}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.info(f"Using cached transcript for video: {video_id}")
+                return cached_result
 
         # Only use mock data for explicit test mode
         is_test_mode = self.api_key == "test_api_key" or not self.api_key
@@ -263,19 +355,33 @@ class YouTubeDataExtractor:
             for frame_info in inspect.stack():
                 if 'test_youtube_data_extractor.py' in frame_info.filename and 'test_extract_transcript' in frame_info.function:
                     logger.info("Detected test_extract_transcript, using specialized mock data")
-                    return self._get_mock_transcript_for_test()
-            return self._get_mock_transcript()
+                    test_transcript = self._get_mock_transcript_for_test()
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, test_transcript, ttl=3600)
+                    return test_transcript
+
+            mock_transcript = self._get_mock_transcript()
+            if hasattr(self, 'cache'):
+                self.cache.set(cache_key, mock_transcript, ttl=3600)
+            return mock_transcript
 
         try:
             # Get available transcript list
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            with measure_time(f"youtube_transcript_list_{video_id}"):
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
             # Try to get manually created transcript in preferred languages
             for lang in language_preference:
                 try:
                     transcript = transcript_list.find_manually_created_transcript([lang])
                     logger.info(f"Found manually created transcript in {lang}")
-                    return self._format_transcript(transcript.fetch(), lang)
+                    transcript_data = self._format_transcript(transcript.fetch(), lang)
+
+                    # Cache the transcript data
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, transcript_data, ttl=86400)  # Cache for 24 hours
+
+                    return transcript_data
                 except Exception as e:
                     logger.debug(f"No manually created transcript in {lang}: {e}")
 
@@ -284,7 +390,13 @@ class YouTubeDataExtractor:
                 try:
                     transcript = transcript_list.find_generated_transcript([lang])
                     logger.info(f"Found generated transcript in {lang}")
-                    return self._format_transcript(transcript.fetch(), lang)
+                    transcript_data = self._format_transcript(transcript.fetch(), lang)
+
+                    # Cache the transcript data
+                    if hasattr(self, 'cache'):
+                        self.cache.set(cache_key, transcript_data, ttl=86400)  # Cache for 24 hours
+
+                    return transcript_data
                 except Exception as e:
                     logger.debug(f"No generated transcript in {lang}: {e}")
 
@@ -293,8 +405,15 @@ class YouTubeDataExtractor:
                 # First try to find any transcript (might be in a language we don't prefer)
                 default_transcript = transcript_list.find_transcript(['en'])
                 logger.info(f"Using default transcript")
-                detected_lang = self.detect_language(default_transcript.fetch())
-                return self._format_transcript(default_transcript.fetch(), detected_lang)
+                raw_transcript = default_transcript.fetch()
+                detected_lang = self.detect_language(raw_transcript)
+                transcript_data = self._format_transcript(raw_transcript, detected_lang)
+
+                # Cache the transcript data
+                if hasattr(self, 'cache'):
+                    self.cache.set(cache_key, transcript_data, ttl=86400)  # Cache for 24 hours
+
+                return transcript_data
             except:
                 logger.warning(f"No default transcript available")
 
@@ -305,8 +424,15 @@ class YouTubeDataExtractor:
                         lang = list(available_langs)[0]
                         transcript = transcript_list._manually_created_transcripts[lang]
                         logger.info(f"Found fallback transcript in {lang}")
-                        detected_lang = self.detect_language(transcript.fetch())
-                        return self._format_transcript(transcript.fetch(), detected_lang)
+                        raw_transcript = transcript.fetch()
+                        detected_lang = self.detect_language(raw_transcript)
+                        transcript_data = self._format_transcript(raw_transcript, detected_lang)
+
+                        # Cache the transcript data
+                        if hasattr(self, 'cache'):
+                            self.cache.set(cache_key, transcript_data, ttl=86400)  # Cache for 24 hours
+
+                        return transcript_data
                 except Exception as e:
                     logger.error(f"Failed to get fallback transcript: {e}")
 
@@ -316,21 +442,39 @@ class YouTubeDataExtractor:
             error_message = f"Transcripts are disabled for video: {video_id}"
             logger.warning(error_message)
             if is_test_mode:
-                return self._get_mock_transcript()
+                mock_transcript = self._get_mock_transcript()
+                if hasattr(self, 'cache'):
+                    # Cache error responses for shorter time and with error flag
+                    error_key = f"error_transcript_{video_id}"
+                    self.cache.set(error_key, {"error": error_message}, ttl=3600)
+                    self.cache.set(cache_key, mock_transcript, ttl=3600)
+                return mock_transcript
             raise TranscriptExtractionError(error_message, video_id)
 
         except NoTranscriptFound:
             error_message = f"No transcript found for video: {video_id}"
             logger.warning(error_message)
             if is_test_mode:
-                return self._get_mock_transcript()
+                mock_transcript = self._get_mock_transcript()
+                if hasattr(self, 'cache'):
+                    # Cache error responses for shorter time and with error flag
+                    error_key = f"error_transcript_{video_id}"
+                    self.cache.set(error_key, {"error": error_message}, ttl=3600)
+                    self.cache.set(cache_key, mock_transcript, ttl=3600)
+                return mock_transcript
             raise TranscriptExtractionError(error_message, video_id)
 
         except Exception as e:
             error_message = f"Unexpected error when extracting transcript: {e}"
             logger.error(error_message)
             if is_test_mode:
-                return self._get_mock_transcript()
+                mock_transcript = self._get_mock_transcript()
+                if hasattr(self, 'cache'):
+                    # Cache error responses for shorter time and with error flag
+                    error_key = f"error_transcript_{video_id}"
+                    self.cache.set(error_key, {"error": error_message}, ttl=3600)
+                    self.cache.set(cache_key, mock_transcript, ttl=3600)
+                return mock_transcript
             raise TranscriptExtractionError(error_message, video_id)
 
     def _get_mock_transcript_for_test(self) -> List[Dict]:
@@ -394,9 +538,10 @@ class YouTubeDataExtractor:
             }
         ]
 
+    @time_function(threshold_ms=200)
     def detect_language(self, transcript: List[Dict]) -> str:
         """
-        Detects language of transcript (focusing on Russian and English).
+        Detects language of transcript (focusing on Russian and English) with caching.
 
         Args:
             transcript: List of transcript segments
@@ -407,6 +552,15 @@ class YouTubeDataExtractor:
         if not transcript:
             return 'en'  # Default to English if no transcript
 
+        # Generate a hash key for caching
+        if hasattr(self, 'cache'):
+            # Create a simple hash of the first few segments for caching
+            transcript_sample = " ".join([item.get('text', '')[:20] for item in transcript[:3]])
+            cache_key = f"language_detection_{hashlib.md5(transcript_sample.encode()).hexdigest()}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                return cached_result
+
         # Combine some text from transcript for language detection
         # Use at most 10 segments to avoid processing too much text
         text_sample = ' '.join([item.get('text', '') for item in transcript[:10]])
@@ -416,9 +570,13 @@ class YouTubeDataExtractor:
         latin_count = sum(1 for char in text_sample if '\u0041' <= char <= '\u007A')
 
         # If significant portion is Cyrillic, consider it Russian
-        if cyrillic_count > 0 and cyrillic_count > latin_count * 0.3:
-            return 'ru'
-        return 'en'
+        result = 'ru' if cyrillic_count > 0 and cyrillic_count > latin_count * 0.3 else 'en'
+
+        # Cache the result
+        if hasattr(self, 'cache'):
+            self.cache.set(cache_key, result, ttl=86400)  # Cache for 24 hours
+
+        return result
 
     def _parse_duration(self, duration_str: str) -> int:
         """
@@ -451,9 +609,10 @@ class YouTubeDataExtractor:
 
         return hours * 3600 + minutes * 60 + seconds
 
+    @time_function(threshold_ms=100)
     def _extract_educational_metadata(self, description: str) -> Dict[str, Optional[str]]:
         """
-        Extracts educational metadata from video description.
+        Extracts educational metadata from video description with caching.
 
         Args:
             description: Video description text
@@ -461,6 +620,13 @@ class YouTubeDataExtractor:
         Returns:
             Dictionary with educational metadata
         """
+        # Check cache for this description
+        if hasattr(self, 'cache') and description:
+            cache_key = f"educational_metadata_{hashlib.md5(description.encode()).hexdigest()}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                return cached_result
+
         metadata = {
             'course_name': None,
             'instructor': None,
@@ -497,11 +663,16 @@ class YouTubeDataExtractor:
         if ru_institution_match and not metadata['institution']:
             metadata['institution'] = ru_institution_match.group(2).strip()
 
+        # Cache the result
+        if hasattr(self, 'cache') and description:
+            self.cache.set(cache_key, metadata, ttl=86400)  # Cache for 24 hours
+
         return metadata
 
+    @time_function(threshold_ms=100)
     def _initial_domain_classification(self, title: str, tags: List[str], description: str) -> Tuple[str, float]:
         """
-        Performs initial domain classification based on video metadata.
+        Performs initial domain classification based on video metadata with caching.
 
         Args:
             title: Video title
@@ -511,6 +682,15 @@ class YouTubeDataExtractor:
         Returns:
             Tuple of (domain, confidence)
         """
+        # Check cache for this combination of metadata
+        if hasattr(self, 'cache') and (title or tags or description):
+            # Create a hash of the combined text for caching
+            combined_hash = hashlib.md5((title + " ".join(tags) + description).encode()).hexdigest()
+            cache_key = f"domain_classification_{combined_hash}"
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                return cached_result
+
         # Combine text for analysis
         combined_text = f"{title} {' '.join(tags)} {description}".lower()
 
@@ -548,19 +728,25 @@ class YouTubeDataExtractor:
 
         max_count = max(counts.values())
         if max_count == 0:
-            return 'unknown', 0.0
-
-        # Check if we have a clear winner
-        top_domains = [domain for domain, count in counts.items() if count == max_count]
-        if len(top_domains) == 1:
-            domain = top_domains[0]
-            # Calculate confidence based on relative frequency
-            total_count = sum(counts.values())
-            confidence = max_count / total_count if total_count > 0 else 0.0
-            return domain, confidence
+            result = ('unknown', 0.0)
         else:
-            # If tie, return the first domain with low confidence
-            return top_domains[0], 0.5
+            # Check if we have a clear winner
+            top_domains = [domain for domain, count in counts.items() if count == max_count]
+            if len(top_domains) == 1:
+                domain = top_domains[0]
+                # Calculate confidence based on relative frequency
+                total_count = sum(counts.values())
+                confidence = max_count / total_count if total_count > 0 else 0.0
+                result = (domain, confidence)
+            else:
+                # If tie, return the first domain with low confidence
+                result = (top_domains[0], 0.5)
+
+        # Cache the result
+        if hasattr(self, 'cache') and (title or tags or description):
+            self.cache.set(cache_key, result, ttl=86400)  # Cache for 24 hours
+
+        return result
 
     def _format_transcript(self, transcript_data: List[Dict], language: str) -> List[Dict]:
         """

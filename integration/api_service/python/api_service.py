@@ -1,6 +1,7 @@
 """
 API Service module for the Lecture Video Content Indexer.
 Provides RESTful API endpoints for video processing and search functionality.
+Integrated with database, caching, and performance monitoring.
 """
 
 import os
@@ -13,10 +14,12 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, HttpUrl
 import uvicorn
 
+from database.db_init import init_database, get_db_context
 from integration.task_manager.python.task_manager import TaskManager
 from common.utils.config_loader import load_config
-from data_acquisition.youtube_api.python.youtube_data_extractor import YouTubeDataExtractor
+from common.utils.performance_utils import measure_time, time_function, measure_memory
 from common.utils.error_handling import handle_api_error
+from data_acquisition.youtube_api.python.youtube_data_extractor import YouTubeDataExtractor
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -70,11 +73,12 @@ class ConceptRequest(BaseModel):
 config = None
 task_manager = None
 youtube_extractor = None
+db_context = None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize API service on startup."""
-    global config, task_manager, youtube_extractor
+    global config, task_manager, youtube_extractor, db_context
 
     try:
         # Log the current working directory to help with debugging
@@ -97,6 +101,21 @@ async def startup_event():
         config = load_config(api_config_path)
         logger.info(f"Loaded API configuration: {list(config.keys())}")
 
+        # Initialize database connection
+        db_config_path = "config/db_config.yaml"
+        db_context = init_database(db_config_path)
+        logger.info("Database initialized successfully")
+
+        # Initialize performance monitoring
+        from common.utils.performance_utils import initialize as init_performance
+        init_performance(
+            enable_monitoring=True,
+            log_interval=300,
+            memory_profiling=False,
+            auto_optimize=True
+        )
+        logger.info("Performance monitoring initialized")
+
         # Extract YouTube API key (first few and last few chars for security)
         api_key = config.get("youtube_api_key", "")
         if api_key:
@@ -106,7 +125,7 @@ async def startup_event():
             logger.warning("No YouTube API key found in config")
 
         # Initialize task manager
-        task_manager = TaskManager(config)
+        task_manager = TaskManager(config, db_context)
         logger.info("Initialized Task Manager")
 
         # Initialize YouTube extractor (for URL validation)
@@ -126,11 +145,15 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown."""
-    global task_manager
+    global task_manager, db_context
 
     if task_manager:
         await task_manager.shutdown()
         logger.info("Task Manager shut down")
+
+    if db_context:
+        db_context.close()
+        logger.info("Database connection closed")
 
     logger.info("API Service shut down")
 
@@ -142,8 +165,20 @@ async def verify_token(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="Invalid authentication token")
     return token
 
+@time_function(threshold_ms=500)
 async def validate_video_url(url: str) -> str:
-    """Validate a YouTube URL and return the video ID."""
+    """
+    Validate a YouTube URL and return the video ID.
+
+    Args:
+        url: YouTube URL
+
+    Returns:
+        video_id: YouTube video ID
+
+    Raises:
+        HTTPException: If URL is invalid
+    """
     global youtube_extractor
 
     if not youtube_extractor:
@@ -157,6 +192,7 @@ async def validate_video_url(url: str) -> str:
 
 # API endpoints
 @app.post("/api/v1/videos", response_model=Dict[str, Any])
+@handle_api_error
 async def submit_video(
     submission: VideoSubmission,
     background_tasks: BackgroundTasks,
@@ -170,35 +206,37 @@ async def submit_video(
     - **priority**: Processing priority (0-10, higher = higher priority)
     - **language**: Preferred language for transcript ("en" or "ru")
     """
-    try:
-        # Validate video URL
-        video_id = await validate_video_url(str(submission.url))
+    with measure_time("submit_video_api"):
+        try:
+            # Validate video URL
+            video_id = await validate_video_url(str(submission.url))
 
-        # Create processing job
-        job_id = await task_manager.create_video_processing_task(
-            video_id=video_id,
-            video_url=str(submission.url),
-            metadata=submission.metadata,
-            priority=submission.priority,
-            language=submission.language
-        )
+            # Create processing job
+            job_id = await task_manager.create_video_processing_task(
+                video_id=video_id,
+                video_url=str(submission.url),
+                metadata=submission.metadata,
+                priority=submission.priority,
+                language=submission.language
+            )
 
-        # Start processing in background
-        background_tasks.add_task(task_manager.process_video_task, job_id)
+            # Start processing in background
+            background_tasks.add_task(task_manager.process_video_task, job_id)
 
-        return {
-            "job_id": job_id,
-            "video_id": video_id,
-            "status": "submitted"
-        }
+            return {
+                "job_id": job_id,
+                "video_id": video_id,
+                "status": "submitted"
+            }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error submitting video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error submitting video: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/videos/{video_id}/status", response_model=VideoStatus)
+@handle_api_error
 async def check_video_status(
     video_id: str,
     token: str = Depends(verify_token)
@@ -208,27 +246,29 @@ async def check_video_status(
 
     - **video_id**: YouTube video ID
     """
-    try:
-        # Get status from task manager
-        status = await task_manager.get_video_processing_status(video_id)
+    with measure_time("check_video_status_api"):
+        try:
+            # Get status from task manager
+            status = await task_manager.get_video_processing_status(video_id)
 
-        if not status:
-            raise HTTPException(status_code=404, detail=f"No processing job found for video ID: {video_id}")
+            if not status:
+                raise HTTPException(status_code=404, detail=f"No processing job found for video ID: {video_id}")
 
-        return VideoStatus(
-            video_id=video_id,
-            status=status.get("status", "unknown"),
-            progress=status.get("progress", 0),
-            domain=status.get("domain")
-        )
+            return VideoStatus(
+                video_id=video_id,
+                status=status.get("status", "unknown"),
+                progress=status.get("progress", 0),
+                domain=status.get("domain")
+            )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error checking video status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error checking video status: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/search", response_model=Dict[str, Any])
+@handle_api_error
 async def search_concepts(
     q: str = Query(..., description="Search query text"),
     filters: str = Query("{}", description="JSON string of filter criteria"),
@@ -250,34 +290,36 @@ async def search_concepts(
     - **page**: Page number
     - **limit**: Results per page
     """
-    try:
-        # Parse filters
-        filter_dict = {}
-        if filters:
-            try:
-                filter_dict = json.loads(filters)
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid filters JSON format")
+    with measure_time("search_concepts_api"):
+        try:
+            # Parse filters
+            filter_dict = {}
+            if filters:
+                try:
+                    filter_dict = json.loads(filters)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="Invalid filters JSON format")
 
-        # Execute search query
-        search_results = await task_manager.search_concepts(
-            query=q,
-            filters=filter_dict,
-            theory_practice_ratio=theory_practice_ratio,
-            domain=domain,
-            page=page,
-            limit=limit
-        )
+            # Execute search query
+            search_results = await task_manager.search_concepts(
+                query=q,
+                filters=filter_dict,
+                theory_practice_ratio=theory_practice_ratio,
+                domain=domain,
+                page=page,
+                limit=limit
+            )
 
-        return search_results
+            return search_results
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error searching concepts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error searching concepts: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/concepts/{concept_id}", response_model=Dict[str, Any])
+@handle_api_error
 async def get_concept(
     concept_id: str,
     token: str = Depends(verify_token)
@@ -287,22 +329,24 @@ async def get_concept(
 
     - **concept_id**: Concept ID
     """
-    try:
-        # Get concept details
-        concept = await task_manager.get_concept_details(concept_id)
+    with measure_time("get_concept_api"):
+        try:
+            # Get concept details
+            concept = await task_manager.get_concept_details(concept_id)
 
-        if not concept:
-            raise HTTPException(status_code=404, detail=f"Concept not found: {concept_id}")
+            if not concept:
+                raise HTTPException(status_code=404, detail=f"Concept not found: {concept_id}")
 
-        return concept
+            return concept
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting concept: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting concept: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/videos/{video_id}/concepts", response_model=Dict[str, Any])
+@handle_api_error
 async def get_video_concepts(
     video_id: str,
     context_type: Optional[str] = Query(
@@ -316,25 +360,27 @@ async def get_video_concepts(
     - **video_id**: YouTube video ID
     - **context_type**: Content type filter (theoretical, practical, mixed)
     """
-    try:
-        # Get video concepts
-        concepts = await task_manager.get_video_concepts(
-            video_id=video_id,
-            context_type=context_type
-        )
+    with measure_time("get_video_concepts_api"):
+        try:
+            # Get video concepts
+            concepts = await task_manager.get_video_concepts(
+                video_id=video_id,
+                context_type=context_type
+            )
 
-        if concepts is None:
-            raise HTTPException(status_code=404, detail=f"Video not found or not processed: {video_id}")
+            if concepts is None:
+                raise HTTPException(status_code=404, detail=f"Video not found or not processed: {video_id}")
 
-        return concepts
+            return concepts
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting video concepts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting video concepts: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/learning-paths", response_model=Dict[str, Any])
+@handle_api_error
 async def generate_learning_path(
     concept_request: ConceptRequest,
     token: str = Depends(verify_token)
@@ -346,24 +392,63 @@ async def generate_learning_path(
     - **theory_practice_ratio**: Desired ratio of theoretical to practical content
     - **domain**: Optional domain filter
     """
+    with measure_time("generate_learning_path_api"):
+        try:
+            # Generate learning path
+            learning_path = await task_manager.generate_learning_path(
+                concept_ids=concept_request.concept_ids,
+                theory_practice_ratio=concept_request.theory_practice_ratio,
+                domain=concept_request.domain
+            )
+
+            if not learning_path:
+                raise HTTPException(status_code=404, detail="Could not generate learning path for the specified concepts")
+
+            return learning_path
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error generating learning path: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/health", response_model=Dict[str, Any])
+async def health_check():
+    """
+    Health check endpoint to verify service status.
+
+    Returns system health status and key metrics.
+    """
     try:
-        # Generate learning path
-        learning_path = await task_manager.generate_learning_path(
-            concept_ids=concept_request.concept_ids,
-            theory_practice_ratio=concept_request.theory_practice_ratio,
-            domain=concept_request.domain
-        )
+        # Check database connection
+        db_status = "healthy"
+        if db_context:
+            try:
+                # Execute a simple query to verify database connection
+                db_context.db_manager.execute_query("SELECT 1")
+            except Exception as e:
+                db_status = f"unhealthy: {str(e)}"
+        else:
+            db_status = "not initialized"
 
-        if not learning_path:
-            raise HTTPException(status_code=404, detail="Could not generate learning path for the specified concepts")
+        # Get basic performance metrics
+        from common.utils.performance_utils import get_system_metrics
+        system_metrics = get_system_metrics()
 
-        return learning_path
-
-    except HTTPException:
-        raise
+        return {
+            "status": "healthy",
+            "timestamp": system_metrics.get("timestamp"),
+            "database": db_status,
+            "memory_usage_mb": system_metrics.get("process_memory_rss_mb", 0),
+            "cpu_percent": system_metrics.get("process_cpu_percent", 0),
+            "uptime": "unknown"  # Would require tracking start time
+        }
     except Exception as e:
-        logger.error(f"Error generating learning path: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
 
 def start_server(host: str = "0.0.0.0", port: int = 8080, reload: bool = False):
     """Start the API server."""
