@@ -5,16 +5,13 @@ Implements advanced search capabilities with repository pattern, caching, and pe
 
 import logging
 import time
-import re
-from typing import Dict, List, Any, Optional, Tuple, Set
-import os
-from pathlib import Path
+from typing import Dict, List, Any, Optional
 import hashlib
 import threading
+import hashlib
+import json
 
 from database.db_init import get_db_context
-from common.utils.config_loader import load_config
-from common.utils.cache_manager import CacheRegion
 from common.utils.performance_utils import measure_time, time_function, measure_memory
 
 # Configure logging
@@ -260,16 +257,9 @@ class SearchEngine:
         # Better approach is to use time-based expiration for search results
 
     @time_function(threshold_ms=1000)
-    @search_cache.cached(ttl=300)  # Cache search results for 5 minutes
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a search query with optimized caching and performance monitoring.
-
-        Args:
-            query: Structured query dictionary
-
-        Returns:
-            Search results dictionary
         """
         start_time = time.time()
 
@@ -288,6 +278,15 @@ class SearchEngine:
                     "query": query
                 }
 
+            # Check cache first
+            if hasattr(self, 'cache'):
+                # Create a cache key from the query
+                cache_key = f"search_{hashlib.md5(json.dumps(query, sort_keys=True).encode()).hexdigest()}"
+                cached_result = self.cache.get(cache_key)
+                if cached_result:
+                    logger.debug(f"Using cached search results for query: {query_text}")
+                    return cached_result
+
             # Delegate search to repository
             with measure_time(f"search_repository_query", threshold_ms=500):
                 search_results = self.search_repository.search(query)
@@ -295,6 +294,10 @@ class SearchEngine:
             # Enhance results with additional data if needed
             with measure_time(f"enhance_search_results", threshold_ms=300):
                 enhanced_results = self._enhance_search_results(search_results)
+
+            # Cache the results if cache is available
+            if hasattr(self, 'cache'):
+                self.cache.set(cache_key, enhanced_results, ttl=300)  # Cache for 5 minutes
 
             logger.info(f"Search for '{query_text}' returned {enhanced_results.get('totalResults', 0)} results in {enhanced_results.get('executionTimeMs', 0)}ms")
             return enhanced_results
@@ -352,7 +355,6 @@ class SearchEngine:
         enhanced["results"] = result_items
         return enhanced
 
-    @video_cache.cached(ttl=3600)  # Cache for 1 hour
     def get_concept_details(self, concept_id: str) -> Optional[Dict[str, Any]]:
         """
         Get detailed information about a concept.
@@ -363,6 +365,13 @@ class SearchEngine:
         Returns:
             Concept details dictionary if found, None otherwise
         """
+        # Check cache first
+        if hasattr(self, 'video_cache'):
+            cache_key = f"concept_details_{concept_id}"
+            cached_result = self.video_cache.get(cache_key)
+            if cached_result:
+                return cached_result
+
         try:
             # Get basic concept information
             concept = self.concept_repository.get_concept(concept_id)
@@ -386,13 +395,16 @@ class SearchEngine:
                 "videos": videos
             }
 
+            # Cache the result if caching is available
+            if hasattr(self, 'video_cache'):
+                self.video_cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+
             return result
 
         except Exception as e:
             logger.error(f"Error getting concept details: {e}")
             return None
 
-    @video_cache.cached(ttl=3600)  # Cache for 1 hour
     def get_video_concepts(self, video_id: str, context_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Get concepts extracted from a video.
@@ -404,6 +416,14 @@ class SearchEngine:
         Returns:
             Video concepts dictionary if found, None otherwise
         """
+        # Check cache first
+        if hasattr(self, 'video_cache'):
+            cache_key = f"video_concepts_{video_id}_{context_type}"
+            cached_result = self.video_cache.get(cache_key)
+            if cached_result:
+                logger.info(f"Using cached video concepts for video: {video_id}")
+                return cached_result
+
         try:
             # Get video metadata
             video = self.video_repository.get_video(video_id)
@@ -424,98 +444,115 @@ class SearchEngine:
                 "theory_practice_ratio": video.get("theory_practice_ratio", 0.5)
             }
 
+            # Cache the result
+            if hasattr(self, 'video_cache'):
+                self.video_cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+
             return result
 
         except Exception as e:
             logger.error(f"Error getting video concepts: {e}")
             return None
 
-    @concept_cache.cached(ttl=3600)  # Cache for 1 hour
-    def generate_learning_path(
-        self,
-        concept_ids: List[str],
-        theory_practice_ratio: float = 0.5,
-        domain: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Generate a learning path for a set of concepts.
+def generate_learning_path(
+    self,
+    concept_ids: List[str],
+    theory_practice_ratio: float = 0.5,
+    domain: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Generate a learning path for a set of concepts.
 
-        Args:
-            concept_ids: List of concept IDs
-            theory_practice_ratio: Desired ratio of theoretical to practical content
-            domain: Optional domain filter
+    Args:
+        concept_ids: List of concept IDs
+        theory_practice_ratio: Desired ratio of theoretical to practical content
+        domain: Optional domain filter
 
-        Returns:
-            Learning path dictionary if successful, None otherwise
-        """
-        try:
-            if not concept_ids:
-                return None
+    Returns:
+        Learning path dictionary if successful, None otherwise
+    """
+    # Check cache first
+    if hasattr(self, 'concept_cache'):
+        # Create a cache key based on the inputs
+        sorted_ids = sorted(concept_ids) # Sort for consistent cache key
+        cache_key = f"learning_path_{'_'.join(sorted_ids)}_{theory_practice_ratio}_{domain}"
+        cached_result = self.concept_cache.get(cache_key)
+        if cached_result:
+            logger.debug(f"Using cached learning path")
+            return cached_result
 
-            # Get all concepts
-            concepts = []
-            for concept_id in concept_ids:
-                concept = self.concept_repository.get_concept(concept_id)
-                if concept:
-                    concepts.append(concept)
-
-            if not concepts:
-                return None
-
-            # Determine domain if not specified
-            if not domain:
-                domains = {}
-                for concept in concepts:
-                    concept_domain = concept.get("domain")
-                    if concept_domain:
-                        domains[concept_domain] = domains.get(concept_domain, 0) + 1
-
-                if domains:
-                    domain = max(domains.items(), key=lambda x: x[1])[0]
-
-            # Find related concepts
-            related_concepts = []
-            for concept in concepts:
-                relations = self.concept_repository.get_concept_relationships(concept.get("concept_id"), limit=3)
-                for relation in relations:
-                    related_concept = self.concept_repository.get_concept(relation.get("target_concept_id"))
-                    if related_concept and related_concept not in related_concepts and related_concept not in concepts:
-                        related_concepts.append(related_concept)
-
-            # Combine target and related concepts
-            all_concepts = concepts + related_concepts
-
-            # Sort concepts by theoretical/practical class based on desired ratio
-            theoretical_concepts = [c for c in all_concepts if c.get("concept_class") == "theoretical"]
-            practical_concepts = [c for c in all_concepts if c.get("concept_class") == "practical"]
-            mixed_concepts = [c for c in all_concepts if c.get("concept_class") not in ("theoretical", "practical")]
-
-            # Create learning path based on theory/practice ratio
-            learning_path = self._create_balanced_learning_path(
-                theoretical_concepts,
-                practical_concepts,
-                mixed_concepts,
-                theory_practice_ratio
-            )
-
-            # Calculate total time
-            total_time = sum(c.get("estimated_time_minutes", 10) for c in learning_path)
-
-            # Compile result
-            result = {
-                "concepts": learning_path,
-                "theory_practice_ratio": theory_practice_ratio,
-                "total_theoretical_concepts": len(theoretical_concepts),
-                "total_practical_concepts": len(practical_concepts),
-                "estimated_total_time_minutes": total_time,
-                "domain": domain
-            }
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error generating learning path: {e}")
+    try:
+        if not concept_ids:
             return None
+
+        # Get all concepts
+        concepts = []
+        for concept_id in concept_ids:
+            concept = self.concept_repository.get_concept(concept_id)
+            if concept:
+                concepts.append(concept)
+
+        if not concepts:
+            return None
+
+        # Determine domain if not specified
+        if not domain:
+            domains = {}
+            for concept in concepts:
+                concept_domain = concept.get("domain")
+                if concept_domain:
+                    domains[concept_domain] = domains.get(concept_domain, 0) + 1
+
+            if domains:
+                domain = max(domains.items(), key=lambda x: x[1])[0]
+
+        # Find related concepts
+        related_concepts = []
+        for concept in concepts:
+            relations = self.concept_repository.get_concept_relationships(concept.get("concept_id"), limit=3)
+            for relation in relations:
+                related_concept = self.concept_repository.get_concept(relation.get("target_concept_id"))
+                if related_concept and related_concept not in related_concepts and related_concept not in concepts:
+                    related_concepts.append(related_concept)
+
+        # Combine target and related concepts
+        all_concepts = concepts + related_concepts
+
+        # Sort concepts by theoretical/practical class based on desired ratio
+        theoretical_concepts = [c for c in all_concepts if c.get("concept_class") == "theoretical"]
+        practical_concepts = [c for c in all_concepts if c.get("concept_class") == "practical"]
+        mixed_concepts = [c for c in all_concepts if c.get("concept_class") not in ("theoretical", "practical")]
+
+        # Create learning path based on theory/practice ratio
+        learning_path = self._create_balanced_learning_path(
+            theoretical_concepts,
+            practical_concepts,
+            mixed_concepts,
+            theory_practice_ratio
+        )
+
+        # Calculate total time
+        total_time = sum(c.get("estimated_time_minutes", 10) for c in learning_path)
+
+        # Compile result
+        result = {
+            "concepts": learning_path,
+            "theory_practice_ratio": theory_practice_ratio,
+            "total_theoretical_concepts": len(theoretical_concepts),
+            "total_practical_concepts": len(practical_concepts),
+            "estimated_total_time_minutes": total_time,
+            "domain": domain
+        }
+
+        # Cache the result if caching is available
+        if hasattr(self, 'concept_cache'):
+            self.concept_cache.set(cache_key, result, ttl=3600)  # Cache for 1 hour
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating learning path: {e}")
+        return None
 
     def _create_balanced_learning_path(
         self,

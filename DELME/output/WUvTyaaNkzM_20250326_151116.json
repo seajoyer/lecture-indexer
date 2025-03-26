@@ -1,0 +1,5339 @@
+{
+  "status": "completed",
+  "video_id": "WUvTyaaNkzM",
+  "video_url": "https://www.youtube.com/watch?v=WUvTyaaNkzM  # Essence of calculus",
+  "metadata": {
+    "video_id": "WUvTyaaNkzM",
+    "title": "The essence of calculus",
+    "channel": "3Blue1Brown",
+    "publication_date": "2017-04-28T15:58:48Z",
+    "duration_seconds": 1025,
+    "category": "27",
+    "tags": [],
+    "description": "What might it feel like to invent calculus?\nHelp fund future projects: https://www.patreon.com/3blue1brown\nAn equally valuable form of support is to share the videos.\nSpecial thanks to these supporters: http://3b1b.co/lessons/essence-of-calculus#thanks\n\nIn this first video of the series, we see how unraveling the nuances of a simple geometry question can lead to integrals, derivatives, and the fundamental theorem of calculus.\n\nThanks to these viewers for their contributions to translations\nDutch: @LFWarsen, Lauri Warsen\nHebrew: Imri, Omer Tuchfeld\nHindi: Vinayak\nHungarian: homok43\nItalian: @Deye27, @hi-anji, alberto alessi\nKorean: Hana Seo\nPortuguese: redkk123\nSpanish: @agustin-j\nVietnamese: @ngvutuan2811, ngvutuan\n\n------------------\n\nThese animations are largely made using manim, a scrappy open source Python library:  https://github.com/3b1b/manim\n\nIf you want to check it out, I feel compelled to warn you that it's not the most well-documented tool, and it has many other quirks you might expect in a library someone wrote with only their own use in mind.\n\nMusic by Vincent Rubinetti.\nDownload the music on Bandcamp:\nhttps://vincerubinetti.bandcamp.com/album/the-music-of-3blue1brown\n\nStream the music on Spotify:\nhttps://open.spotify.com/album/1dVyjwS8FBqXhRunaG5W5u\n\nIf you want to contribute translated subtitles or to help review those that have already been made by others and need approval, you can click the gear icon in the video and go to subtitles/cc, then \"add subtitles/cc\".  I really appreciate those who do this, as it helps make the lessons accessible to more people.\n\n------------------\n\n3blue1brown is a channel about animating math, in all senses of the word animate.  And you know the drill with YouTube, if you want to stay posted about new videos, subscribe, and click the bell to receive notifications (if you're into that).\n\nIf you are new to this channel and want to see more, a good place to start is this playlist: http://3b1b.co/recommended\n\nVarious social media stuffs:\nWebsite: https://www.3blue1brown.com\nTwitter: https://twitter.com/3Blue1Brown\nPatreon: https://patreon.com/3blue1brown\nFacebook: https://www.facebook.com/3blue1brown\nReddit: https://www.reddit.com/r/3Blue1Brown",
+    "language": "en",
+    "view_count": 9853055,
+    "educational_metadata": {
+      "course_name": null,
+      "instructor": null,
+      "institution": null
+    },
+    "domain": "mathematics",
+    "domain_confidence": 0.8571428571428571
+  },
+  "transcript": {
+    "segments": [
+      {
+        "id": "segment_WUvTyaaNkzM_0",
+        "start_time": 14.98,
+        "end_time": 16.46,
+        "text": "Hey everyone, Grant here.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_1",
+        "start_time": 16.82,
+        "end_time": 19.828,
+        "text": "This is the first video in a series on the essence of calculus,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_2",
+        "start_time": 19.828,
+        "end_time": 23.599999999999998,
+        "text": "and I'll be publishing the following videos once per day for the next 10 days.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_3",
+        "start_time": 24.3,
+        "end_time": 26.911,
+        "text": "The goal here, as the name suggests, is to really get",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_4",
+        "start_time": 26.911,
+        "end_time": 29.720000000000002,
+        "text": "the heart of the subject out in one binge-watchable set.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_5",
+        "start_time": 30.32,
+        "end_time": 34.179,
+        "text": "But with a topic that's as broad as calculus, there's a lot of things that can mean,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_6",
+        "start_time": 34.179,
+        "end_time": 36.2,
+        "text": "so here's what I have in mind specifically.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_7",
+        "start_time": 36.94,
+        "end_time": 39.413,
+        "text": "Calculus has a lot of rules and formulas which",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_8",
+        "start_time": 39.413,
+        "end_time": 41.94,
+        "text": "are often presented as things to be memorized.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_9",
+        "start_time": 42.48,
+        "end_time": 45.754,
+        "text": "Lots of derivative formulas, the product rule, the chain rule,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_10",
+        "start_time": 45.754,
+        "end_time": 49.977999999999994,
+        "text": "implicit differentiation, the fact that integrals and derivatives are opposite,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_11",
+        "start_time": 49.978,
+        "end_time": 52.46,
+        "text": "Taylor series, just a lot of things like that.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_12",
+        "start_time": 52.96,
+        "end_time": 55.133,
+        "text": "And my goal is for you to come away feeling like",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_13",
+        "start_time": 55.133,
+        "end_time": 57.080000000000005,
+        "text": "you could have invented calculus yourself.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_14",
+        "start_time": 57.64,
+        "end_time": 61.638,
+        "text": "That is, cover all those core ideas, but in a way that makes clear where they",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_15",
+        "start_time": 61.638,
+        "end_time": 66.0,
+        "text": "actually come from, and what they really mean, using an all-around visual approach.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_16",
+        "start_time": 66.92,
+        "end_time": 70.427,
+        "text": "Inventing math is no joke, and there is a difference between being",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_17",
+        "start_time": 70.427,
+        "end_time": 74.04,
+        "text": "told why something's true, and actually generating it from scratch.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_18",
+        "start_time": 74.68,
+        "end_time": 79.09100000000001,
+        "text": "But at all points, I want you to think to yourself, if you were an early mathematician,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_19",
+        "start_time": 79.091,
+        "end_time": 82.032,
+        "text": "pondering these ideas and drawing out the right diagrams,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_20",
+        "start_time": 82.032,
+        "end_time": 86.24,
+        "text": "does it feel reasonable that you could have stumbled across these truths yourself?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_21",
+        "start_time": 86.82,
+        "end_time": 91.56899999999999,
+        "text": "In this initial video, I want to show how you might stumble into the core ideas of",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_22",
+        "start_time": 91.569,
+        "end_time": 95.566,
+        "text": "calculus by thinking very deeply about one specific bit of geometry,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_23",
+        "start_time": 95.566,
+        "end_time": 96.84,
+        "text": "the area of a circle.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_24",
+        "start_time": 97.78,
+        "end_time": 101.04,
+        "text": "Maybe you know that this is pi times its radius squared, but why?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_25",
+        "start_time": 101.58,
+        "end_time": 104.46,
+        "text": "Is there a nice way to think about where this formula comes from?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_26",
+        "start_time": 105.42,
+        "end_time": 109.32600000000001,
+        "text": "Well, contemplating this problem and leaving yourself open to exploring the",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_27",
+        "start_time": 109.326,
+        "end_time": 113.54499999999999,
+        "text": "interesting thoughts that come about can actually lead you to a glimpse of three",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_28",
+        "start_time": 113.545,
+        "end_time": 117.92,
+        "text": "big ideas in calculus, integrals, derivatives, and the fact that they're opposites.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_29",
+        "start_time": 119.84,
+        "end_time": 124.84,
+        "text": "But the story starts more simply, just you and a circle, let's say with radius 3.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_30",
+        "start_time": 125.7,
+        "end_time": 129.382,
+        "text": "You're trying to figure out its area, and after going through a lot of",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_31",
+        "start_time": 129.382,
+        "end_time": 133.485,
+        "text": "paper trying different ways to chop up and rearrange the pieces of that area,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_32",
+        "start_time": 133.485,
+        "end_time": 136.852,
+        "text": "many of which might lead to their own interesting observations,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_33",
+        "start_time": 136.852,
+        "end_time": 141.06,
+        "text": "maybe you try out the idea of slicing up the circle into many concentric rings.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_34",
+        "start_time": 142.0,
+        "end_time": 145.807,
+        "text": "This should seem promising because it respects the symmetry of the circle,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_35",
+        "start_time": 145.807,
+        "end_time": 149.45999999999998,
+        "text": "and math has a tendency to reward you when you respect its symmetries.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_36",
+        "start_time": 150.36,
+        "end_time": 155.06,
+        "text": "Let's take one of those rings, which has some inner radius r that's between 0 and 3.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_37",
+        "start_time": 156.22,
+        "end_time": 159.922,
+        "text": "If we can find a nice expression for the area of each ring like this one,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_38",
+        "start_time": 159.922,
+        "end_time": 162.255,
+        "text": "and if we have a nice way to add them all up,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_39",
+        "start_time": 162.255,
+        "end_time": 165.5,
+        "text": "it might lead us to an understanding of the full circle's area.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_40",
+        "start_time": 166.42,
+        "end_time": 169.11999999999998,
+        "text": "Maybe you start by imagining straightening out this ring.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_41",
+        "start_time": 170.8,
+        "end_time": 174.99,
+        "text": "And you could try thinking through exactly what this new shape is and what its",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_42",
+        "start_time": 174.99,
+        "end_time": 179.18,
+        "text": "area should be, but for simplicity, let's just approximate it as a rectangle.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_43",
+        "start_time": 180.18,
+        "end_time": 183.862,
+        "text": "The width of that rectangle is the circumference of the original ring,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_44",
+        "start_time": 183.862,
+        "end_time": 185.44,
+        "text": "which is 2 pi times r, right?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_45",
+        "start_time": 185.86,
+        "end_time": 188.06,
+        "text": "I mean, that's essentially the definition of pi.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_46",
+        "start_time": 188.68,
+        "end_time": 189.38,
+        "text": "And its thickness?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_47",
+        "start_time": 190.2,
+        "end_time": 194.15099999999998,
+        "text": "Well, that depends on how finely you chopped up the circle in the first place,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_48",
+        "start_time": 194.151,
+        "end_time": 195.62,
+        "text": "which was kind of arbitrary.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_49",
+        "start_time": 196.34,
+        "end_time": 200.095,
+        "text": "In the spirit of using what will come to be standard calculus notation,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_50",
+        "start_time": 200.095,
+        "end_time": 204.431,
+        "text": "let's call that thickness dr for a tiny difference in the radius from one ring to",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_51",
+        "start_time": 204.431,
+        "end_time": 204.96,
+        "text": "the next.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_52",
+        "start_time": 205.48,
+        "end_time": 207.88,
+        "text": "Maybe you think of it as something like 0.1.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_53",
+        "start_time": 208.98,
+        "end_time": 212.849,
+        "text": "So approximating this unwrapped ring as a thin rectangle,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_54",
+        "start_time": 212.849,
+        "end_time": 217.6,
+        "text": "its area is 2 pi times r, the radius, times dr, the little thickness.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_55",
+        "start_time": 218.6,
+        "end_time": 222.43699999999998,
+        "text": "And even though that's not perfect, for smaller and smaller choices of dr,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_56",
+        "start_time": 222.437,
+        "end_time": 226.48100000000002,
+        "text": "this is actually going to be a better and better approximation for that area,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_57",
+        "start_time": 226.481,
+        "end_time": 230.993,
+        "text": "since the top and the bottom sides of this shape are going to get closer and closer to",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_58",
+        "start_time": 230.993,
+        "end_time": 232.6,
+        "text": "being exactly the same length.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_59",
+        "start_time": 233.54,
+        "end_time": 235.933,
+        "text": "So let's just move forward with this approximation,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_60",
+        "start_time": 235.933,
+        "end_time": 238.701,
+        "text": "keeping in the back of our minds that it's slightly wrong,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_61",
+        "start_time": 238.701,
+        "end_time": 242.35999999999999,
+        "text": "but it's going to become more accurate for smaller and smaller choices of dr.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_62",
+        "start_time": 243.22,
+        "end_time": 246.4,
+        "text": "That is, if we slice up the circle into thinner and thinner rings.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_63",
+        "start_time": 247.7,
+        "end_time": 252.38299999999998,
+        "text": "So just to sum up where we are, you've broken up the area of the circle into",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_64",
+        "start_time": 252.383,
+        "end_time": 257.19,
+        "text": "all of these rings, and you're approximating the area of each one of those as",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_65",
+        "start_time": 257.19,
+        "end_time": 262.058,
+        "text": "2 pi times its radius times dr, where the specific value for that inner radius",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_66",
+        "start_time": 262.058,
+        "end_time": 266.804,
+        "text": "ranges from 0 for the smallest ring up to just under 3 for the biggest ring,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_67",
+        "start_time": 266.804,
+        "end_time": 271.97999999999996,
+        "text": "spaced out by whatever the thickness is that you choose for dr, something like 0.1.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_68",
+        "start_time": 273.14,
+        "end_time": 276.974,
+        "text": "And notice that the spacing between the values here corresponds to the",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_69",
+        "start_time": 276.974,
+        "end_time": 281.3,
+        "text": "thickness dr of each ring, the difference in radius from one ring to the next.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_70",
+        "start_time": 282.26,
+        "end_time": 286.012,
+        "text": "In fact, a nice way to think about the rectangles approximating each",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_71",
+        "start_time": 286.012,
+        "end_time": 289.82,
+        "text": "ring's area is to fit them all upright side by side along this axis.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_72",
+        "start_time": 290.66,
+        "end_time": 295.82000000000005,
+        "text": "Each one has a thickness dr, which is why they fit so snugly right there together,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_73",
+        "start_time": 295.82,
+        "end_time": 301.231,
+        "text": "and the height of any one of these rectangles sitting above some specific value of r,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_74",
+        "start_time": 301.231,
+        "end_time": 304.0,
+        "text": "like 0.6, is exactly 2 pi times that value.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_75",
+        "start_time": 304.64,
+        "end_time": 308.96,
+        "text": "That's the circumference of the corresponding ring that this rectangle approximates.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_76",
+        "start_time": 309.56,
+        "end_time": 312.549,
+        "text": "Pictures like this 2 pi r can get tall for the screen,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_77",
+        "start_time": 312.549,
+        "end_time": 316.92199999999997,
+        "text": "I mean 2 times pi times 3 is around 19, so let's just throw up a y axis that's",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_78",
+        "start_time": 316.922,
+        "end_time": 321.35,
+        "text": "scaled a little differently so that we can actually fit all of these rectangles",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_79",
+        "start_time": 321.35,
+        "end_time": 322.18,
+        "text": "on the screen.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_80",
+        "start_time": 323.26,
+        "end_time": 326.941,
+        "text": "A nice way to think about this setup is to draw the graph of 2 pi r,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_81",
+        "start_time": 326.941,
+        "end_time": 329.53999999999996,
+        "text": "which is a straight line that has a slope 2 pi.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_82",
+        "start_time": 330.1,
+        "end_time": 334.8,
+        "text": "Each of these rectangles extends up to the point where it just barely touches that graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_83",
+        "start_time": 336.0,
+        "end_time": 337.46,
+        "text": "Again, we're being approximate here.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_84",
+        "start_time": 337.9,
+        "end_time": 340.01399999999995,
+        "text": "Each of these rectangles only approximates the",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_85",
+        "start_time": 340.014,
+        "end_time": 342.22,
+        "text": "area of the corresponding ring from the circle.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_86",
+        "start_time": 342.94,
+        "end_time": 346.243,
+        "text": "But remember, that approximation, 2 pi r times dr,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_87",
+        "start_time": 346.243,
+        "end_time": 350.8,
+        "text": "gets less and less wrong as the size of dr gets smaller and smaller.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_88",
+        "start_time": 351.8,
+        "end_time": 353.967,
+        "text": "And this has a very beautiful meaning when we're",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_89",
+        "start_time": 353.967,
+        "end_time": 356.53999999999996,
+        "text": "looking at the sum of the areas of all those rectangles.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_90",
+        "start_time": 357.08,
+        "end_time": 360.058,
+        "text": "For smaller and smaller choices of dr, you might at first",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_91",
+        "start_time": 360.058,
+        "end_time": 363.14,
+        "text": "think that turns the problem into a monstrously large sum.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_92",
+        "start_time": 363.6,
+        "end_time": 365.56,
+        "text": "I mean, there's many many rectangles to consider,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_93",
+        "start_time": 365.56,
+        "end_time": 368.4,
+        "text": "and the decimal precision of each one of their areas is going to be an",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_94",
+        "start_time": 368.4,
+        "end_time": 369.2,
+        "text": "absolute nightmare.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_95",
+        "start_time": 370.06,
+        "end_time": 375.3,
+        "text": "But notice, all of their areas in aggregate just looks like the area under a graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_96",
+        "start_time": 375.98,
+        "end_time": 379.365,
+        "text": "And that portion under the graph is just a triangle,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_97",
+        "start_time": 379.365,
+        "end_time": 383.40000000000003,
+        "text": "a triangle with a base of 3 and a height that's 2 pi times 3.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_98",
+        "start_time": 384.14,
+        "end_time": 390.5,
+        "text": "So its area, 1 half base times height, works out to be exactly pi times 3 squared.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_99",
+        "start_time": 391.36,
+        "end_time": 395.134,
+        "text": "Or if the radius of our original circle was some other value,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_100",
+        "start_time": 395.134,
+        "end_time": 398.66,
+        "text": "capital R, that area comes out to be pi times r squared.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_101",
+        "start_time": 399.38,
+        "end_time": 401.46,
+        "text": "And that's the formula for the area of a circle.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_102",
+        "start_time": 402.32,
+        "end_time": 405.412,
+        "text": "It doesn't matter who you are or what you typically think of math,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_103",
+        "start_time": 405.412,
+        "end_time": 407.38,
+        "text": "that right there is a beautiful argument.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_104",
+        "start_time": 410.18,
+        "end_time": 412.818,
+        "text": "But if you want to think like a mathematician here,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_105",
+        "start_time": 412.818,
+        "end_time": 415.19599999999997,
+        "text": "you don't just care about finding the answer,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_106",
+        "start_time": 415.196,
+        "end_time": 418.92,
+        "text": "you care about developing general problem-solving tools and techniques.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_107",
+        "start_time": 419.68,
+        "end_time": 423.766,
+        "text": "So take a moment to meditate on what exactly just happened and why it worked,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_108",
+        "start_time": 423.766,
+        "end_time": 427.58700000000005,
+        "text": "because the way we transitioned from something approximate to something",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_109",
+        "start_time": 427.587,
+        "end_time": 431.78,
+        "text": "precise is actually pretty subtle and cuts deep to what calculus is all about.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_110",
+        "start_time": 433.82,
+        "end_time": 438.909,
+        "text": "You had this problem that could be approximated with the sum of many small numbers,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_111",
+        "start_time": 438.909,
+        "end_time": 444.06,
+        "text": "each of which looked like 2 pi r times dr, for values of r ranging between 0 and 3.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_112",
+        "start_time": 446.6,
+        "end_time": 451.947,
+        "text": "Remember, the small number dr here represents our choice for the thickness of each ring,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_113",
+        "start_time": 451.947,
+        "end_time": 452.98,
+        "text": "for example 0.1.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_114",
+        "start_time": 453.52,
+        "end_time": 455.64,
+        "text": "And there are two important things to note here.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_115",
+        "start_time": 456.08,
+        "end_time": 460.64,
+        "text": "First of all, not only is dr a factor in the quantities we're adding up,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_116",
+        "start_time": 460.64,
+        "end_time": 465.58,
+        "text": "2 pi r times dr, it also gives the spacing between the different values of r.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_117",
+        "start_time": 466.24,
+        "end_time": 470.52,
+        "text": "And secondly, the smaller our choice for dr, the better the approximation.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_118",
+        "start_time": 472.2,
+        "end_time": 475.203,
+        "text": "Adding all of those numbers could be seen in a different,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_119",
+        "start_time": 475.203,
+        "end_time": 478.469,
+        "text": "pretty clever way as adding the areas of many thin rectangles",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_120",
+        "start_time": 478.469,
+        "end_time": 482.42,
+        "text": "sitting underneath a graph, the graph of the function 2 pi r in this case.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_121",
+        "start_time": 482.94,
+        "end_time": 487.426,
+        "text": "Then, and this is key, by considering smaller and smaller choices for dr,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_122",
+        "start_time": 487.426,
+        "end_time": 492.58799999999997,
+        "text": "corresponding to better and better approximations of the original problem, the sum,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_123",
+        "start_time": 492.588,
+        "end_time": 495.906,
+        "text": "thought of as the aggregate area of those rectangles,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_124",
+        "start_time": 495.906,
+        "end_time": 498.18,
+        "text": "approaches the area under the graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_125",
+        "start_time": 499.0,
+        "end_time": 503.477,
+        "text": "And because of that, you can conclude that the answer to the original question,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_126",
+        "start_time": 503.477,
+        "end_time": 508.52,
+        "text": "in full unapproximated precision, is exactly the same as the area underneath this graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_127",
+        "start_time": 510.86,
+        "end_time": 515.261,
+        "text": "A lot of other hard problems in math and science can be broken down and",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_128",
+        "start_time": 515.261,
+        "end_time": 518.361,
+        "text": "approximated as the sum of many small quantities,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_129",
+        "start_time": 518.361,
+        "end_time": 523.9399999999999,
+        "text": "like figuring out how far a car has traveled based on its velocity at each point in time.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_130",
+        "start_time": 524.76,
+        "end_time": 528.77,
+        "text": "In a case like that, you might range through many different points in time,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_131",
+        "start_time": 528.77,
+        "end_time": 533.261,
+        "text": "and at each one multiply the velocity at that time times a tiny change in time, dt,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_132",
+        "start_time": 533.261,
+        "end_time": 537.8589999999999,
+        "text": "which would give the corresponding little bit of distance traveled during that little",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_133",
+        "start_time": 537.859,
+        "end_time": 538.1800000000001,
+        "text": "time.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_134",
+        "start_time": 539.26,
+        "end_time": 543.156,
+        "text": "I'll talk through the details of examples like this later in the series,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_135",
+        "start_time": 543.156,
+        "end_time": 547.3779999999999,
+        "text": "but at a high level many of these types of problems turn out to be equivalent",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_136",
+        "start_time": 547.378,
+        "end_time": 552.14,
+        "text": "to finding the area under some graph, in much the same way that our circle problem did.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_137",
+        "start_time": 553.2,
+        "end_time": 556.147,
+        "text": "This happens whenever the quantities you're adding up,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_138",
+        "start_time": 556.147,
+        "end_time": 559.038,
+        "text": "the one whose sum approximates the original problem,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_139",
+        "start_time": 559.038,
+        "end_time": 563.24,
+        "text": "can be thought of as the areas of many thin rectangles sitting side by side.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_140",
+        "start_time": 564.64,
+        "end_time": 569.78,
+        "text": "If finer and finer approximations of the original problem correspond to thinner and",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_141",
+        "start_time": 569.78,
+        "end_time": 575.106,
+        "text": "thinner rings, then the original problem is equivalent to finding the area under some",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_142",
+        "start_time": 575.106,
+        "end_time": 575.54,
+        "text": "graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_143",
+        "start_time": 576.6,
+        "end_time": 580.424,
+        "text": "Again, this is an idea we'll see in more detail later in the series,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_144",
+        "start_time": 580.424,
+        "end_time": 583.18,
+        "text": "so don't worry if it's not 100% clear right now.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_145",
+        "start_time": 583.78,
+        "end_time": 587.151,
+        "text": "The point now is that you, as the mathematician having just",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_146",
+        "start_time": 587.151,
+        "end_time": 590.578,
+        "text": "solved a problem by reframing it as the area under a graph,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_147",
+        "start_time": 590.578,
+        "end_time": 594.52,
+        "text": "might start thinking about how to find the areas under other graphs.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_148",
+        "start_time": 595.64,
+        "end_time": 600.318,
+        "text": "We were lucky in the circle problem that the relevant area turned out to be a triangle,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_149",
+        "start_time": 600.318,
+        "end_time": 603.76,
+        "text": "but imagine instead something like a parabola, the graph of x2.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_150",
+        "start_time": 604.76,
+        "end_time": 608.013,
+        "text": "What's the area underneath that curve, say between",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_151",
+        "start_time": 608.013,
+        "end_time": 610.6800000000001,
+        "text": "the values of x equals 0 and x equals 3?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_152",
+        "start_time": 612.08,
+        "end_time": 614.76,
+        "text": "Well, it's hard to think about, right?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_153",
+        "start_time": 615.22,
+        "end_time": 618.02,
+        "text": "And let me reframe that question in a slightly different way.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_154",
+        "start_time": 618.02,
+        "end_time": 623.06,
+        "text": "We'll fix that left endpoint in place at 0, and let the right endpoint vary.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_155",
+        "start_time": 626.86,
+        "end_time": 630.556,
+        "text": "Are you able to find a function, a of x, that gives",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_156",
+        "start_time": 630.556,
+        "end_time": 634.1800000000001,
+        "text": "you the area under this parabola between 0 and x?",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_157",
+        "start_time": 635.62,
+        "end_time": 639.58,
+        "text": "A function a of x like this is called an integral of x2.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_158",
+        "start_time": 640.5,
+        "end_time": 644.603,
+        "text": "Calculus holds within it the tools to figure out what an integral like this is,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_159",
+        "start_time": 644.603,
+        "end_time": 647.1999999999999,
+        "text": "but right now it's just a mystery function to us.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_160",
+        "start_time": 647.5,
+        "end_time": 651.318,
+        "text": "We know it gives the area under the graph of x2 between some fixed left",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_161",
+        "start_time": 651.318,
+        "end_time": 654.92,
+        "text": "point and some variable right point, but we don't know what it is.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_162",
+        "start_time": 655.66,
+        "end_time": 659.8489999999999,
+        "text": "And again, the reason we care about this kind of question is not just for",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_163",
+        "start_time": 659.849,
+        "end_time": 663.98,
+        "text": "the sake of asking hard geometry questions, it's because many practical",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_164",
+        "start_time": 663.98,
+        "end_time": 668.054,
+        "text": "problems that can be approximated by adding up a large number of small",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_165",
+        "start_time": 668.054,
+        "end_time": 672.3,
+        "text": "things can be reframed as a question about an area under a certain graph.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_166",
+        "start_time": 673.42,
+        "end_time": 677.372,
+        "text": "I'll tell you right now that finding this area, this integral function,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_167",
+        "start_time": 677.372,
+        "end_time": 681.992,
+        "text": "is genuinely hard, and whenever you come across a genuinely hard question in math,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_168",
+        "start_time": 681.992,
+        "end_time": 685.7769999999999,
+        "text": "a good policy is to not try too hard to get at the answer directly,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_169",
+        "start_time": 685.777,
+        "end_time": 689.34,
+        "text": "since usually you just end up banging your head against a wall.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_170",
+        "start_time": 690.08,
+        "end_time": 693.7800000000001,
+        "text": "Instead, play around with the idea, with no particular goal in mind.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_171",
+        "start_time": 694.34,
+        "end_time": 698.5640000000001,
+        "text": "Spend some time building up familiarity with the interplay between the function",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_172",
+        "start_time": 698.564,
+        "end_time": 702.36,
+        "text": "defining the graph, in this case x2, and the function giving the area.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_173",
+        "start_time": 704.09,
+        "end_time": 708.02,
+        "text": "In that playful spirit, if you're lucky, here's something you might notice.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_174",
+        "start_time": 708.58,
+        "end_time": 714.779,
+        "text": "When you slightly increase x by some tiny nudge dx, look at the resulting change in area,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_175",
+        "start_time": 714.779,
+        "end_time": 720.42,
+        "text": "represented with this sliver I'm going to call da for a tiny difference in area.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_176",
+        "start_time": 721.38,
+        "end_time": 725.507,
+        "text": "That sliver can be pretty well approximated with a rectangle,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_177",
+        "start_time": 725.507,
+        "end_time": 728.62,
+        "text": "one whose height is x2 and whose width is dx.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_178",
+        "start_time": 729.66,
+        "end_time": 732.228,
+        "text": "And the smaller the size of that nudge dx, the",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_179",
+        "start_time": 732.228,
+        "end_time": 735.02,
+        "text": "more that sliver actually looks like a rectangle.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_180",
+        "start_time": 736.8,
+        "end_time": 741.0799999999999,
+        "text": "This gives us an interesting way to think about how a of x is related to x2.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_181",
+        "start_time": 742.0,
+        "end_time": 746.578,
+        "text": "A change to the output of a, this little da, is about equal to x2,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_182",
+        "start_time": 746.578,
+        "end_time": 750.185,
+        "text": "where x is whatever input you started at, times dx,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_183",
+        "start_time": 750.185,
+        "end_time": 754.0,
+        "text": "the little nudge to the input that caused a to change.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_184",
+        "start_time": 754.78,
+        "end_time": 760.3159999999999,
+        "text": "Or rearranged, da divided by dx, the ratio of a tiny change in a to the tiny",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_185",
+        "start_time": 760.316,
+        "end_time": 765.7800000000001,
+        "text": "change in x that caused it, is approximately whatever x2 is at that point.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_186",
+        "start_time": 766.56,
+        "end_time": 768.76,
+        "text": "And that's an approximation that should get better",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_187",
+        "start_time": 768.76,
+        "end_time": 770.96,
+        "text": "and better for smaller and smaller choices of dx.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_188",
+        "start_time": 772.1,
+        "end_time": 775.64,
+        "text": "In other words, we don't know what a of x is, that remains a mystery.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_189",
+        "start_time": 776.08,
+        "end_time": 779.5,
+        "text": "But we do know a property that this mystery function must have.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_190",
+        "start_time": 780.16,
+        "end_time": 784.972,
+        "text": "When you look at two nearby points, for example 3 and 3.001,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_191",
+        "start_time": 784.972,
+        "end_time": 790.185,
+        "text": "consider the change to the output of a between those two points,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_192",
+        "start_time": 790.185,
+        "end_time": 796.1199999999999,
+        "text": "the difference between the mystery function evaluated at 3.001 and 3.001.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_193",
+        "start_time": 796.12,
+        "end_time": 802.076,
+        "text": "That change, divided by the difference in the input values, which in this case is 0.001,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_194",
+        "start_time": 802.076,
+        "end_time": 808.1,
+        "text": "should be about equal to the value of x2 for the starting input, in this case 3 squared.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_195",
+        "start_time": 810.2,
+        "end_time": 814.416,
+        "text": "And this relationship between tiny changes to the mystery function",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_196",
+        "start_time": 814.416,
+        "end_time": 818.44,
+        "text": "and the values of x2 itself is true at all inputs, not just 3.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_197",
+        "start_time": 819.42,
+        "end_time": 821.973,
+        "text": "That doesn't immediately tell us how to find a of x,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_198",
+        "start_time": 821.973,
+        "end_time": 824.8199999999999,
+        "text": "but it provides a very strong clue that we can work with.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_199",
+        "start_time": 826.26,
+        "end_time": 828.74,
+        "text": "And there's nothing special about the graph x2 here.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_200",
+        "start_time": 829.28,
+        "end_time": 833.6469999999999,
+        "text": "Any function defined as the area under some graph has this property,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_201",
+        "start_time": 833.647,
+        "end_time": 838.5920000000001,
+        "text": "that da divided by dx, a slight nudge to the output of a divided by a slight",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_202",
+        "start_time": 838.592,
+        "end_time": 843.7289999999999,
+        "text": "nudge to the input that caused it, is about equal to the height of the graph at",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_203",
+        "start_time": 843.729,
+        "end_time": 844.5,
+        "text": "that point.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_204",
+        "start_time": 846.2,
+        "end_time": 850.36,
+        "text": "Again, that's an approximation that gets better and better for smaller choices of dx.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_205",
+        "start_time": 851.64,
+        "end_time": 856.04,
+        "text": "And here, we're stumbling into another big idea from calculus, derivatives.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_206",
+        "start_time": 857.1,
+        "end_time": 862.107,
+        "text": "This ratio da divided by dx is called the derivative of a, or more technically,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_207",
+        "start_time": 862.107,
+        "end_time": 867.24,
+        "text": "the derivative is whatever this ratio approaches as dx gets smaller and smaller.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_208",
+        "start_time": 868.18,
+        "end_time": 872.0379999999999,
+        "text": "I'll dive much more deeply into the idea of a derivative in the next video,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_209",
+        "start_time": 872.038,
+        "end_time": 876.514,
+        "text": "but loosely speaking it's a measure of how sensitive a function is to small changes in",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_210",
+        "start_time": 876.514,
+        "end_time": 877.08,
+        "text": "its input.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_211",
+        "start_time": 877.94,
+        "end_time": 882.1740000000001,
+        "text": "You'll see as the series goes on that there are many ways you can visualize a derivative,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_212",
+        "start_time": 882.174,
+        "end_time": 885.17,
+        "text": "depending on what function you're looking at and how you think",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_213",
+        "start_time": 885.17,
+        "end_time": 886.74,
+        "text": "about tiny nudges to its output.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_214",
+        "start_time": 888.6,
+        "end_time": 892.154,
+        "text": "We care about derivatives because they help us solve problems,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_215",
+        "start_time": 892.154,
+        "end_time": 897.14,
+        "text": "and in our little exploration here, we already have a glimpse of one way they're used.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_216",
+        "start_time": 897.84,
+        "end_time": 900.437,
+        "text": "They are the key to solving integral questions,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_217",
+        "start_time": 900.437,
+        "end_time": 903.42,
+        "text": "problems that require finding the area under a curve.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_218",
+        "start_time": 904.36,
+        "end_time": 907.67,
+        "text": "Once you gain enough familiarity with computing derivatives,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_219",
+        "start_time": 907.67,
+        "end_time": 912.5809999999999,
+        "text": "you'll be able to look at a situation like this one where you don't know what a function",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_220",
+        "start_time": 912.581,
+        "end_time": 915.5600000000001,
+        "text": "is, but you do know that its derivative should be x2,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_221",
+        "start_time": 915.56,
+        "end_time": 918.76,
+        "text": "and from that reverse engineer what the function must be.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_222",
+        "start_time": 920.7,
+        "end_time": 923.826,
+        "text": "This back and forth between integrals and derivatives,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_223",
+        "start_time": 923.826,
+        "end_time": 927.994,
+        "text": "where the derivative of a function for the area under a graph gives you",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_224",
+        "start_time": 927.994,
+        "end_time": 932.104,
+        "text": "back the function defining the graph itself, is called the fundamental",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_225",
+        "start_time": 932.104,
+        "end_time": 933.32,
+        "text": "theorem of calculus.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_226",
+        "start_time": 934.22,
+        "end_time": 938.75,
+        "text": "It ties together the two big ideas of integrals and derivatives,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_227",
+        "start_time": 938.75,
+        "end_time": 942.36,
+        "text": "and shows how each one is an inverse of the other.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_228",
+        "start_time": 944.8,
+        "end_time": 947.305,
+        "text": "All of this is only a high-level view, just a peek",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_229",
+        "start_time": 947.305,
+        "end_time": 949.8599999999999,
+        "text": "at some of the core ideas that emerge in calculus.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_230",
+        "start_time": 950.5,
+        "end_time": 954.42,
+        "text": "And what follows in this series are the details, for derivatives and integrals and more.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_231",
+        "start_time": 954.98,
+        "end_time": 959.106,
+        "text": "At all points, I want you to feel that you could have invented calculus yourself,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_232",
+        "start_time": 959.106,
+        "end_time": 963.435,
+        "text": "that if you drew the right pictures and played with each idea in just the right way,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_233",
+        "start_time": 963.435,
+        "end_time": 967.255,
+        "text": "these formulas and rules and constructs that are presented could have just",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_234",
+        "start_time": 967.255,
+        "end_time": 970.26,
+        "text": "as easily popped out naturally from your own explorations.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_235",
+        "start_time": 972.38,
+        "end_time": 976.305,
+        "text": "And before you go, it would feel wrong not to give the people who supported this",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_236",
+        "start_time": 976.305,
+        "end_time": 980.131,
+        "text": "series on Patreon a well-deserved thanks, both for their financial backing as",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_237",
+        "start_time": 980.131,
+        "end_time": 983.86,
+        "text": "well as for the suggestions they gave while the series was being developed.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_238",
+        "start_time": 984.7,
+        "end_time": 987.888,
+        "text": "You see, supporters got early access to the videos as I made them,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_239",
+        "start_time": 987.888,
+        "end_time": 991.5600000000001,
+        "text": "and they'll continue to get early access for future essence-of type series.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_240",
+        "start_time": 992.14,
+        "end_time": 996.24,
+        "text": "And as a thanks to the community, I keep ads off of new videos for their first month.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_241",
+        "start_time": 997.02,
+        "end_time": 1000.462,
+        "text": "I'm still astounded that I can spend time working on videos like these,",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_242",
+        "start_time": 1000.462,
+        "end_time": 1003.42,
+        "text": "and in a very direct way, you are the one to thank for that.",
+        "language": "en",
+        "video_id": "WUvTyaaNkzM",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      }
+    ],
+    "sentences": [
+      {
+        "id": "segment_WUvTyaaNkzM_0_sentence_0",
+        "start_time": 14.98,
+        "end_time": 16.46,
+        "text": "Hey everyone, Grant here.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_0",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_1_sentence_0",
+        "start_time": 16.82,
+        "end_time": 19.828,
+        "text": "This is the first video in a series on the essence of calculus,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_1",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_2_sentence_0",
+        "start_time": 19.828,
+        "end_time": 23.599999999999998,
+        "text": "and I'll be publishing the following videos once per day for the next 10 days.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_2",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_3_sentence_0",
+        "start_time": 24.3,
+        "end_time": 26.911,
+        "text": "The goal here, as the name suggests, is to really get",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_3",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_4_sentence_0",
+        "start_time": 26.911,
+        "end_time": 29.720000000000002,
+        "text": "the heart of the subject out in one binge-watchable set.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_4",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_5_sentence_0",
+        "start_time": 30.32,
+        "end_time": 34.179,
+        "text": "But with a topic that's as broad as calculus, there's a lot of things that can mean,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_5",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_6_sentence_0",
+        "start_time": 34.179,
+        "end_time": 36.2,
+        "text": "so here's what I have in mind specifically.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_6",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_7_sentence_0",
+        "start_time": 36.94,
+        "end_time": 39.413,
+        "text": "Calculus has a lot of rules and formulas which",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_7",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_8_sentence_0",
+        "start_time": 39.413,
+        "end_time": 41.94,
+        "text": "are often presented as things to be memorized.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_8",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_9_sentence_0",
+        "start_time": 42.48,
+        "end_time": 45.754,
+        "text": "Lots of derivative formulas, the product rule, the chain rule,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_9",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_10_sentence_0",
+        "start_time": 45.754,
+        "end_time": 49.977999999999994,
+        "text": "implicit differentiation, the fact that integrals and derivatives are opposite,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_10",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_11_sentence_0",
+        "start_time": 49.978,
+        "end_time": 52.46,
+        "text": "Taylor series, just a lot of things like that.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_11",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_12_sentence_0",
+        "start_time": 52.96,
+        "end_time": 55.133,
+        "text": "And my goal is for you to come away feeling like",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_12",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_13_sentence_0",
+        "start_time": 55.133,
+        "end_time": 57.080000000000005,
+        "text": "you could have invented calculus yourself.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_13",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_14_sentence_0",
+        "start_time": 57.64,
+        "end_time": 61.638,
+        "text": "That is, cover all those core ideas, but in a way that makes clear where they",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_14",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_15_sentence_0",
+        "start_time": 61.638,
+        "end_time": 66.0,
+        "text": "actually come from, and what they really mean, using an all-around visual approach.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_15",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_16_sentence_0",
+        "start_time": 66.92,
+        "end_time": 70.427,
+        "text": "Inventing math is no joke, and there is a difference between being",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_16",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_17_sentence_0",
+        "start_time": 70.427,
+        "end_time": 74.04,
+        "text": "told why something's true, and actually generating it from scratch.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_17",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_18_sentence_0",
+        "start_time": 74.68,
+        "end_time": 79.09100000000001,
+        "text": "But at all points, I want you to think to yourself, if you were an early mathematician,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_18",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_19_sentence_0",
+        "start_time": 79.091,
+        "end_time": 82.032,
+        "text": "pondering these ideas and drawing out the right diagrams,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_19",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_20_sentence_0",
+        "start_time": 82.032,
+        "end_time": 86.24,
+        "text": "does it feel reasonable that you could have stumbled across these truths yourself?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_20",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_21_sentence_0",
+        "start_time": 86.82,
+        "end_time": 91.56899999999999,
+        "text": "In this initial video, I want to show how you might stumble into the core ideas of",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_21",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_22_sentence_0",
+        "start_time": 91.569,
+        "end_time": 95.566,
+        "text": "calculus by thinking very deeply about one specific bit of geometry,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_22",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_23_sentence_0",
+        "start_time": 95.566,
+        "end_time": 96.84,
+        "text": "the area of a circle.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_23",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_24_sentence_0",
+        "start_time": 97.78,
+        "end_time": 101.04,
+        "text": "Maybe you know that this is pi times its radius squared, but why?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_24",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_25_sentence_0",
+        "start_time": 101.58,
+        "end_time": 104.46,
+        "text": "Is there a nice way to think about where this formula comes from?",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_25",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_26_sentence_0",
+        "start_time": 105.42,
+        "end_time": 109.32600000000001,
+        "text": "Well, contemplating this problem and leaving yourself open to exploring the",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_26",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_27_sentence_0",
+        "start_time": 109.326,
+        "end_time": 113.54499999999999,
+        "text": "interesting thoughts that come about can actually lead you to a glimpse of three",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_27",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_28_sentence_0",
+        "start_time": 113.545,
+        "end_time": 117.92,
+        "text": "big ideas in calculus, integrals, derivatives, and the fact that they're opposites.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_28",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_29_sentence_0",
+        "start_time": 119.84,
+        "end_time": 124.84,
+        "text": "But the story starts more simply, just you and a circle, let's say with radius 3.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_29",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_30_sentence_0",
+        "start_time": 125.7,
+        "end_time": 129.382,
+        "text": "You're trying to figure out its area, and after going through a lot of",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_30",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_31_sentence_0",
+        "start_time": 129.382,
+        "end_time": 133.485,
+        "text": "paper trying different ways to chop up and rearrange the pieces of that area,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_31",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_32_sentence_0",
+        "start_time": 133.485,
+        "end_time": 136.852,
+        "text": "many of which might lead to their own interesting observations,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_32",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_33_sentence_0",
+        "start_time": 136.852,
+        "end_time": 141.06,
+        "text": "maybe you try out the idea of slicing up the circle into many concentric rings.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_33",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_34_sentence_0",
+        "start_time": 142.0,
+        "end_time": 145.807,
+        "text": "This should seem promising because it respects the symmetry of the circle,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_34",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_35_sentence_0",
+        "start_time": 145.807,
+        "end_time": 149.45999999999998,
+        "text": "and math has a tendency to reward you when you respect its symmetries.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_35",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_36_sentence_0",
+        "start_time": 150.36,
+        "end_time": 155.06,
+        "text": "Let's take one of those rings, which has some inner radius r that's between 0 and 3.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_36",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_37_sentence_0",
+        "start_time": 156.22,
+        "end_time": 159.922,
+        "text": "If we can find a nice expression for the area of each ring like this one,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_37",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_38_sentence_0",
+        "start_time": 159.922,
+        "end_time": 162.255,
+        "text": "and if we have a nice way to add them all up,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_38",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_39_sentence_0",
+        "start_time": 162.255,
+        "end_time": 165.5,
+        "text": "it might lead us to an understanding of the full circle's area.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_39",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_40_sentence_0",
+        "start_time": 166.42,
+        "end_time": 169.11999999999998,
+        "text": "Maybe you start by imagining straightening out this ring.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_40",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_41_sentence_0",
+        "start_time": 170.8,
+        "end_time": 174.99,
+        "text": "And you could try thinking through exactly what this new shape is and what its",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_41",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_42_sentence_0",
+        "start_time": 174.99,
+        "end_time": 179.18,
+        "text": "area should be, but for simplicity, let's just approximate it as a rectangle.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_42",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_43_sentence_0",
+        "start_time": 180.18,
+        "end_time": 183.862,
+        "text": "The width of that rectangle is the circumference of the original ring,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_43",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_44_sentence_0",
+        "start_time": 183.862,
+        "end_time": 185.44,
+        "text": "which is 2 pi times r, right?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_44",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_45_sentence_0",
+        "start_time": 185.86,
+        "end_time": 188.06,
+        "text": "I mean, that's essentially the definition of pi.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_45",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_46_sentence_0",
+        "start_time": 188.68,
+        "end_time": 189.38,
+        "text": "And its thickness?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_46",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_47_sentence_0",
+        "start_time": 190.2,
+        "end_time": 194.15099999999998,
+        "text": "Well, that depends on how finely you chopped up the circle in the first place,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_47",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_48_sentence_0",
+        "start_time": 194.151,
+        "end_time": 195.62,
+        "text": "which was kind of arbitrary.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_48",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_49_sentence_0",
+        "start_time": 196.34,
+        "end_time": 200.095,
+        "text": "In the spirit of using what will come to be standard calculus notation,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_49",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_50_sentence_0",
+        "start_time": 200.095,
+        "end_time": 204.431,
+        "text": "let's call that thickness dr for a tiny difference in the radius from one ring to",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_50",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_51_sentence_0",
+        "start_time": 204.431,
+        "end_time": 204.96,
+        "text": "the next.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_51",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_52_sentence_0",
+        "start_time": 205.48,
+        "end_time": 207.88,
+        "text": "Maybe you think of it as something like 0.1.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_52",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_53_sentence_0",
+        "start_time": 208.98,
+        "end_time": 212.849,
+        "text": "So approximating this unwrapped ring as a thin rectangle,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_53",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_54_sentence_0",
+        "start_time": 212.849,
+        "end_time": 217.6,
+        "text": "its area is 2 pi times r, the radius, times dr, the little thickness.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_54",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_55_sentence_0",
+        "start_time": 218.6,
+        "end_time": 222.43699999999998,
+        "text": "And even though that's not perfect, for smaller and smaller choices of dr,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_55",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_56_sentence_0",
+        "start_time": 222.437,
+        "end_time": 226.48100000000002,
+        "text": "this is actually going to be a better and better approximation for that area,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_56",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_57_sentence_0",
+        "start_time": 226.481,
+        "end_time": 230.993,
+        "text": "since the top and the bottom sides of this shape are going to get closer and closer to",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_57",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_58_sentence_0",
+        "start_time": 230.993,
+        "end_time": 232.6,
+        "text": "being exactly the same length.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_58",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_59_sentence_0",
+        "start_time": 233.54,
+        "end_time": 235.933,
+        "text": "So let's just move forward with this approximation,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_59",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_60_sentence_0",
+        "start_time": 235.933,
+        "end_time": 238.701,
+        "text": "keeping in the back of our minds that it's slightly wrong,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_60",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_61_sentence_0",
+        "start_time": 238.701,
+        "end_time": 242.35999999999999,
+        "text": "but it's going to become more accurate for smaller and smaller choices of dr.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_61",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_62_sentence_0",
+        "start_time": 243.22,
+        "end_time": 246.4,
+        "text": "That is, if we slice up the circle into thinner and thinner rings.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_62",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_63_sentence_0",
+        "start_time": 247.7,
+        "end_time": 252.38299999999998,
+        "text": "So just to sum up where we are, you've broken up the area of the circle into",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_63",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_64_sentence_0",
+        "start_time": 252.383,
+        "end_time": 257.19,
+        "text": "all of these rings, and you're approximating the area of each one of those as",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_64",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_65_sentence_0",
+        "start_time": 257.19,
+        "end_time": 262.058,
+        "text": "2 pi times its radius times dr, where the specific value for that inner radius",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_65",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_66_sentence_0",
+        "start_time": 262.058,
+        "end_time": 266.804,
+        "text": "ranges from 0 for the smallest ring up to just under 3 for the biggest ring,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_66",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_67_sentence_0",
+        "start_time": 266.804,
+        "end_time": 271.97999999999996,
+        "text": "spaced out by whatever the thickness is that you choose for dr, something like 0.1.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_67",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_68_sentence_0",
+        "start_time": 273.14,
+        "end_time": 276.974,
+        "text": "And notice that the spacing between the values here corresponds to the",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_68",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_69_sentence_0",
+        "start_time": 276.974,
+        "end_time": 281.3,
+        "text": "thickness dr of each ring, the difference in radius from one ring to the next.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_69",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_70_sentence_0",
+        "start_time": 282.26,
+        "end_time": 286.012,
+        "text": "In fact, a nice way to think about the rectangles approximating each",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_70",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_71_sentence_0",
+        "start_time": 286.012,
+        "end_time": 289.82,
+        "text": "ring's area is to fit them all upright side by side along this axis.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_71",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_72_sentence_0",
+        "start_time": 290.66,
+        "end_time": 295.82000000000005,
+        "text": "Each one has a thickness dr, which is why they fit so snugly right there together,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_72",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_73_sentence_0",
+        "start_time": 295.82,
+        "end_time": 301.231,
+        "text": "and the height of any one of these rectangles sitting above some specific value of r,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_73",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_74_sentence_0",
+        "start_time": 301.231,
+        "end_time": 304.0,
+        "text": "like 0.6, is exactly 2 pi times that value.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_74",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_75_sentence_0",
+        "start_time": 304.64,
+        "end_time": 308.96,
+        "text": "That's the circumference of the corresponding ring that this rectangle approximates.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_75",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_76_sentence_0",
+        "start_time": 309.56,
+        "end_time": 312.549,
+        "text": "Pictures like this 2 pi r can get tall for the screen,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_76",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_77_sentence_0",
+        "start_time": 312.549,
+        "end_time": 316.92199999999997,
+        "text": "I mean 2 times pi times 3 is around 19, so let's just throw up a y axis that's",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_77",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_78_sentence_0",
+        "start_time": 316.922,
+        "end_time": 321.35,
+        "text": "scaled a little differently so that we can actually fit all of these rectangles",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_78",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_79_sentence_0",
+        "start_time": 321.35,
+        "end_time": 322.18,
+        "text": "on the screen.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_79",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_80_sentence_0",
+        "start_time": 323.26,
+        "end_time": 326.941,
+        "text": "A nice way to think about this setup is to draw the graph of 2 pi r,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_80",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_81_sentence_0",
+        "start_time": 326.941,
+        "end_time": 329.53999999999996,
+        "text": "which is a straight line that has a slope 2 pi.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_81",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_82_sentence_0",
+        "start_time": 330.1,
+        "end_time": 334.8,
+        "text": "Each of these rectangles extends up to the point where it just barely touches that graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_82",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_83_sentence_0",
+        "start_time": 336.0,
+        "end_time": 337.46,
+        "text": "Again, we're being approximate here.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_83",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_84_sentence_0",
+        "start_time": 337.9,
+        "end_time": 340.01399999999995,
+        "text": "Each of these rectangles only approximates the",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_84",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_85_sentence_0",
+        "start_time": 340.014,
+        "end_time": 342.22,
+        "text": "area of the corresponding ring from the circle.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_85",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_86_sentence_0",
+        "start_time": 342.94,
+        "end_time": 346.243,
+        "text": "But remember, that approximation, 2 pi r times dr,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_86",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_87_sentence_0",
+        "start_time": 346.243,
+        "end_time": 350.8,
+        "text": "gets less and less wrong as the size of dr gets smaller and smaller.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_87",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_88_sentence_0",
+        "start_time": 351.8,
+        "end_time": 353.967,
+        "text": "And this has a very beautiful meaning when we're",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_88",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_89_sentence_0",
+        "start_time": 353.967,
+        "end_time": 356.53999999999996,
+        "text": "looking at the sum of the areas of all those rectangles.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_89",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_90_sentence_0",
+        "start_time": 357.08,
+        "end_time": 360.058,
+        "text": "For smaller and smaller choices of dr, you might at first",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_90",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_91_sentence_0",
+        "start_time": 360.058,
+        "end_time": 363.14,
+        "text": "think that turns the problem into a monstrously large sum.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_91",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_92_sentence_0",
+        "start_time": 363.6,
+        "end_time": 365.56,
+        "text": "I mean, there's many many rectangles to consider,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_92",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_93_sentence_0",
+        "start_time": 365.56,
+        "end_time": 368.4,
+        "text": "and the decimal precision of each one of their areas is going to be an",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_93",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_94_sentence_0",
+        "start_time": 368.4,
+        "end_time": 369.2,
+        "text": "absolute nightmare.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_94",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_95_sentence_0",
+        "start_time": 370.06,
+        "end_time": 375.3,
+        "text": "But notice, all of their areas in aggregate just looks like the area under a graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_95",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_96_sentence_0",
+        "start_time": 375.98,
+        "end_time": 379.365,
+        "text": "And that portion under the graph is just a triangle,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_96",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_97_sentence_0",
+        "start_time": 379.365,
+        "end_time": 383.40000000000003,
+        "text": "a triangle with a base of 3 and a height that's 2 pi times 3.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_97",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_98_sentence_0",
+        "start_time": 384.14,
+        "end_time": 390.5,
+        "text": "So its area, 1 half base times height, works out to be exactly pi times 3 squared.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_98",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_99_sentence_0",
+        "start_time": 391.36,
+        "end_time": 395.134,
+        "text": "Or if the radius of our original circle was some other value,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_99",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_100_sentence_0",
+        "start_time": 395.134,
+        "end_time": 398.66,
+        "text": "capital R, that area comes out to be pi times r squared.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_100",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_101_sentence_0",
+        "start_time": 399.38,
+        "end_time": 401.46,
+        "text": "And that's the formula for the area of a circle.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_101",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_102_sentence_0",
+        "start_time": 402.32,
+        "end_time": 405.412,
+        "text": "It doesn't matter who you are or what you typically think of math,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_102",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_103_sentence_0",
+        "start_time": 405.412,
+        "end_time": 407.38,
+        "text": "that right there is a beautiful argument.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_103",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_104_sentence_0",
+        "start_time": 410.18,
+        "end_time": 412.818,
+        "text": "But if you want to think like a mathematician here,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_104",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_105_sentence_0",
+        "start_time": 412.818,
+        "end_time": 415.19599999999997,
+        "text": "you don't just care about finding the answer,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_105",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_106_sentence_0",
+        "start_time": 415.196,
+        "end_time": 418.92,
+        "text": "you care about developing general problem-solving tools and techniques.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_106",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_107_sentence_0",
+        "start_time": 419.68,
+        "end_time": 423.766,
+        "text": "So take a moment to meditate on what exactly just happened and why it worked,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_107",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_108_sentence_0",
+        "start_time": 423.766,
+        "end_time": 427.58700000000005,
+        "text": "because the way we transitioned from something approximate to something",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_108",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_109_sentence_0",
+        "start_time": 427.587,
+        "end_time": 431.78,
+        "text": "precise is actually pretty subtle and cuts deep to what calculus is all about.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_109",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_110_sentence_0",
+        "start_time": 433.82,
+        "end_time": 438.909,
+        "text": "You had this problem that could be approximated with the sum of many small numbers,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_110",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_111_sentence_0",
+        "start_time": 438.909,
+        "end_time": 444.06,
+        "text": "each of which looked like 2 pi r times dr, for values of r ranging between 0 and 3.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_111",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_112_sentence_0",
+        "start_time": 446.6,
+        "end_time": 451.947,
+        "text": "Remember, the small number dr here represents our choice for the thickness of each ring,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_112",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_113_sentence_0",
+        "start_time": 451.947,
+        "end_time": 452.98,
+        "text": "for example 0.1.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_113",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_114_sentence_0",
+        "start_time": 453.52,
+        "end_time": 455.64,
+        "text": "And there are two important things to note here.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_114",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_115_sentence_0",
+        "start_time": 456.08,
+        "end_time": 460.64,
+        "text": "First of all, not only is dr a factor in the quantities we're adding up,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_115",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_116_sentence_0",
+        "start_time": 460.64,
+        "end_time": 465.58,
+        "text": "2 pi r times dr, it also gives the spacing between the different values of r.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_116",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_117_sentence_0",
+        "start_time": 466.24,
+        "end_time": 470.52,
+        "text": "And secondly, the smaller our choice for dr, the better the approximation.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_117",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_118_sentence_0",
+        "start_time": 472.2,
+        "end_time": 475.203,
+        "text": "Adding all of those numbers could be seen in a different,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_118",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_119_sentence_0",
+        "start_time": 475.203,
+        "end_time": 478.469,
+        "text": "pretty clever way as adding the areas of many thin rectangles",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_119",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_120_sentence_0",
+        "start_time": 478.469,
+        "end_time": 482.42,
+        "text": "sitting underneath a graph, the graph of the function 2 pi r in this case.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_120",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_121_sentence_0",
+        "start_time": 482.94,
+        "end_time": 487.426,
+        "text": "Then, and this is key, by considering smaller and smaller choices for dr,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_121",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_122_sentence_0",
+        "start_time": 487.426,
+        "end_time": 492.58799999999997,
+        "text": "corresponding to better and better approximations of the original problem, the sum,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_122",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_123_sentence_0",
+        "start_time": 492.588,
+        "end_time": 495.906,
+        "text": "thought of as the aggregate area of those rectangles,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_123",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_124_sentence_0",
+        "start_time": 495.906,
+        "end_time": 498.18,
+        "text": "approaches the area under the graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_124",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_125_sentence_0",
+        "start_time": 499.0,
+        "end_time": 503.477,
+        "text": "And because of that, you can conclude that the answer to the original question,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_125",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_126_sentence_0",
+        "start_time": 503.477,
+        "end_time": 508.52,
+        "text": "in full unapproximated precision, is exactly the same as the area underneath this graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_126",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_127_sentence_0",
+        "start_time": 510.86,
+        "end_time": 515.261,
+        "text": "A lot of other hard problems in math and science can be broken down and",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_127",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_128_sentence_0",
+        "start_time": 515.261,
+        "end_time": 518.361,
+        "text": "approximated as the sum of many small quantities,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_128",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_129_sentence_0",
+        "start_time": 518.361,
+        "end_time": 523.9399999999999,
+        "text": "like figuring out how far a car has traveled based on its velocity at each point in time.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_129",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_130_sentence_0",
+        "start_time": 524.76,
+        "end_time": 528.77,
+        "text": "In a case like that, you might range through many different points in time,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_130",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_131_sentence_0",
+        "start_time": 528.77,
+        "end_time": 533.261,
+        "text": "and at each one multiply the velocity at that time times a tiny change in time, dt,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_131",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_132_sentence_0",
+        "start_time": 533.261,
+        "end_time": 537.8589999999999,
+        "text": "which would give the corresponding little bit of distance traveled during that little",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_132",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_133_sentence_0",
+        "start_time": 537.859,
+        "end_time": 538.1800000000001,
+        "text": "time.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_133",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_134_sentence_0",
+        "start_time": 539.26,
+        "end_time": 543.156,
+        "text": "I'll talk through the details of examples like this later in the series,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_134",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_135_sentence_0",
+        "start_time": 543.156,
+        "end_time": 547.3779999999999,
+        "text": "but at a high level many of these types of problems turn out to be equivalent",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_135",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_136_sentence_0",
+        "start_time": 547.378,
+        "end_time": 552.14,
+        "text": "to finding the area under some graph, in much the same way that our circle problem did.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_136",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_137_sentence_0",
+        "start_time": 553.2,
+        "end_time": 556.147,
+        "text": "This happens whenever the quantities you're adding up,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_137",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_138_sentence_0",
+        "start_time": 556.147,
+        "end_time": 559.038,
+        "text": "the one whose sum approximates the original problem,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_138",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_139_sentence_0",
+        "start_time": 559.038,
+        "end_time": 563.24,
+        "text": "can be thought of as the areas of many thin rectangles sitting side by side.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_139",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_140_sentence_0",
+        "start_time": 564.64,
+        "end_time": 569.78,
+        "text": "If finer and finer approximations of the original problem correspond to thinner and",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_140",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_141_sentence_0",
+        "start_time": 569.78,
+        "end_time": 575.106,
+        "text": "thinner rings, then the original problem is equivalent to finding the area under some",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_141",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_142_sentence_0",
+        "start_time": 575.106,
+        "end_time": 575.54,
+        "text": "graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_142",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_143_sentence_0",
+        "start_time": 576.6,
+        "end_time": 580.424,
+        "text": "Again, this is an idea we'll see in more detail later in the series,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_143",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_144_sentence_0",
+        "start_time": 580.424,
+        "end_time": 583.18,
+        "text": "so don't worry if it's not 100% clear right now.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_144",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_145_sentence_0",
+        "start_time": 583.78,
+        "end_time": 587.151,
+        "text": "The point now is that you, as the mathematician having just",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_145",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_146_sentence_0",
+        "start_time": 587.151,
+        "end_time": 590.578,
+        "text": "solved a problem by reframing it as the area under a graph,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_146",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_147_sentence_0",
+        "start_time": 590.578,
+        "end_time": 594.52,
+        "text": "might start thinking about how to find the areas under other graphs.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_147",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_148_sentence_0",
+        "start_time": 595.64,
+        "end_time": 600.318,
+        "text": "We were lucky in the circle problem that the relevant area turned out to be a triangle,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_148",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_149_sentence_0",
+        "start_time": 600.318,
+        "end_time": 603.76,
+        "text": "but imagine instead something like a parabola, the graph of x2.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_149",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_150_sentence_0",
+        "start_time": 604.76,
+        "end_time": 608.013,
+        "text": "What's the area underneath that curve, say between",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_150",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_151_sentence_0",
+        "start_time": 608.013,
+        "end_time": 610.6800000000001,
+        "text": "the values of x equals 0 and x equals 3?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_151",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_152_sentence_0",
+        "start_time": 612.08,
+        "end_time": 614.76,
+        "text": "Well, it's hard to think about, right?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_152",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_153_sentence_0",
+        "start_time": 615.22,
+        "end_time": 618.02,
+        "text": "And let me reframe that question in a slightly different way.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_153",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_154_sentence_0",
+        "start_time": 618.02,
+        "end_time": 623.06,
+        "text": "We'll fix that left endpoint in place at 0, and let the right endpoint vary.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_154",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_155_sentence_0",
+        "start_time": 626.86,
+        "end_time": 630.556,
+        "text": "Are you able to find a function, a of x, that gives",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_155",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_156_sentence_0",
+        "start_time": 630.556,
+        "end_time": 634.1800000000001,
+        "text": "you the area under this parabola between 0 and x?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_156",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_157_sentence_0",
+        "start_time": 635.62,
+        "end_time": 639.58,
+        "text": "A function a of x like this is called an integral of x2.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_157",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_158_sentence_0",
+        "start_time": 640.5,
+        "end_time": 644.603,
+        "text": "Calculus holds within it the tools to figure out what an integral like this is,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_158",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_159_sentence_0",
+        "start_time": 644.603,
+        "end_time": 647.1999999999999,
+        "text": "but right now it's just a mystery function to us.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_159",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_160_sentence_0",
+        "start_time": 647.5,
+        "end_time": 651.318,
+        "text": "We know it gives the area under the graph of x2 between some fixed left",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_160",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_161_sentence_0",
+        "start_time": 651.318,
+        "end_time": 654.92,
+        "text": "point and some variable right point, but we don't know what it is.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_161",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_162_sentence_0",
+        "start_time": 655.66,
+        "end_time": 659.8489999999999,
+        "text": "And again, the reason we care about this kind of question is not just for",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_162",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_163_sentence_0",
+        "start_time": 659.849,
+        "end_time": 663.98,
+        "text": "the sake of asking hard geometry questions, it's because many practical",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_163",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_164_sentence_0",
+        "start_time": 663.98,
+        "end_time": 668.054,
+        "text": "problems that can be approximated by adding up a large number of small",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_164",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_165_sentence_0",
+        "start_time": 668.054,
+        "end_time": 672.3,
+        "text": "things can be reframed as a question about an area under a certain graph.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_165",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_166_sentence_0",
+        "start_time": 673.42,
+        "end_time": 677.372,
+        "text": "I'll tell you right now that finding this area, this integral function,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_166",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_167_sentence_0",
+        "start_time": 677.372,
+        "end_time": 681.992,
+        "text": "is genuinely hard, and whenever you come across a genuinely hard question in math,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_167",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_168_sentence_0",
+        "start_time": 681.992,
+        "end_time": 685.7769999999999,
+        "text": "a good policy is to not try too hard to get at the answer directly,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_168",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_169_sentence_0",
+        "start_time": 685.777,
+        "end_time": 689.34,
+        "text": "since usually you just end up banging your head against a wall.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_169",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_170_sentence_0",
+        "start_time": 690.08,
+        "end_time": 693.7800000000001,
+        "text": "Instead, play around with the idea, with no particular goal in mind.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_170",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_171_sentence_0",
+        "start_time": 694.34,
+        "end_time": 698.5640000000001,
+        "text": "Spend some time building up familiarity with the interplay between the function",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_171",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_172_sentence_0",
+        "start_time": 698.564,
+        "end_time": 702.36,
+        "text": "defining the graph, in this case x2, and the function giving the area.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_172",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_173_sentence_0",
+        "start_time": 704.09,
+        "end_time": 708.02,
+        "text": "In that playful spirit, if you're lucky, here's something you might notice.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_173",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_174_sentence_0",
+        "start_time": 708.58,
+        "end_time": 714.779,
+        "text": "When you slightly increase x by some tiny nudge dx, look at the resulting change in area,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_174",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_175_sentence_0",
+        "start_time": 714.779,
+        "end_time": 720.42,
+        "text": "represented with this sliver I'm going to call da for a tiny difference in area.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_175",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_176_sentence_0",
+        "start_time": 721.38,
+        "end_time": 725.507,
+        "text": "That sliver can be pretty well approximated with a rectangle,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_176",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_177_sentence_0",
+        "start_time": 725.507,
+        "end_time": 728.62,
+        "text": "one whose height is x2 and whose width is dx.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_177",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_178_sentence_0",
+        "start_time": 729.66,
+        "end_time": 732.228,
+        "text": "And the smaller the size of that nudge dx, the",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_178",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_179_sentence_0",
+        "start_time": 732.228,
+        "end_time": 735.02,
+        "text": "more that sliver actually looks like a rectangle.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_179",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_180_sentence_0",
+        "start_time": 736.8,
+        "end_time": 741.0799999999999,
+        "text": "This gives us an interesting way to think about how a of x is related to x2.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_180",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_181_sentence_0",
+        "start_time": 742.0,
+        "end_time": 746.578,
+        "text": "A change to the output of a, this little da, is about equal to x2,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_181",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_182_sentence_0",
+        "start_time": 746.578,
+        "end_time": 750.185,
+        "text": "where x is whatever input you started at, times dx,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_182",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_183_sentence_0",
+        "start_time": 750.185,
+        "end_time": 754.0,
+        "text": "the little nudge to the input that caused a to change.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_183",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_184_sentence_0",
+        "start_time": 754.78,
+        "end_time": 760.3159999999999,
+        "text": "Or rearranged, da divided by dx, the ratio of a tiny change in a to the tiny",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_184",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_185_sentence_0",
+        "start_time": 760.316,
+        "end_time": 765.7800000000001,
+        "text": "change in x that caused it, is approximately whatever x2 is at that point.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_185",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_186_sentence_0",
+        "start_time": 766.56,
+        "end_time": 768.76,
+        "text": "And that's an approximation that should get better",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_186",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_187_sentence_0",
+        "start_time": 768.76,
+        "end_time": 770.96,
+        "text": "and better for smaller and smaller choices of dx.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_187",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_188_sentence_0",
+        "start_time": 772.1,
+        "end_time": 775.64,
+        "text": "In other words, we don't know what a of x is, that remains a mystery.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_188",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_189_sentence_0",
+        "start_time": 776.08,
+        "end_time": 779.5,
+        "text": "But we do know a property that this mystery function must have.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_189",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_190_sentence_0",
+        "start_time": 780.16,
+        "end_time": 784.972,
+        "text": "When you look at two nearby points, for example 3 and 3.001,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_190",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_191_sentence_0",
+        "start_time": 784.972,
+        "end_time": 790.185,
+        "text": "consider the change to the output of a between those two points,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_191",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_192_sentence_0",
+        "start_time": 790.185,
+        "end_time": 796.1199999999999,
+        "text": "the difference between the mystery function evaluated at 3.001 and 3.001.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_192",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_193_sentence_0",
+        "start_time": 796.12,
+        "end_time": 802.076,
+        "text": "That change, divided by the difference in the input values, which in this case is 0.001,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_193",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_194_sentence_0",
+        "start_time": 802.076,
+        "end_time": 808.1,
+        "text": "should be about equal to the value of x2 for the starting input, in this case 3 squared.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_194",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_195_sentence_0",
+        "start_time": 810.2,
+        "end_time": 814.416,
+        "text": "And this relationship between tiny changes to the mystery function",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_195",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_196_sentence_0",
+        "start_time": 814.416,
+        "end_time": 818.44,
+        "text": "and the values of x2 itself is true at all inputs, not just 3.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_196",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_197_sentence_0",
+        "start_time": 819.42,
+        "end_time": 821.973,
+        "text": "That doesn't immediately tell us how to find a of x,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_197",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_198_sentence_0",
+        "start_time": 821.973,
+        "end_time": 824.8199999999999,
+        "text": "but it provides a very strong clue that we can work with.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_198",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_199_sentence_0",
+        "start_time": 826.26,
+        "end_time": 828.74,
+        "text": "And there's nothing special about the graph x2 here.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_199",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_200_sentence_0",
+        "start_time": 829.28,
+        "end_time": 833.6469999999999,
+        "text": "Any function defined as the area under some graph has this property,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_200",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_201_sentence_0",
+        "start_time": 833.647,
+        "end_time": 838.5920000000001,
+        "text": "that da divided by dx, a slight nudge to the output of a divided by a slight",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_201",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_202_sentence_0",
+        "start_time": 838.592,
+        "end_time": 843.7289999999999,
+        "text": "nudge to the input that caused it, is about equal to the height of the graph at",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_202",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_203_sentence_0",
+        "start_time": 843.729,
+        "end_time": 844.5,
+        "text": "that point.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_203",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_204_sentence_0",
+        "start_time": 846.2,
+        "end_time": 850.36,
+        "text": "Again, that's an approximation that gets better and better for smaller choices of dx.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_204",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_205_sentence_0",
+        "start_time": 851.64,
+        "end_time": 856.04,
+        "text": "And here, we're stumbling into another big idea from calculus, derivatives.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_205",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_206_sentence_0",
+        "start_time": 857.1,
+        "end_time": 862.107,
+        "text": "This ratio da divided by dx is called the derivative of a, or more technically,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_206",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_207_sentence_0",
+        "start_time": 862.107,
+        "end_time": 867.24,
+        "text": "the derivative is whatever this ratio approaches as dx gets smaller and smaller.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_207",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_208_sentence_0",
+        "start_time": 868.18,
+        "end_time": 872.0379999999999,
+        "text": "I'll dive much more deeply into the idea of a derivative in the next video,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_208",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_209_sentence_0",
+        "start_time": 872.038,
+        "end_time": 876.514,
+        "text": "but loosely speaking it's a measure of how sensitive a function is to small changes in",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_209",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_210_sentence_0",
+        "start_time": 876.514,
+        "end_time": 877.08,
+        "text": "its input.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_210",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_211_sentence_0",
+        "start_time": 877.94,
+        "end_time": 882.1740000000001,
+        "text": "You'll see as the series goes on that there are many ways you can visualize a derivative,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_211",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_212_sentence_0",
+        "start_time": 882.174,
+        "end_time": 885.17,
+        "text": "depending on what function you're looking at and how you think",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_212",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_213_sentence_0",
+        "start_time": 885.17,
+        "end_time": 886.74,
+        "text": "about tiny nudges to its output.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_213",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_214_sentence_0",
+        "start_time": 888.6,
+        "end_time": 892.154,
+        "text": "We care about derivatives because they help us solve problems,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_214",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_215_sentence_0",
+        "start_time": 892.154,
+        "end_time": 897.14,
+        "text": "and in our little exploration here, we already have a glimpse of one way they're used.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_215",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_216_sentence_0",
+        "start_time": 897.84,
+        "end_time": 900.437,
+        "text": "They are the key to solving integral questions,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_216",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_217_sentence_0",
+        "start_time": 900.437,
+        "end_time": 903.42,
+        "text": "problems that require finding the area under a curve.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_217",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_218_sentence_0",
+        "start_time": 904.36,
+        "end_time": 907.67,
+        "text": "Once you gain enough familiarity with computing derivatives,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_218",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_219_sentence_0",
+        "start_time": 907.67,
+        "end_time": 912.5809999999999,
+        "text": "you'll be able to look at a situation like this one where you don't know what a function",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_219",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_220_sentence_0",
+        "start_time": 912.581,
+        "end_time": 915.5600000000001,
+        "text": "is, but you do know that its derivative should be x2,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_220",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_221_sentence_0",
+        "start_time": 915.56,
+        "end_time": 918.76,
+        "text": "and from that reverse engineer what the function must be.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_221",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_222_sentence_0",
+        "start_time": 920.7,
+        "end_time": 923.826,
+        "text": "This back and forth between integrals and derivatives,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_222",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_223_sentence_0",
+        "start_time": 923.826,
+        "end_time": 927.994,
+        "text": "where the derivative of a function for the area under a graph gives you",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_223",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_224_sentence_0",
+        "start_time": 927.994,
+        "end_time": 932.104,
+        "text": "back the function defining the graph itself, is called the fundamental",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_224",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_225_sentence_0",
+        "start_time": 932.104,
+        "end_time": 933.32,
+        "text": "theorem of calculus.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_225",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_226_sentence_0",
+        "start_time": 934.22,
+        "end_time": 938.75,
+        "text": "It ties together the two big ideas of integrals and derivatives,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_226",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_227_sentence_0",
+        "start_time": 938.75,
+        "end_time": 942.36,
+        "text": "and shows how each one is an inverse of the other.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_227",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_228_sentence_0",
+        "start_time": 944.8,
+        "end_time": 947.305,
+        "text": "All of this is only a high-level view, just a peek",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_228",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_229_sentence_0",
+        "start_time": 947.305,
+        "end_time": 949.8599999999999,
+        "text": "at some of the core ideas that emerge in calculus.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_229",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_230_sentence_0",
+        "start_time": 950.5,
+        "end_time": 954.42,
+        "text": "And what follows in this series are the details, for derivatives and integrals and more.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_230",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_231_sentence_0",
+        "start_time": 954.98,
+        "end_time": 959.106,
+        "text": "At all points, I want you to feel that you could have invented calculus yourself,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_231",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_232_sentence_0",
+        "start_time": 959.106,
+        "end_time": 963.435,
+        "text": "that if you drew the right pictures and played with each idea in just the right way,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_232",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_233_sentence_0",
+        "start_time": 963.435,
+        "end_time": 967.255,
+        "text": "these formulas and rules and constructs that are presented could have just",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_233",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_234_sentence_0",
+        "start_time": 967.255,
+        "end_time": 970.26,
+        "text": "as easily popped out naturally from your own explorations.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_234",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_235_sentence_0",
+        "start_time": 972.38,
+        "end_time": 976.305,
+        "text": "And before you go, it would feel wrong not to give the people who supported this",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_235",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_236_sentence_0",
+        "start_time": 976.305,
+        "end_time": 980.131,
+        "text": "series on Patreon a well-deserved thanks, both for their financial backing as",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_236",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_237_sentence_0",
+        "start_time": 980.131,
+        "end_time": 983.86,
+        "text": "well as for the suggestions they gave while the series was being developed.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_237",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_238_sentence_0",
+        "start_time": 984.7,
+        "end_time": 987.888,
+        "text": "You see, supporters got early access to the videos as I made them,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_238",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_239_sentence_0",
+        "start_time": 987.888,
+        "end_time": 991.5600000000001,
+        "text": "and they'll continue to get early access for future essence-of type series.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_239",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_240_sentence_0",
+        "start_time": 992.14,
+        "end_time": 996.24,
+        "text": "And as a thanks to the community, I keep ads off of new videos for their first month.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_240",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_241_sentence_0",
+        "start_time": 997.02,
+        "end_time": 1000.462,
+        "text": "I'm still astounded that I can spend time working on videos like these,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_241",
+        "video_id": "WUvTyaaNkzM"
+      },
+      {
+        "id": "segment_WUvTyaaNkzM_242_sentence_0",
+        "start_time": 1000.462,
+        "end_time": 1003.42,
+        "text": "and in a very direct way, you are the one to thank for that.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_WUvTyaaNkzM_242",
+        "video_id": "WUvTyaaNkzM"
+      }
+    ],
+    "language": "en",
+    "domain": "mathematics",
+    "video_id": "WUvTyaaNkzM"
+  },
+  "domain_features": {
+    "domain": "mathematics",
+    "key_concepts": [
+      {
+        "text": "function",
+        "theoretical": false,
+        "frequency": 18,
+        "domain": "mathematics"
+      },
+      {
+        "text": "calculus",
+        "theoretical": true,
+        "frequency": 13,
+        "domain": "mathematics"
+      },
+      {
+        "text": "problem",
+        "theoretical": false,
+        "frequency": 11,
+        "domain": "mathematics"
+      },
+      {
+        "text": "derivative",
+        "theoretical": true,
+        "frequency": 7,
+        "domain": "mathematics"
+      },
+      {
+        "text": "integral",
+        "theoretical": true,
+        "frequency": 4,
+        "domain": "mathematics"
+      },
+      {
+        "text": "derivative of a",
+        "theoretical": true,
+        "frequency": 2,
+        "domain": "mathematics"
+      },
+      {
+        "text": "geometry",
+        "theoretical": true,
+        "frequency": 2,
+        "domain": "mathematics"
+      },
+      {
+        "text": "fundamental",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "graph of the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "mystery",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "interplay between the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "nice expression for",
+        "theoretical": false,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "areas under other",
+        "theoretical": false,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "of x",
+        "theoretical": false,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "theorem",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "solve",
+        "theoretical": false,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "lot of rules",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "product rule",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "chain rule",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "nice way to",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "comes from",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "story starts more",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "should be",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "definition of pi",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "tiny difference in",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "radius from one",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "y axis that",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "formula for the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "of a circle",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "slightly different way",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "right endpoint vary",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "function a of",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "integral of x",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "change to the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "between those two",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "area under some",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "divided by dx",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "function defining the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      }
+    ],
+    "theoretical_segments": 22,
+    "practical_segments": 28
+  },
+  "theory_practice_results": {
+    "classification": "practical",
+    "confidence": 0.9094650205761317,
+    "theory_practice_ratio": 0.09053497942386832,
+    "theoretical_segments": 22,
+    "practical_segments": 28,
+    "mixed_segments": 193
+  },
+  "theory_practice_patterns": {
+    "theory_to_practice_sequences": [
+      {
+        "id": "t2p_25",
+        "start_time": 101.58,
+        "end_time": 109.32600000000001,
+        "pattern_type": "theory_to_practice",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_25",
+            "start_time": 101.58,
+            "end_time": 104.46,
+            "text": "Is there a nice way to think about where this formula comes from?",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_26",
+            "start_time": 105.42,
+            "end_time": 109.32600000000001,
+            "text": "Well, contemplating this problem and leaving yourself open to exploring the",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          }
+        ]
+      },
+      {
+        "id": "t2p_36",
+        "start_time": 150.36,
+        "end_time": 159.922,
+        "pattern_type": "theory_to_practice",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_36",
+            "start_time": 150.36,
+            "end_time": 155.06,
+            "text": "Let's take one of those rings, which has some inner radius r that's between 0 and 3.",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_37",
+            "start_time": 156.22,
+            "end_time": 159.922,
+            "text": "If we can find a nice expression for the area of each ring like this one,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          }
+        ]
+      },
+      {
+        "id": "t2p_121",
+        "start_time": 482.94,
+        "end_time": 492.58799999999997,
+        "pattern_type": "theory_to_practice",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_121",
+            "start_time": 482.94,
+            "end_time": 487.426,
+            "text": "Then, and this is key, by considering smaller and smaller choices for dr,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_122",
+            "start_time": 487.426,
+            "end_time": 492.58799999999997,
+            "text": "corresponding to better and better approximations of the original problem, the sum,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          }
+        ]
+      },
+      {
+        "id": "t2p_154",
+        "start_time": 618.02,
+        "end_time": 630.556,
+        "pattern_type": "theory_to_practice",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_154",
+            "start_time": 618.02,
+            "end_time": 623.06,
+            "text": "We'll fix that left endpoint in place at 0, and let the right endpoint vary.",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_155",
+            "start_time": 626.86,
+            "end_time": 630.556,
+            "text": "Are you able to find a function, a of x, that gives",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          }
+        ]
+      },
+      {
+        "id": "t2p_191",
+        "start_time": 784.972,
+        "end_time": 796.1199999999999,
+        "pattern_type": "theory_to_practice",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_191",
+            "start_time": 784.972,
+            "end_time": 790.185,
+            "text": "consider the change to the output of a between those two points,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_192",
+            "start_time": 790.185,
+            "end_time": 796.1199999999999,
+            "text": "the difference between the mystery function evaluated at 3.001 and 3.001.",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          }
+        ]
+      }
+    ],
+    "practice_to_theory_sequences": [
+      {
+        "id": "p2t_91",
+        "start_time": 360.058,
+        "end_time": 365.56,
+        "pattern_type": "practice_to_theory",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_91",
+            "start_time": 360.058,
+            "end_time": 363.14,
+            "text": "think that turns the problem into a monstrously large sum.",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_92",
+            "start_time": 363.6,
+            "end_time": 365.56,
+            "text": "I mean, there's many many rectangles to consider,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          }
+        ]
+      },
+      {
+        "id": "p2t_190",
+        "start_time": 780.16,
+        "end_time": 790.185,
+        "pattern_type": "practice_to_theory",
+        "segments": [
+          {
+            "id": "segment_WUvTyaaNkzM_190",
+            "start_time": 780.16,
+            "end_time": 784.972,
+            "text": "When you look at two nearby points, for example 3 and 3.001,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "practical"
+          },
+          {
+            "id": "segment_WUvTyaaNkzM_191",
+            "start_time": 784.972,
+            "end_time": 790.185,
+            "text": "consider the change to the output of a between those two points,",
+            "language": "en",
+            "video_id": "WUvTyaaNkzM",
+            "domain": "mathematics",
+            "content_type": "theoretical"
+          }
+        ]
+      }
+    ]
+  },
+  "processing_time": 0.8763155937194824
+}

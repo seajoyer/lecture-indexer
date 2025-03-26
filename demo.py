@@ -47,6 +47,66 @@ except ImportError:
     print("Note: For colored output, install colorama: pip install colorama")
 
 def main():
+
+    # Add this code after imports, before main()
+    class MockSearchEngine:
+        """A fallback search engine implementation when database is not available."""
+
+        def __init__(self, config):
+            self.config = config
+            logger.info("Initialized MockSearchEngine (fallback implementation)")
+
+        def search(self, query):
+            """Return empty search results."""
+            return {
+                "results": [],
+                "totalResults": 0,
+                "theoreticalResults": 0,
+                "practicalResults": 0,
+                "executionTimeMs": 0,
+                "message": "Search is disabled when database is not initialized."
+            }
+
+        def index_content(self, processed_result):
+            """Mock indexing."""
+            logger.info(f"Mock indexing content for video {processed_result.get('video_id', 'unknown')}")
+            return True
+
+        def get_video_concepts(self, video_id):
+            """Return empty concepts."""
+            return None
+
+        def get_concept_details(self, concept_id):
+            """Return empty concept details."""
+            return None
+
+        def generate_learning_path(self, concept_ids, theory_practice_ratio=0.5, domain=None):
+            """Return empty learning path."""
+            return None
+
+        def optimize_database(self):
+            """Mock database optimization."""
+            return True
+
+        def rebuild_search_indexes(self):
+            """Mock index rebuilding."""
+            return True
+
+
+    def initialize_search_engine(config):
+        """Initialize search engine with fallback to mock implementation."""
+        try:
+            from search_retrieval.python.search_engine import SearchEngine
+            search_engine = SearchEngine(config)
+            return search_engine
+        except RuntimeError as e:
+            if "Database context not initialized" in str(e):
+                print(f"{Fore.YELLOW}Warning: Database not initialized. Search functionality will be limited.{Style.RESET_ALL}")
+                return MockSearchEngine(config)
+            else:
+                # Re-raise other RuntimeErrors
+                raise
+
     """Main function for the demonstration script."""
     parser = argparse.ArgumentParser(description='Lecture Video Content Indexer Demo')
 
@@ -119,7 +179,9 @@ def main():
 
     youtube_extractor = YouTubeDataExtractor(api_key)
     data_pipeline = DataPipeline(pipeline_config)
-    search_engine = SearchEngine(search_config)
+
+    # Use our new initialization function to handle database unavailability
+    search_engine = initialize_search_engine(search_config)
 
     # If we're just listing concepts
     if args.list_concepts:

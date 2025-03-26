@@ -983,7 +983,7 @@ class TheoryPracticeClassifier:
         return result
 
     @time_function(threshold_ms=5000)
-    @measure_memory(threshold_mb=100)
+    @measure_memory(name="extract_theory_practice_patterns", threshold_mb=100)
     def classify_transcript(self, transcript: Dict[str, Any]) -> Dict[str, Any]:
         """
         Classify an entire transcript and provide theory/practice statistics with caching.

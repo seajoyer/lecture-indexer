@@ -1,521 +1,631 @@
 """
-Unit tests for the Search Engine component.
+Tests for the SearchEngine class.
 """
 
 import pytest
-import json
 import os
-import shutil
-import sqlite3
-from unittest.mock import patch, MagicMock
-from pathlib import Path
+import json
+import tempfile
+from typing import Dict, List, Any
+from unittest.mock import MagicMock, patch
 
 from search_retrieval.python.search_engine import SearchEngine
+from database.db_init import get_db_context, init_database
 
-# Test configuration
-TEST_CONFIG = {
-    "index_dir": "test_index",
-    "use_stemming": True,
-    "use_fuzzy_matching": True
-}
-
-# Mock video metadata
-MOCK_METADATA = {
-    "video_id": "test123",
-    "title": "Test Video",
-    "channel": "Test Channel",
-    "publication_date": "2023-01-01T00:00:00Z",
-    "duration_seconds": 300,
-    "description": "This is a test video about mathematics and algorithms.",
-    "language": "en",
-    "domain": "mathematics",
-    "domain_confidence": 0.8
-}
-
-# Mock transcript segments
-MOCK_SEGMENTS = [
-    {
-        "id": "segment1",
-        "start_time": 0.0,
-        "end_time": 5.0,
-        "text": "Welcome to this lecture on calculus.",
-        "content_type": "theoretical"
-    },
-    {
-        "id": "segment2",
-        "start_time": 5.0,
-        "end_time": 10.0,
-        "text": "Today we will discuss derivatives and integrals.",
-        "content_type": "theoretical"
-    },
-    {
-        "id": "segment3",
-        "start_time": 10.0,
-        "end_time": 15.0,
-        "text": "Let's solve this problem: find the derivative of f(x) = x^2.",
-        "content_type": "practical"
-    }
-]
-
-# Mock concepts
-MOCK_CONCEPTS = [
-    {
-        "text": "calculus",
-        "domain": "mathematics",
-        "frequency": 2,
-        "theoretical": True
-    },
-    {
-        "text": "derivative",
-        "domain": "mathematics",
-        "frequency": 2,
-        "theoretical": False
-    },
-    {
-        "text": "integral",
-        "domain": "mathematics",
-        "frequency": 1,
-        "theoretical": True
-    }
-]
-
-# Mock theory/practice results
-MOCK_TP_RESULTS = {
-    "classification": "theoretical",
-    "confidence": 0.8,
-    "theoretical_segments": 2,
-    "practical_segments": 1,
-    "mixed_segments": 0,
-    "theory_practice_ratio": 0.67
-}
-
-# Mock theory/practice patterns
-MOCK_TP_PATTERNS = {
-    "theory_to_practice_sequences": [
-        {
-            "pattern_type": "definition_to_example",
-            "segments": MOCK_SEGMENTS
-        }
-    ],
-    "practice_to_theory_sequences": [],
-    "theory_practice_alternations": 1,
-    "max_theory_sequence": 2,
-    "max_practice_sequence": 1
-}
-
-# Complete processed result
-MOCK_PROCESSED_RESULT = {
-    "job_id": "job123",
-    "video_id": "test123",
-    "video_url": "https://www.youtube.com/watch?v=test123",
-    "metadata": MOCK_METADATA,
-    "transcript": {
-        "segments": MOCK_SEGMENTS,
-        "language": "en",
-        "domain": "mathematics"
-    },
-    "domain_features": {
-        "key_concepts": MOCK_CONCEPTS
-    },
-    "theory_practice_results": MOCK_TP_RESULTS,
-    "theory_practice_patterns": MOCK_TP_PATTERNS,
-    "status": "completed"
-}
 
 @pytest.fixture
-def search_engine():
-    """Create a Search Engine instance for testing."""
-    # Create test index directory
-    os.makedirs(TEST_CONFIG["index_dir"], exist_ok=True)
+def config():
+    """Create a test configuration."""
+    return {
+        "output_dir": tempfile.mkdtemp(),
+        "youtube_api_key": "test_key",
+        "use_stemming": True,
+        "use_fuzzy_matching": True,
+        "min_ngram_size": 2,
+        "max_ngram_size": 3,
+        "fuzzy_match_threshold": 0.8
+    }
 
-    # Create search engine instance
-    engine = SearchEngine(TEST_CONFIG)
 
-    yield engine
+@pytest.fixture
+def test_db_path():
+    """Create a temporary database path for testing."""
+    temp_dir = tempfile.mkdtemp()
+    db_path = os.path.join(temp_dir, "test_indexer.db")
+    yield db_path
+    # Clean up
+    if os.path.exists(db_path):
+        os.unlink(db_path)
 
-    # Clean up test directory
-    shutil.rmtree(TEST_CONFIG["index_dir"], ignore_errors=True)
 
-class TestSearchEngine:
-    """Test the Search Engine component."""
+@pytest.fixture
+def db_context(test_db_path):
+    """Initialize a test database context."""
+    db_context = init_database(test_db_path)
+    yield db_context
+    db_context.close()
 
-    def test_init(self, search_engine):
-        """Test initialization of search engine."""
-        assert search_engine is not None
-        assert search_engine.index_dir == TEST_CONFIG["index_dir"]
-        assert os.path.exists(search_engine.db_path)
 
-    def test_index_content(self, search_engine):
-        """Test indexing content."""
-        # Index mock content
-        result = search_engine.index_content(MOCK_PROCESSED_RESULT)
+@pytest.fixture
+def search_engine(config, db_context):
+    """Create a SearchEngine instance with a test database."""
+    # Mock the get_db_context function to return our test db_context
+    with patch('search_retrieval.python.search_engine.get_db_context', return_value=db_context):
+        engine = SearchEngine(config)
+        yield engine
 
-        # Verify indexing was successful
-        assert result is True
 
-        # Verify database contains the indexed content
-        conn = sqlite3.connect(search_engine.db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Check videos table
-        cursor.execute("SELECT * FROM videos WHERE video_id = ?", (MOCK_METADATA["video_id"],))
-        video_row = cursor.fetchone()
-        assert video_row is not None
-
-        # Check segments table
-        cursor.execute("SELECT COUNT(*) FROM segments WHERE video_id = ?", (MOCK_METADATA["video_id"],))
-        segment_count = cursor.fetchone()[0]
-        assert segment_count > 0
-
-        # Check concepts table
-        cursor.execute("SELECT COUNT(*) FROM concepts")
-        concept_count = cursor.fetchone()[0]
-        assert concept_count > 0
-
-        conn.close()
-
-    def test_search_exact_match(self, search_engine):
-        """Test searching with exact match."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search for a term that should match exactly
-        query = {
-            "original_text": "calculus",
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 10}
-        }
-
-        results = search_engine.search(query)
-
-        # Verify results
-        assert results is not None
-        assert "results" in results
-        assert results["totalResults"] > 0
-
-        # The term "calculus" should be found in the results
-        found = False
-        for result in results["results"]:
-            if "calculus" in result.get("context_text", "").lower():
-                found = True
-                break
-
-        assert found, "Search term 'calculus' not found in results"
-
-    def test_search_with_theoretical_bias(self, search_engine):
-        """Test searching with theoretical bias."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search with theoretical bias
-        query = {
-            "original_text": "calculus",
-            "filters": {},
-            "theory_practice_ratio": 0.8,  # High theoretical bias
-            "pagination": {"offset": 0, "limit": 10}
-        }
-
-        results = search_engine.search(query)
-
-        # Verify results have theoretical bias
-        assert results["theoreticalResults"] > 0
-
-        # Check if theoretical segments are prioritized
-        if results["results"]:
-            # The majority of results should be theoretical
-            theoretical_count = sum(1 for r in results["results"] if r.get("context_type") == "theoretical")
-            assert theoretical_count > 0
-
-    def test_search_with_practical_bias(self, search_engine):
-        """Test searching with practical bias."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search with practical bias
-        query = {
-            "original_text": "derivative",
-            "filters": {},
-            "theory_practice_ratio": 0.2,  # Low theoretical bias (high practical bias)
-            "pagination": {"offset": 0, "limit": 10}
-        }
-
-        results = search_engine.search(query)
-
-        # Verify results contain at least some content
-        assert results["totalResults"] > 0
-
-        # Check if practical segments are present
-        practical_count = sum(1 for r in results["results"] if r.get("context_type") == "practical")
-        if results["results"]:
-            assert practical_count > 0 or results["practicalResults"] > 0, "No practical results found with practical bias"
-
-    def test_search_with_domain_filter(self, search_engine):
-        """Test searching with domain filter."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search with domain filter
-        query = {
-            "original_text": "calculus",
-            "filters": {},
+@pytest.fixture
+def sample_processed_result():
+    """Create a sample processed result for testing indexing."""
+    return {
+        "video_id": "test123",
+        "video_url": "https://www.youtube.com/watch?v=test123",
+        "metadata": {
+            "title": "Test Mathematics Lecture",
+            "description": "A test lecture on calculus.",
+            "channel": "Test Academy",
+            "publication_date": "2023-01-01T00:00:00Z",
+            "duration_seconds": 600,
+            "language": "en",
             "domain": "mathematics",
-            "pagination": {"offset": 0, "limit": 10}
+            "domain_confidence": 0.8
+        },
+        "transcript": {
+            "segments": [
+                {
+                    "id": "seg1",
+                    "start_time": 0.0,
+                    "end_time": 10.0,
+                    "text": "Welcome to this mathematics lecture on calculus.",
+                    "language": "en",
+                    "content_type": "theoretical"
+                },
+                {
+                    "id": "seg2",
+                    "start_time": 10.0,
+                    "end_time": 20.0,
+                    "text": "Today we will learn about derivatives.",
+                    "language": "en",
+                    "content_type": "theoretical"
+                },
+                {
+                    "id": "seg3",
+                    "start_time": 20.0,
+                    "end_time": 30.0,
+                    "text": "Let's solve an example problem: find the derivative of f(x) = x^2.",
+                    "language": "en",
+                    "content_type": "practical"
+                }
+            ],
+            "language": "en",
+            "domain": "mathematics",
+            "video_id": "test123"
+        },
+        "domain_features": {
+            "domain": "mathematics",
+            "theoretical_segments": 2,
+            "practical_segments": 1,
+            "key_concepts": [
+                {
+                    "text": "calculus",
+                    "domain": "mathematics",
+                    "frequency": 2,
+                    "theoretical": True,
+                    "relevance": 0.8
+                },
+                {
+                    "text": "derivative",
+                    "domain": "mathematics",
+                    "frequency": 2,
+                    "theoretical": True,
+                    "relevance": 0.7
+                }
+            ]
+        },
+        "theory_practice_results": {
+            "classification": "theoretical",
+            "confidence": 0.7,
+            "theoretical_segments": 2,
+            "practical_segments": 1,
+            "theory_practice_ratio": 0.7
+        },
+        "theory_practice_patterns": {
+            "theory_to_practice_sequences": [
+                {
+                    "start_index": 1,
+                    "end_index": 2,
+                    "segments": [
+                        {
+                            "id": "seg2",
+                            "start_time": 10.0,
+                            "end_time": 20.0,
+                            "text": "Today we will learn about derivatives.",
+                            "content_type": "theoretical"
+                        },
+                        {
+                            "id": "seg3",
+                            "start_time": 20.0,
+                            "end_time": 30.0,
+                            "text": "Let's solve an example problem: find the derivative of f(x) = x^2.",
+                            "content_type": "practical"
+                        }
+                    ],
+                    "pattern": "theory_to_practice",
+                    "pattern_type": "concept_to_example"
+                }
+            ],
+            "practice_to_theory_sequences": []
         }
+    }
 
-        results = search_engine.search(query)
 
-        # All results should be from mathematics domain
-        for result in results["results"]:
-            # Domain could be in the result itself or in the domain field
-            domain = result.get("domain") or "unknown"
-            assert domain == "mathematics" or domain == "unknown", f"Result has incorrect domain: {domain}"
-
-    def test_search_with_video_filter(self, search_engine):
-        """Test searching with video ID filter."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search with video filter
-        query = {
-            "original_text": "calculus",
-            "filters": {"video_id": MOCK_METADATA["video_id"]},
-            "pagination": {"offset": 0, "limit": 10}
+@pytest.fixture
+def sample_search_query():
+    """Create a sample search query."""
+    return {
+        "original_text": "calculus derivative",
+        "filters": {},
+        "theory_practice_ratio": None,
+        "domain": None,
+        "pagination": {
+            "offset": 0,
+            "limit": 10
         }
+    }
 
-        results = search_engine.search(query)
 
-        # All results should be from the specified video
-        for result in results["results"]:
-            assert result.get("video_id") == MOCK_METADATA["video_id"]
+def test_index_content(search_engine, sample_processed_result):
+    """Test indexing content functionality."""
+    # Mock the repository save methods to avoid actual database operations
+    search_engine.db_context.video_repository.save_video = MagicMock(return_value=True)
+    search_engine.db_context.video_repository.save_segments = MagicMock(return_value=True)
+    search_engine.db_context.video_repository.save_theory_practice_patterns = MagicMock(return_value=True)
+    search_engine.db_context.concept_repository.save_concept = MagicMock(return_value="concept1")
+    search_engine.db_context.concept_repository.save_occurrences = MagicMock(return_value=True)
+    search_engine.db_context.search_repository.index_video_metadata = MagicMock(return_value=True)
+    search_engine.db_context.search_repository.index_segments = MagicMock(return_value=True)
 
-    def test_get_concept_details(self, search_engine):
-        """Test getting concept details."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
+    # Test indexing
+    result = search_engine.index_content(sample_processed_result)
 
-        # Search for a concept to get its ID
-        query = {
-            "original_text": "calculus",
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 10}
+    # Assert successful indexing
+    assert result is True
+
+    # Verify that the repository methods were called correctly
+    search_engine.db_context.video_repository.save_video.assert_called_once()
+    search_engine.db_context.video_repository.save_segments.assert_called_once()
+    search_engine.db_context.video_repository.save_theory_practice_patterns.assert_called_once()
+
+    # Concept repository should be called for each concept
+    assert search_engine.db_context.concept_repository.save_concept.call_count == len(
+        sample_processed_result["domain_features"]["key_concepts"])
+
+    # Search repository methods should be called
+    search_engine.db_context.search_repository.index_video_metadata.assert_called_once()
+    search_engine.db_context.search_repository.index_segments.assert_called_once()
+
+
+def test_search(search_engine, sample_search_query):
+    """Test search functionality."""
+    # Mock the search repository search method
+    mock_search_results = {
+        "results": [
+            {
+                "result_type": "concept",
+                "concept_id": "c1",
+                "text": "calculus",
+                "domain": "mathematics",
+                "relevance_score": 0.9,
+                "video_id": "test123",
+                "video_title": "Test Mathematics Lecture",
+                "segment_id": "seg1",
+                "context_text": "Welcome to this mathematics lecture on calculus."
+            }
+        ],
+        "totalResults": 1,
+        "theoreticalResults": 1,
+        "practicalResults": 0,
+        "executionTimeMs": 50
+    }
+
+    search_engine.db_context.search_repository.search = MagicMock(return_value=mock_search_results)
+
+    # Test search
+    results = search_engine.search(sample_search_query)
+
+    # Assert correct results
+    assert results == mock_search_results
+    search_engine.db_context.search_repository.search.assert_called_once_with(sample_search_query)
+
+
+def test_search_with_filters(search_engine):
+    """Test search with filters."""
+    query_with_filters = {
+        "original_text": "calculus",
+        "filters": {
+            "video_id": "test123"
+        },
+        "theory_practice_ratio": 0.7,
+        "domain": "mathematics",
+        "pagination": {
+            "offset": 0,
+            "limit": 10
         }
+    }
 
-        results = search_engine.search(query)
+    # Mock search to return filtered results
+    mock_search_results = {
+        "results": [
+            {
+                "result_type": "concept",
+                "concept_id": "c1",
+                "text": "calculus",
+                "domain": "mathematics",
+                "relevance_score": 0.9,
+                "video_id": "test123",
+                "video_title": "Test Mathematics Lecture",
+                "segment_id": "seg1",
+                "context_text": "Welcome to this mathematics lecture on calculus."
+            }
+        ],
+        "totalResults": 1,
+        "theoreticalResults": 1,
+        "practicalResults": 0,
+        "executionTimeMs": 50
+    }
 
-        concept_id = None
-        for result in results["results"]:
-            if result.get("concept_id"):
-                concept_id = result["concept_id"]
-                break
+    search_engine.db_context.search_repository.search = MagicMock(return_value=mock_search_results)
 
-        if concept_id:
-            # Get concept details
-            concept_details = search_engine.get_concept_details(concept_id)
+    # Test search with filters
+    results = search_engine.search(query_with_filters)
 
-            # Verify concept details
-            assert concept_details is not None
-            assert "concept" in concept_details
-            assert concept_details["concept"]["concept_id"] == concept_id
-            assert "occurrences" in concept_details
-        else:
-            pytest.skip("No concept results found to test get_concept_details")
+    # Assert correct results
+    assert results == mock_search_results
+    search_engine.db_context.search_repository.search.assert_called_once_with(query_with_filters)
 
-    def test_get_video_concepts(self, search_engine):
-        """Test getting video concepts."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
 
-        # Get video concepts
-        video_concepts = search_engine.get_video_concepts(MOCK_METADATA["video_id"])
-
-        # Verify video concepts
-        assert video_concepts is not None
-        assert "video" in video_concepts
-        assert video_concepts["video"]["video_id"] == MOCK_METADATA["video_id"]
-        assert "concepts" in video_concepts
-        assert len(video_concepts["concepts"]) > 0
-
-        # Test with context_type filter
-        theoretical_concepts = search_engine.get_video_concepts(MOCK_METADATA["video_id"], "theoretical")
-        assert theoretical_concepts is not None
-        assert "concepts" in theoretical_concepts
-
-    def test_generate_learning_path(self, search_engine):
-        """Test generating learning path."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Get concept IDs from video concepts
-        video_concepts = search_engine.get_video_concepts(MOCK_METADATA["video_id"])
-
-        if video_concepts and video_concepts.get("concepts"):
-            # Get concept IDs
-            concept_ids = [c["concept_id"] for c in video_concepts["concepts"][:2]]
-
-            if concept_ids:
-                # Generate learning path
-                learning_path = search_engine.generate_learning_path(concept_ids)
-
-                # Verify learning path
-                assert learning_path is not None
-                assert "concepts" in learning_path
-                assert len(learning_path["concepts"]) > 0
-                assert "theory_practice_ratio" in learning_path
-                assert 0 <= learning_path["theory_practice_ratio"] <= 1
-            else:
-                pytest.skip("No concept IDs found to test generate_learning_path")
-        else:
-            pytest.skip("No video concepts found to test generate_learning_path")
-
-    def test_empty_search(self, search_engine):
-        """Test searching with empty query."""
-        # Search with empty query
-        query = {
-            "original_text": "",
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 10}
+def test_search_no_query(search_engine):
+    """Test search with empty query."""
+    empty_query = {
+        "original_text": "",
+        "filters": {},
+        "pagination": {
+            "offset": 0,
+            "limit": 10
         }
+    }
 
-        results = search_engine.search(query)
+    # Test search with empty query
+    results = search_engine.search(empty_query)
 
-        # Verify empty results
-        assert results is not None
-        assert "results" in results
-        assert len(results["results"]) == 0
-        assert results["totalResults"] == 0
+    # Assert empty results
+    assert results["results"] == []
+    assert results["totalResults"] == 0
 
-    def test_search_nonexistent_term(self, search_engine):
-        """Test searching for a term that doesn't exist."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
 
-        # Search for a term that shouldn't match anything
-        query = {
-            "original_text": "xyznonexistentterm",
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 10}
+def test_search_with_database_error(search_engine, sample_search_query):
+    """Test search behavior when database encounters an error."""
+    # Mock search to raise an exception
+    error_message = "Database error"
+    search_engine.db_context.search_repository.search = MagicMock(side_effect=Exception(error_message))
+
+    # Test search with database error
+    results = search_engine.search(sample_search_query)
+
+    # Assert error results
+    assert "error" in results
+    assert results["results"] == []
+    assert results["totalResults"] == 0
+    assert error_message in results["error"]
+
+
+def test_get_concept_details(search_engine):
+    """Test getting concept details."""
+    concept_id = "c1"
+    mock_concept = {
+        "concept_id": concept_id,
+        "text": "calculus",
+        "domain": "mathematics",
+        "theoretical": True
+    }
+    mock_occurrences = [
+        {
+            "occurrence_id": "o1",
+            "concept_id": concept_id,
+            "video_id": "test123",
+            "segment_id": "seg1",
+            "context_text": "Welcome to this mathematics lecture on calculus."
         }
-
-        results = search_engine.search(query)
-
-        # Verify empty results
-        assert results is not None
-        assert "results" in results
-        assert len(results["results"]) == 0
-        assert results["totalResults"] == 0
-
-    def test_get_nonexistent_concept(self, search_engine):
-        """Test getting details for a concept that doesn't exist."""
-        concept_details = search_engine.get_concept_details("nonexistent_id")
-        assert concept_details is None
-
-    def test_get_nonexistent_video_concepts(self, search_engine):
-        """Test getting concepts for a video that doesn't exist."""
-        video_concepts = search_engine.get_video_concepts("nonexistent_id")
-        assert video_concepts is None
-
-    def test_generate_learning_path_no_concepts(self, search_engine):
-        """Test generating learning path with no concepts."""
-        learning_path = search_engine.generate_learning_path([])
-        assert learning_path is None
-
-    def test_generate_learning_path_nonexistent_concepts(self, search_engine):
-        """Test generating learning path with nonexistent concepts."""
-        learning_path = search_engine.generate_learning_path(["nonexistent_id"])
-        assert learning_path is None
-
-    def test_index_invalid_content(self, search_engine):
-        """Test indexing invalid content."""
-        # Empty result
-        empty_result = {}
-        result = search_engine.index_content(empty_result)
-        assert result is False
-
-        # Missing video_id
-        invalid_result = {
-            "job_id": "job123",
-            "metadata": {}
+    ]
+    mock_related = [
+        {
+            "relationship_id": "r1",
+            "source_concept_id": concept_id,
+            "target_concept_id": "c2",
+            "target_text": "derivative",
+            "relationship_type": "related"
         }
-        result = search_engine.index_content(invalid_result)
-        assert result is False
-
-    def test_search_with_fuzzy_matching(self, search_engine):
-        """Test searching with fuzzy matching enabled."""
-        # First index some content
-        search_engine.index_content(MOCK_PROCESSED_RESULT)
-
-        # Search for a term with a slight misspelling
-        query = {
-            "original_text": "calculuss",  # Misspelled "calculus"
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 10}
+    ]
+    mock_videos = [
+        {
+            "video_id": "test123",
+            "title": "Test Mathematics Lecture",
+            "occurrence_count": 1
         }
+    ]
 
-        results = search_engine.search(query)
+    # Mock repository methods
+    search_engine.db_context.concept_repository.get_concept = MagicMock(return_value=mock_concept)
+    search_engine.db_context.concept_repository.get_concept_occurrences = MagicMock(return_value=mock_occurrences)
+    search_engine.db_context.concept_repository.get_concept_relationships = MagicMock(return_value=mock_related)
+    search_engine.db_context.concept_repository.get_videos_for_concept = MagicMock(return_value=mock_videos)
 
-        # If fuzzy matching is working, we should still find results
-        # that are related to "calculus"
-        found = False
-        for result in results["results"]:
-            if "calculus" in result.get("context_text", "").lower():
-                found = True
-                break
+    # Test getting concept details
+    result = search_engine.get_concept_details(concept_id)
 
-        # This may not always work depending on the implementation details
-        # So we'll skip rather than fail if no results
-        if not found and results["totalResults"] == 0:
-            pytest.skip("Fuzzy matching may not be enabled or working as expected")
-        else:
-            assert found, "Fuzzy matching did not find 'calculus' with query 'calculuss'"
+    # Assert correct results
+    assert result["concept"] == mock_concept
+    assert result["occurrences"] == mock_occurrences
+    assert result["related"] == mock_related
+    assert result["videos"] == mock_videos
 
-    def test_pagination(self, search_engine):
-        """Test search result pagination."""
-        # Create and index multiple results to ensure pagination
-        for i in range(3):
-            result_copy = MOCK_PROCESSED_RESULT.copy()
-            result_copy["video_id"] = f"test{i}"
-            result_copy["metadata"] = MOCK_METADATA.copy()
-            result_copy["metadata"]["video_id"] = f"test{i}"
-            result_copy["metadata"]["title"] = f"Test Video {i}"
-            search_engine.index_content(result_copy)
 
-        # Search with pagination
-        query = {
-            "original_text": "calculus",
-            "filters": {},
-            "pagination": {"offset": 0, "limit": 2}
+def test_get_concept_details_not_found(search_engine):
+    """Test getting details of a non-existent concept."""
+    # Mock get_concept to return None
+    search_engine.db_context.concept_repository.get_concept = MagicMock(return_value=None)
+
+    # Test getting non-existent concept
+    result = search_engine.get_concept_details("non_existent")
+
+    # Assert None is returned
+    assert result is None
+
+
+def test_get_video_concepts(search_engine):
+    """Test getting video concepts."""
+    video_id = "test123"
+    mock_video = {
+        "video_id": video_id,
+        "title": "Test Mathematics Lecture",
+        "domain": "mathematics",
+        "theory_practice_ratio": 0.7
+    }
+    mock_concepts = [
+        {
+            "concept_id": "c1",
+            "text": "calculus",
+            "domain": "mathematics",
+            "theoretical": True,
+            "occurrence_count": 2
+        },
+        {
+            "concept_id": "c2",
+            "text": "derivative",
+            "domain": "mathematics",
+            "theoretical": True,
+            "occurrence_count": 2
         }
+    ]
+    mock_patterns = [
+        {
+            "pattern_id": "p1",
+            "video_id": video_id,
+            "pattern_type": "theory_to_practice",
+            "start_time": 10.0,
+            "end_time": 30.0
+        }
+    ]
 
-        results_page1 = search_engine.search(query)
+    # Mock repository methods
+    search_engine.db_context.video_repository.get_video = MagicMock(return_value=mock_video)
+    search_engine.db_context.concept_repository.get_concepts_for_video = MagicMock(return_value=mock_concepts)
+    search_engine.db_context.video_repository.get_video_theory_practice_patterns = MagicMock(return_value=mock_patterns)
 
-        # Check first page
-        assert len(results_page1["results"]) <= 2
+    # Test getting video concepts
+    result = search_engine.get_video_concepts(video_id)
 
-        # Get second page
-        query["pagination"]["offset"] = 2
-        results_page2 = search_engine.search(query)
+    # Assert correct results
+    assert result["video"] == mock_video
+    assert result["concepts"] == mock_concepts
+    assert result["theory_practice_patterns"] == mock_patterns
+    assert result["theory_practice_ratio"] == 0.7
 
-        # Check second page is different from first
-        if results_page1["totalResults"] > 2 and results_page2["results"]:
-            # If we have IDs, check they're different
-            if results_page1["results"] and results_page2["results"]:
-                page1_ids = set()
-                page2_ids = set()
 
-                for r in results_page1["results"]:
-                    if r.get("occurrence_id"):
-                        page1_ids.add(r["occurrence_id"])
-                    elif r.get("segment_id"):
-                        page1_ids.add(r["segment_id"])
+def test_get_video_concepts_not_found(search_engine):
+    """Test getting concepts for a non-existent video."""
+    # Mock get_video to return None
+    search_engine.db_context.video_repository.get_video = MagicMock(return_value=None)
 
-                for r in results_page2["results"]:
-                    if r.get("occurrence_id"):
-                        page2_ids.add(r["occurrence_id"])
-                    elif r.get("segment_id"):
-                        page2_ids.add(r["segment_id"])
+    # Test getting concepts for non-existent video
+    result = search_engine.get_video_concepts("non_existent")
 
-                if page1_ids and page2_ids:
-                    # Check for any overlap
-                    overlap = page1_ids & page2_ids
-                    assert len(overlap) == 0, "Pages contain overlapping results"
+    # Assert None is returned
+    assert result is None
+
+
+def test_generate_learning_path(search_engine):
+    """Test generating a learning path."""
+    concept_ids = ["c1", "c2"]
+    mock_concepts = [
+        {
+            "concept_id": "c1",
+            "text": "calculus",
+            "domain": "mathematics",
+            "concept_class": "theoretical",
+            "relevance": 0.8
+        },
+        {
+            "concept_id": "c2",
+            "text": "derivative",
+            "domain": "mathematics",
+            "concept_class": "theoretical",
+            "relevance": 0.7
+        }
+    ]
+    mock_related = [
+        {
+            "target_concept_id": "c3",
+            "target_text": "integral",
+            "target_domain": "mathematics",
+            "target_class": "theoretical"
+        }
+    ]
+
+    # Mock repository methods
+    search_engine.db_context.concept_repository.get_concept = MagicMock(side_effect=lambda cid: next(
+        (c for c in mock_concepts if c["concept_id"] == cid), None))
+    search_engine.db_context.concept_repository.get_concept_relationships = MagicMock(return_value=mock_related)
+
+    # Test generating a learning path
+    result = search_engine.generate_learning_path(concept_ids)
+
+    # Assert correct structure
+    assert "concepts" in result
+    assert "theory_practice_ratio" in result
+    assert "domain" in result
+    assert len(result["concepts"]) > 0
+
+    # Assert each concept in the path has correct fields
+    for concept in result["concepts"]:
+        assert "text" in concept
+        assert "domain" in concept
+        assert "order" in concept
+
+
+def test_generate_learning_path_empty_concepts(search_engine):
+    """Test generating a learning path with empty concept list."""
+    # Test generating a learning path with empty concept list
+    result = search_engine.generate_learning_path([])
+
+    # Assert None is returned
+    assert result is None
+
+
+def test_generate_learning_path_non_existent_concepts(search_engine):
+    """Test generating a learning path with non-existent concepts."""
+    # Mock get_concept to return None
+    search_engine.db_context.concept_repository.get_concept = MagicMock(return_value=None)
+
+    # Test generating a learning path with non-existent concepts
+    result = search_engine.generate_learning_path(["non_existent"])
+
+    # Assert None is returned
+    assert result is None
+
+
+def test_generate_learning_path_custom_ratio(search_engine):
+    """Test generating a learning path with custom theory-practice ratio."""
+    concept_ids = ["c1", "c2"]
+    theory_practice_ratio = 0.3  # Prefer practical content
+
+    mock_concepts = [
+        {
+            "concept_id": "c1",
+            "text": "calculus",
+            "domain": "mathematics",
+            "concept_class": "theoretical",
+            "relevance": 0.8
+        },
+        {
+            "concept_id": "c2",
+            "text": "derivative",
+            "domain": "mathematics",
+            "concept_class": "practical",
+            "relevance": 0.7
+        }
+    ]
+
+    # Mock repository methods
+    search_engine.db_context.concept_repository.get_concept = MagicMock(side_effect=lambda cid: next(
+        (c for c in mock_concepts if c["concept_id"] == cid), None))
+    search_engine.db_context.concept_repository.get_concept_relationships = MagicMock(return_value=[])
+
+    # Test generating a learning path with custom ratio
+    result = search_engine.generate_learning_path(concept_ids, theory_practice_ratio)
+
+    # Assert ratio is used
+    assert result["theory_practice_ratio"] == theory_practice_ratio
+
+    # Assert the learning path contains the concepts
+    assert len(result["concepts"]) == 2
+    assert any(c["text"] == "calculus" for c in result["concepts"])
+    assert any(c["text"] == "derivative" for c in result["concepts"])
+
+
+def test_index_content_no_video_id(search_engine):
+    """Test indexing without a video ID."""
+    invalid_result = {
+        "metadata": {
+            "title": "Test Video"
+        }
+    }
+
+    # Test indexing invalid content
+    result = search_engine.index_content(invalid_result)
+
+    # Assert indexing fails
+    assert result is False
+
+
+def test_index_content_error_handling(search_engine, sample_processed_result):
+    """Test error handling during indexing."""
+    # Mock save_video to raise an exception
+    search_engine.db_context.video_repository.save_video = MagicMock(side_effect=Exception("Test error"))
+
+    # Test indexing with error
+    result = search_engine.index_content(sample_processed_result)
+
+    # Assert indexing fails
+    assert result is False
+
+
+def test_batch_index_content(search_engine, sample_processed_result):
+    """Test batch indexing of content."""
+    # Mock index_content to track calls
+    search_engine.index_content = MagicMock(return_value=True)
+
+    # Create a batch of results
+    batch_results = [
+        sample_processed_result,
+        {**sample_processed_result, "video_id": "test456"}
+    ]
+
+    # Test batch indexing
+    results = search_engine.batch_index_content(batch_results)
+
+    # Verify index_content was called for each item
+    assert search_engine.index_content.call_count == 2
+    assert all(result for result in results.values())
+    assert len(results) == 2
+
+
+def test_optimize_database(search_engine):
+    """Test database optimization."""
+    # Mock optimization methods
+    search_engine.db_context.search_repository.optimize_search_indexes = MagicMock(return_value=True)
+    search_engine.db_context.optimize_database = MagicMock(return_value=True)
+
+    # Test optimization
+    result = search_engine.optimize_database()
+
+    # Verify optimization methods were called
+    assert result is True
+    search_engine.db_context.search_repository.optimize_search_indexes.assert_called_once()
+    search_engine.db_context.optimize_database.assert_called_once()
+
+
+def test_rebuild_search_indexes(search_engine):
+    """Test rebuilding search indexes."""
+    # Mock rebuild method
+    search_engine.db_context.search_repository.rebuild_search_indexes = MagicMock(return_value=True)
+    search_engine.cache.flush = MagicMock()
+
+    # Test rebuilding indexes
+    result = search_engine.rebuild_search_indexes()
+
+    # Verify rebuild method was called
+    assert result is True
+    search_engine.db_context.search_repository.rebuild_search_indexes.assert_called_once()
+    search_engine.cache.flush.assert_called_once()

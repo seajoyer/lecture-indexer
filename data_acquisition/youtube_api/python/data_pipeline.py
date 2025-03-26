@@ -96,7 +96,7 @@ class DataPipeline:
             raise
 
     @time_function(threshold_ms=10000)  # 10 seconds threshold for video processing
-    @measure_memory(threshold_mb=500)  # Alert if memory usage exceeds 500MB
+    @measure_memory(name="process_video", threshold_mb=500)  # Alert if memory usage exceeds 500MB
     def process_video(self, video_url: str, language_preference: List[str] = ['en', 'ru']) -> Dict[str, Any]:
         """
         Process a YouTube video through the entire pipeline.

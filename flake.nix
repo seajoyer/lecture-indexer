@@ -15,6 +15,9 @@
         };
 
         pythonEnv = pkgs.python3.withPackages (ps: with ps; [
+          # misc
+          colorama
+
           # Core dependencies
           fastapi
           uvicorn
@@ -176,7 +179,7 @@
             if [ ! -f config/api.yaml ]; then
               echo "Creating default API config..."
               cat > config/api.yaml <<EOF
-            youtube_api_key: "\${YOUTUBE_API_KEY}"
+            youtube_api_key: "\''${YOUTUBE_API_KEY}"
             task_dir: "data/tasks"
             result_dir: "data/results"
             max_workers: 4
@@ -186,7 +189,7 @@
             if [ ! -f config/pipeline.yaml ]; then
               echo "Creating default pipeline config..."
               cat > config/pipeline.yaml <<EOF
-            youtube_api_key: "\${YOUTUBE_API_KEY}"
+            youtube_api_key: "\''${YOUTUBE_API_KEY}"
             output_dir: "data/processed"
             EOF
             fi
@@ -201,16 +204,16 @@
             # Check if configs exist but have empty API keys, and the env var is available
             if [ -n "$YOUTUBE_API_KEY" ]; then
               # Update api.yaml if it exists but has empty API key
-              if [ -f config/api.yaml ] && ! grep -q "youtube_api_key: \"\\$\{YOUTUBE_API_KEY\}\"" config/api.yaml; then
+              if [ -f config/api.yaml ] && ! grep -q "youtube_api_key: \"\''${YOUTUBE_API_KEY}\"" config/api.yaml; then
                 echo "Updating API key in config/api.yaml..."
                 # Use sed to replace the API key line with the environment variable reference
-                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\${YOUTUBE_API_KEY}\"|" config/api.yaml
+                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\''${YOUTUBE_API_KEY}\"|" config/api.yaml
               fi
 
               # Update pipeline.yaml if it exists but has empty API key
-              if [ -f config/pipeline.yaml ] && ! grep -q "youtube_api_key: \"\\$\{YOUTUBE_API_KEY\}\"" config/pipeline.yaml; then
+              if [ -f config/pipeline.yaml ] && ! grep -q "youtube_api_key: \"\''${YOUTUBE_API_KEY}\"" config/pipeline.yaml; then
                 echo "Updating API key in config/pipeline.yaml..."
-                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\${YOUTUBE_API_KEY}\"|" config/pipeline.yaml
+                sed -i "s|youtube_api_key:.*|youtube_api_key: \"\''${YOUTUBE_API_KEY}\"|" config/pipeline.yaml
               fi
             fi
 

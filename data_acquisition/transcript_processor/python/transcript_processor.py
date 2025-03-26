@@ -12,7 +12,7 @@ import nltk
 import spacy
 from nltk.tokenize import sent_tokenize
 
-from common.utils.performance_utils import measure_time, time_function, measure_memory
+from common.utils.performance_utils import measure_time, time_function, memory_function
 from common.utils.cache_manager import CacheRegion
 from database.db_init import get_db_context
 
@@ -430,7 +430,7 @@ class TranscriptProcessor:
         return sections
 
     @time_function(threshold_ms=5000)
-    @measure_memory(threshold_mb=200)
+    @memory_function(threshold_mb=200)
     def enhance_with_nlp(self, sentence_segments: List[Dict], language: str) -> List[Dict]:
         """
         Enhance sentence segments with NLP analysis.

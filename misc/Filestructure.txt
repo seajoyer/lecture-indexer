@@ -93,19 +93,19 @@ lecture-indexer/                 # Root project directory
 ├── tests/                       # Test suite
 │   ├── unit/
 │   │   ├── data_acquisition/
-│   │   │   ├── test_youtube_data_extractor.py   ✅ # Tests for YouTube data extractor
-│   │   │   ├── test_transcript_processor.py     ✅ # Tests for transcript processor
-│   │   │   └── test_data_pipeline.py            ✅ # Tests for data pipeline
+│   │   │   ├── test_youtube_data_extractor.py      ✅ # Tests for YouTube data extractor
+│   │   │   ├── test_transcript_processor.py        ✅ # Tests for transcript processor
+│   │   │   └── test_data_pipeline.py               ✅ # Tests for data pipeline
 │   │   ├── concept_analysis/
-│   │   │   ├── test_domain_classifier.py        ✅ # Tests for domain classifier
+│   │   │   ├── test_domain_classifier.py           ✅ # Tests for domain classifier
 │   │   │   └── test_theory_practice_classifier.py  ✅ # Tests for theory/practice classifier
 │   │   ├── search_retrieval/
-│   │   │   └── test_search_engine.py            ✅ # Tests for search engine
+│   │   │   └── test_search_engine.py               ✅ # Tests for search engine
 │   │   └── integration/
-│   │       └── test_api_task_manager.py         ✅ # Tests for API and task manager
+│   │       └── test_api_task_manager.py            ✅ # Tests for API and task manager
 │   │
 │   ├── integration/
-│   │   ├── test_full_workflow.py            ✅ # Tests for complete integration
+│   │   ├── test_full_workflow.py            🔄 # Tests for complete integration
 │   │   └── test_database_integration.py     🔥 # Tests for new database component
 │   │
 │   ├── performance/

@@ -1,501 +1,484 @@
 """
-Integration tests for the API Service and Task Manager components.
+API and Task Manager tests for the Lecture Video Content Indexer.
+Tests the integration between API service and task manager components.
 """
 
 import pytest
-import json
-import os
-import shutil
 import asyncio
+import json
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from fastapi import HTTPException
 
 from integration.api_service.python.api_service import app
 from integration.task_manager.python.task_manager import TaskManager
 
-# Test configuration
-TEST_CONFIG = {
-    "youtube_api_key": "test_api_key",
-    "task_dir": "test_tasks",
-    "result_dir": "test_results",
-    "max_workers": 2
-}
-
-TEST_VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-TEST_VIDEO_ID = "dQw4w9WgXcQ"
-
-# Mock task data
-MOCK_TASK = {
-    "task_id": "test-task-id",
-    "video_id": TEST_VIDEO_ID,
-    "video_url": TEST_VIDEO_URL,
-    "metadata": {},
-    "priority": 0,
-    "language": "en",
-    "status": "pending",
-    "progress": 0,
-    "created_at": "2023-01-01T00:00:00Z",
-    "updated_at": "2023-01-01T00:00:00Z"
-}
-
-MOCK_COMPLETED_TASK = {
-    "task_id": "test-task-id",
-    "video_id": TEST_VIDEO_ID,
-    "video_url": TEST_VIDEO_URL,
-    "metadata": {},
-    "priority": 0,
-    "language": "en",
-    "status": "completed",
-    "progress": 100,
-    "domain": "mathematics",
-    "created_at": "2023-01-01T00:00:00Z",
-    "updated_at": "2023-01-01T01:00:00Z"
-}
-
-# Mock search results
-MOCK_SEARCH_RESULTS = {
-    "results": [
-        {
-            "concept_id": "concept1",
-            "text": "derivative",
-            "domain": "mathematics",
-            "context_type": "theoretical",
-            "video_id": TEST_VIDEO_ID,
-            "video_title": "Test Video",
-            "relevance_score": 0.9
-        }
-    ],
-    "total": 1,
-    "page": 1,
-    "limit": 10,
-    "theoretical_count": 1,
-    "practical_count": 0
-}
-
-# Mock concept details
-MOCK_CONCEPT_DETAILS = {
-    "concept": {
-        "concept_id": "concept1",
-        "text": "derivative",
-        "domain": "mathematics",
-        "concept_class": "theoretical"
-    },
-    "occurrences": [
-        {
-            "video_id": TEST_VIDEO_ID,
-            "video_title": "Test Video",
-            "context_type": "theoretical",
-            "relevance_score": 0.9
-        }
-    ],
-    "related": []
-}
-
-# Mock video concepts
-MOCK_VIDEO_CONCEPTS = {
-    "video": {
-        "video_id": TEST_VIDEO_ID,
-        "title": "Test Video",
-        "domain": "mathematics",
-        "theory_practice_ratio": 0.8
-    },
-    "concepts": [
-        {
-            "concept_id": "concept1",
-            "text": "derivative",
-            "domain": "mathematics",
-            "concept_class": "theoretical"
-        }
-    ],
-    "theory_practice_ratio": 0.8
-}
-
-# Mock learning path
-MOCK_LEARNING_PATH = {
-    "concepts": [
-        {
-            "concept_id": "concept1",
-            "text": "derivative",
-            "domain": "mathematics",
-            "concept_class": "theoretical",
-            "order": 1
-        }
-    ],
-    "theory_practice_ratio": 0.8,
-    "total_theoretical_concepts": 1,
-    "total_practical_concepts": 0,
-    "estimated_total_time_minutes": 30,
-    "domain": "mathematics"
-}
-
-@pytest.fixture
-def mock_config_loader():
-    """Mock the config loader."""
-    with patch('common.utils.config_loader.load_config') as mock_loader:
-        mock_loader.return_value = TEST_CONFIG
-        yield mock_loader
+# Create a test client for the FastAPI app
+client = TestClient(app)
 
 @pytest.fixture
 def mock_task_manager():
-    """Mock the task manager."""
-    with patch('integration.task_manager.python.task_manager.TaskManager') as mock_manager:
-        # Set up AsyncMock for async methods
-        mock_instance = AsyncMock()
-        mock_instance.create_video_processing_task = AsyncMock(return_value="test-task-id")
-        mock_instance.process_video_task = AsyncMock()
-        mock_instance.get_video_processing_status = AsyncMock(return_value=MOCK_COMPLETED_TASK)
-        mock_instance.search_concepts = AsyncMock(return_value=MOCK_SEARCH_RESULTS)
-        mock_instance.get_concept_details = AsyncMock(return_value=MOCK_CONCEPT_DETAILS)
-        mock_instance.get_video_concepts = AsyncMock(return_value=MOCK_VIDEO_CONCEPTS)
-        mock_instance.generate_learning_path = AsyncMock(return_value=MOCK_LEARNING_PATH)
-
-        mock_manager.return_value = mock_instance
-        yield mock_instance
-
-@pytest.fixture
-def mock_youtube_extractor():
-    """Mock the YouTube data extractor."""
-    with patch('data_acquisition.youtube_api.python.youtube_data_extractor.YouTubeDataExtractor') as mock_extractor:
+    """Create a mock task manager for testing."""
+    with patch("integration.api_service.python.api_service.TaskManager", autospec=True) as mock:
         mock_instance = MagicMock()
-        mock_instance.validate_video_url.return_value = (True, TEST_VIDEO_ID)
+        mock.return_value = mock_instance
 
-        mock_extractor.return_value = mock_instance
+        # Mock async methods
+        mock_instance.create_video_processing_task = AsyncMock(return_value="test_job_id")
+        mock_instance.get_video_processing_status = AsyncMock(return_value={
+            "status": "processing",
+            "progress": 0.5,
+            "domain": "mathematics"
+        })
+        mock_instance.search_concepts = AsyncMock(return_value={
+            "results": [{"id": "concept1", "text": "Calculus"}],
+            "totalResults": 1
+        })
+        mock_instance.get_concept_details = AsyncMock(return_value={
+            "concept": {"id": "concept1", "text": "Calculus"},
+            "occurrences": [{"video_id": "test123"}]
+        })
+        mock_instance.get_video_concepts = AsyncMock(return_value={
+            "video": {"video_id": "test123", "title": "Test Video"},
+            "concepts": [{"id": "concept1", "text": "Calculus"}]
+        })
+        mock_instance.generate_learning_path = AsyncMock(return_value={
+            "concepts": [{"id": "concept1", "text": "Calculus"}],
+            "total_concepts": 1
+        })
+        mock_instance.process_video_task = AsyncMock()
+
+        # Simulate task_queue
+        mock_instance.task_queue = MagicMock()
+        mock_instance.task_queue.put = AsyncMock()
+
         yield mock_instance
 
 @pytest.fixture
-def api_client(mock_config_loader, mock_task_manager, mock_youtube_extractor):
-    """Create a test client for the FastAPI app."""
-    # Mock verify_token dependency
-    app.dependency_overrides = {}
+def mock_oauth_token():
+    """Mock OAuth token verification."""
+    with patch("integration.api_service.python.api_service.verify_token", return_value="test_token"):
+        yield
 
-    def mock_verify_token():
-        return "test-token"
+@pytest.mark.asyncio
+async def test_api_initialization(test_db_context):
+    """Test API service initialization."""
+    # Test startup event
+    with patch("integration.api_service.python.api_service.load_config") as mock_load_config, \
+         patch("integration.api_service.python.api_service.init_database") as mock_init_db, \
+         patch("integration.api_service.python.api_service.TaskManager") as mock_task_manager:
 
-    app.dependency_overrides[app.dependencies[0].dependency] = mock_verify_token
+        # Configure mocks
+        mock_load_config.return_value = {"youtube_api_key": "test_key"}
+        mock_init_db.return_value = test_db_context
+        mock_task_manager.return_value = MagicMock()
 
-    # Set mock task_manager as global variable in app
-    app.app.state.task_manager = mock_task_manager
-    app.app.state.youtube_extractor = mock_youtube_extractor
+        # Call startup event
+        from integration.api_service.python.api_service import startup_event
+        await startup_event()
 
-    with TestClient(app) as client:
-        yield client
+        # Verify initialization
+        mock_load_config.assert_called_once()
+        mock_init_db.assert_called_once()
+        mock_task_manager.assert_called_once()
 
-@pytest.fixture
-def task_manager():
-    """Create a Task Manager instance with mocked components."""
-    # Create test directories
-    os.makedirs(TEST_CONFIG["task_dir"], exist_ok=True)
-    os.makedirs(TEST_CONFIG["result_dir"], exist_ok=True)
+        # Check global variables were set
+        from integration.api_service.python.api_service import config, task_manager, db_context
+        assert config is not None
+        assert task_manager is not None
+        assert db_context is not None
 
-    # Create task manager with mocks
-    with patch('data_acquisition.youtube_api.python.data_pipeline.DataPipeline') as mock_pipeline, \
-         patch('search_retrieval.search_engine.python.search_engine.SearchEngine') as mock_search, \
-         patch('common.utils.config_loader.load_config') as mock_config:
-
-        # Set up mock returns
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline.return_value = mock_pipeline_instance
-
-        mock_search_instance = MagicMock()
-        mock_search.return_value = mock_search_instance
-
-        mock_config.return_value = {}
-
-        # Create task manager
-        task_manager = TaskManager(TEST_CONFIG)
-
-        # Store mocks for assertions
-        task_manager.mock_pipeline = mock_pipeline_instance
-        task_manager.mock_search = mock_search_instance
-
-        yield task_manager
-
-        # Clean up test directories
-        shutil.rmtree(TEST_CONFIG["task_dir"], ignore_errors=True)
-        shutil.rmtree(TEST_CONFIG["result_dir"], ignore_errors=True)
-
-# API Service Tests
-class TestAPIService:
-    """Test the API Service component."""
-
-    def test_submit_video(self, api_client, mock_task_manager):
-        """Test submitting a video for processing."""
-        response = api_client.post(
+@pytest.mark.asyncio
+async def test_submit_video_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/videos endpoint for submitting videos."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.post(
             "/api/v1/videos",
             json={
-                "url": TEST_VIDEO_URL,
+                "url": "https://www.youtube.com/watch?v=test123",
                 "metadata": {"course": "Test Course"},
-                "priority": 1,
+                "priority": 2,
                 "language": "en"
-            }
+            },
+            headers={"Authorization": "Bearer test_token"}
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["job_id"] == "test-task-id"
-        assert data["video_id"] == TEST_VIDEO_ID
-        assert data["status"] == "submitted"
+    # Verify response
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": "test_job_id",
+        "video_id": "test123",
+        "status": "submitted"
+    }
 
-        mock_task_manager.create_video_processing_task.assert_called_once()
+    # Verify task manager was called correctly
+    mock_task_manager.create_video_processing_task.assert_called_once()
+    # We can check that the video_url parameter was passed
+    args, kwargs = mock_task_manager.create_video_processing_task.call_args
+    assert kwargs.get("video_url") == "https://www.youtube.com/watch?v=test123"
 
-    def test_check_video_status(self, api_client, mock_task_manager):
-        """Test checking video processing status."""
-        response = api_client.get(f"/api/v1/videos/{TEST_VIDEO_ID}/status")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["video_id"] == TEST_VIDEO_ID
-        assert data["status"] == "completed"
-        assert data["progress"] == 100
-        assert data["domain"] == "mathematics"
-
-        mock_task_manager.get_video_processing_status.assert_called_once_with(TEST_VIDEO_ID)
-
-    def test_search_concepts(self, api_client, mock_task_manager):
-        """Test searching for concepts."""
-        response = api_client.get(
-            "/api/v1/search",
-            params={
-                "q": "derivative",
-                "domain": "mathematics",
-                "theory_practice_ratio": 0.7,
-                "page": 1,
-                "limit": 10
-            }
+@pytest.mark.asyncio
+async def test_check_video_status_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/videos/{video_id}/status endpoint."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.get(
+            "/api/v1/videos/test123/status",
+            headers={"Authorization": "Bearer test_token"}
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["results"]) == 1
-        assert data["results"][0]["text"] == "derivative"
-        assert data["results"][0]["domain"] == "mathematics"
-        assert data["theoretical_count"] == 1
-        assert data["practical_count"] == 0
+    # Verify response
+    assert response.status_code == 200
+    assert response.json() == {
+        "video_id": "test123",
+        "status": "processing",
+        "progress": 0.5,
+        "domain": "mathematics"
+    }
 
-        mock_task_manager.search_concepts.assert_called_once()
+    # Verify task manager was called
+    mock_task_manager.get_video_processing_status.assert_called_once_with("test123")
 
-    def test_get_concept(self, api_client, mock_task_manager):
-        """Test getting concept details."""
-        response = api_client.get("/api/v1/concepts/concept1")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["concept"]["concept_id"] == "concept1"
-        assert data["concept"]["text"] == "derivative"
-        assert len(data["occurrences"]) == 1
-
-        mock_task_manager.get_concept_details.assert_called_once_with("concept1")
-
-    def test_get_video_concepts(self, api_client, mock_task_manager):
-        """Test getting concepts from a video."""
-        response = api_client.get(
-            f"/api/v1/videos/{TEST_VIDEO_ID}/concepts",
-            params={"context_type": "theoretical"}
+@pytest.mark.asyncio
+async def test_search_concepts_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/search endpoint."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.get(
+            "/api/v1/search?q=calculus&domain=mathematics&page=1&limit=10",
+            headers={"Authorization": "Bearer test_token"}
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["video"]["video_id"] == TEST_VIDEO_ID
-        assert len(data["concepts"]) == 1
-        assert data["concepts"][0]["concept_id"] == "concept1"
+    # Verify response
+    assert response.status_code == 200
+    assert "results" in response.json()
+    assert response.json()["results"] == [{"id": "concept1", "text": "Calculus"}]
+    assert response.json()["totalResults"] == 1
 
-        mock_task_manager.get_video_concepts.assert_called_once_with(
-            video_id=TEST_VIDEO_ID,
-            context_type="theoretical"
+    # Verify task manager was called with correct parameters
+    mock_task_manager.search_concepts.assert_called_once()
+    call_args = mock_task_manager.search_concepts.call_args[1]
+    assert call_args["query"] == "calculus"
+    assert call_args["domain"] == "mathematics"
+    assert call_args["page"] == 1
+    assert call_args["limit"] == 10
+
+@pytest.mark.asyncio
+async def test_get_concept_details_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/concepts/{concept_id} endpoint."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.get(
+            "/api/v1/concepts/concept1",
+            headers={"Authorization": "Bearer test_token"}
         )
 
-    def test_generate_learning_path(self, api_client, mock_task_manager):
-        """Test generating a learning path."""
-        response = api_client.post(
+    # Verify response
+    assert response.status_code == 200
+    assert "concept" in response.json()
+    assert response.json()["concept"] == {"id": "concept1", "text": "Calculus"}
+    assert "occurrences" in response.json()
+    assert response.json()["occurrences"] == [{"video_id": "test123"}]
+
+    # Verify task manager was called
+    mock_task_manager.get_concept_details.assert_called_once_with("concept1")
+
+@pytest.mark.asyncio
+async def test_get_video_concepts_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/videos/{video_id}/concepts endpoint."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.get(
+            "/api/v1/videos/test123/concepts?context_type=theoretical",
+            headers={"Authorization": "Bearer test_token"}
+        )
+
+    # Verify response
+    assert response.status_code == 200
+    assert "video" in response.json()
+    assert response.json()["video"] == {"video_id": "test123", "title": "Test Video"}
+    assert "concepts" in response.json()
+    assert response.json()["concepts"] == [{"id": "concept1", "text": "Calculus"}]
+
+    # Verify task manager was called
+    mock_task_manager.get_video_concepts.assert_called_once_with(
+        video_id="test123",
+        context_type="theoretical"
+    )
+
+@pytest.mark.asyncio
+async def test_generate_learning_path_endpoint(mock_task_manager, mock_oauth_token):
+    """Test the /api/v1/learning-paths endpoint."""
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.post(
             "/api/v1/learning-paths",
             json={
-                "concept_ids": ["concept1"],
+                "concept_ids": ["concept1", "concept2"],
                 "theory_practice_ratio": 0.7,
                 "domain": "mathematics"
-            }
+            },
+            headers={"Authorization": "Bearer test_token"}
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["concepts"]) == 1
-        assert data["concepts"][0]["concept_id"] == "concept1"
-        assert data["theory_practice_ratio"] == 0.8
-        assert data["domain"] == "mathematics"
+    # Verify response
+    assert response.status_code == 200
+    assert "concepts" in response.json()
+    assert response.json()["concepts"] == [{"id": "concept1", "text": "Calculus"}]
+    assert "total_concepts" in response.json()
+    assert response.json()["total_concepts"] == 1
 
-        mock_task_manager.generate_learning_path.assert_called_once_with(
-            concept_ids=["concept1"],
-            theory_practice_ratio=0.7,
-            domain="mathematics"
+    # Verify task manager was called
+    mock_task_manager.generate_learning_path.assert_called_once_with(
+        concept_ids=["concept1", "concept2"],
+        theory_practice_ratio=0.7,
+        domain="mathematics"
+    )
+
+@pytest.mark.asyncio
+async def test_health_check_endpoint(test_db_context):
+    """Test the /api/v1/health endpoint."""
+    # Mock the database connection
+    with patch("integration.api_service.python.api_service.db_context", test_db_context):
+        response = client.get("/api/v1/health")
+
+    # Verify response
+    assert response.status_code == 200
+    assert "status" in response.json()
+    assert response.json()["status"] == "healthy"
+    assert "database" in response.json()
+
+@pytest.mark.asyncio
+async def test_submit_video_error_handling(mock_task_manager, mock_oauth_token):
+    """Test error handling in the submit video endpoint."""
+    # Configure mock to raise an exception
+    mock_task_manager.create_video_processing_task.side_effect = ValueError("Invalid video URL")
+
+    with patch("integration.api_service.python.api_service.task_manager", mock_task_manager):
+        response = client.post(
+            "/api/v1/videos",
+            json={
+                "url": "invalid_url",
+                "metadata": {},
+                "priority": 0,
+                "language": "en"
+            },
+            headers={"Authorization": "Bearer test_token"}
         )
 
-# Task Manager Tests
-class TestTaskManager:
-    """Test the Task Manager component."""
+    # Verify response indicates error
+    assert response.status_code != 200
+    assert "detail" in response.json()
 
-    @pytest.mark.asyncio
-    async def test_create_video_processing_task(self, task_manager):
-        """Test creating a video processing task."""
-        task_id = await task_manager.create_video_processing_task(
-            video_id=TEST_VIDEO_ID,
-            video_url=TEST_VIDEO_URL,
-            metadata={"course": "Test Course"},
-            priority=1,
-            language="en"
-        )
-
-        assert isinstance(task_id, str)
-        assert len(task_id) > 0
-
-        # Check that task was saved to file
-        task_file = os.path.join(TEST_CONFIG["task_dir"], f"{task_id}.json")
-        assert os.path.exists(task_file)
-
-        # Verify task content
-        with open(task_file, 'r') as f:
-            task = json.load(f)
-            assert task["task_id"] == task_id
-            assert task["video_id"] == TEST_VIDEO_ID
-            assert task["video_url"] == TEST_VIDEO_URL
-            assert task["metadata"]["course"] == "Test Course"
-            assert task["priority"] == 1
-            assert task["language"] == "en"
-            assert task["status"] == "pending"
-            assert task["progress"] == 0
-
-    @pytest.mark.asyncio
-    async def test_process_video_task(self, task_manager):
-        """Test processing a video task."""
-        # Create a test task
-        task_id = await task_manager.create_video_processing_task(
-            video_id=TEST_VIDEO_ID,
-            video_url=TEST_VIDEO_URL
-        )
-
-        # Set up pipeline mock to return success
-        mock_result = {
-            "job_id": "test-job-id",
-            "video_id": TEST_VIDEO_ID,
-            "metadata": {"domain": "mathematics"},
-            "status": "completed"
+@pytest.mark.asyncio
+async def test_api_authentication():
+    """Test API authentication."""
+    # Test without token
+    response = client.post(
+        "/api/v1/videos",
+        json={
+            "url": "https://www.youtube.com/watch?v=test123",
+            "metadata": {},
+            "priority": 0,
+            "language": "en"
         }
-        task_manager.mock_pipeline.process_video.return_value = mock_result
+    )
 
-        # Process the task
-        await task_manager.process_video_task(task_id)
+    # Should fail due to missing token
+    assert response.status_code == 401
 
-        # Check that pipeline was called
-        task_manager.mock_pipeline.process_video.assert_called_once_with(
-            TEST_VIDEO_URL, ['en', 'ru']
+    # Test with invalid token
+    with patch("integration.api_service.python.api_service.verify_token",
+              side_effect=HTTPException(status_code=401, detail="Invalid token")):
+        response = client.post(
+            "/api/v1/videos",
+            json={
+                "url": "https://www.youtube.com/watch?v=test123",
+                "metadata": {},
+                "priority": 0,
+                "language": "en"
+            },
+            headers={"Authorization": "Bearer invalid_token"}
         )
 
-        # Check that task was updated
-        task_file = os.path.join(TEST_CONFIG["task_dir"], f"{task_id}.json")
-        with open(task_file, 'r') as f:
-            task = json.load(f)
-            assert task["status"] == "completed"
-            assert task["progress"] == 100
-            assert task["domain"] == "mathematics"
+    # Should fail due to invalid token
+    assert response.status_code == 401
 
-    @pytest.mark.asyncio
-    async def test_process_video_task_failure(self, task_manager):
-        """Test handling failures in video processing."""
-        # Create a test task
-        task_id = await task_manager.create_video_processing_task(
-            video_id=TEST_VIDEO_ID,
-            video_url=TEST_VIDEO_URL
-        )
+@pytest.mark.asyncio
+async def test_task_manager_initialization(test_db_context):
+    """Test TaskManager initialization."""
+    config = {"youtube_api_key": "test_key", "max_workers": 2}
 
-        # Set up pipeline mock to raise exception
-        task_manager.mock_pipeline.process_video.side_effect = Exception("Processing error")
+    # Mock components to avoid actual initialization
+    with patch("integration.task_manager.python.task_manager.YouTubeDataExtractor") as mock_extractor, \
+         patch("integration.task_manager.python.task_manager.TranscriptProcessor") as mock_processor, \
+         patch("integration.task_manager.python.task_manager.DomainClassifier") as mock_classifier, \
+         patch("integration.task_manager.python.task_manager.TheoryPracticeClassifier") as mock_tp_classifier, \
+         patch("integration.task_manager.python.task_manager.SearchEngine") as mock_search_engine:
 
-        # Process the task
-        await task_manager.process_video_task(task_id)
+        # Initialize task manager
+        task_manager = TaskManager(config, test_db_context)
 
-        # Check that task was updated with error
-        task_file = os.path.join(TEST_CONFIG["task_dir"], f"{task_id}.json")
-        with open(task_file, 'r') as f:
-            task = json.load(f)
-            assert task["status"] == "failed"
-            assert "error" in task
-            assert "Processing error" in task["error"]
+        # Verify components were initialized
+        mock_extractor.assert_called_once_with("test_key")
+        mock_processor.assert_called_once()
+        mock_classifier.assert_called_once_with(config)
+        mock_tp_classifier.assert_called_once()
+        mock_search_engine.assert_called_once_with(config)
 
-    @pytest.mark.asyncio
-    async def test_get_video_processing_status(self, task_manager):
-        """Test getting video processing status."""
-        # Create a test task
-        task_id = await task_manager.create_video_processing_task(
-            video_id=TEST_VIDEO_ID,
-            video_url=TEST_VIDEO_URL
-        )
+        # Verify task manager properties
+        assert task_manager.config == config
+        assert task_manager.max_workers == 2
+        assert task_manager.db_context == test_db_context
+        assert hasattr(task_manager, "worker_semaphore")
+        assert hasattr(task_manager, "shutdown_event")
+        assert hasattr(task_manager, "task_queue")
 
-        # Get status
-        status = await task_manager.get_video_processing_status(TEST_VIDEO_ID)
+@pytest.mark.asyncio
+async def test_task_manager_create_video_task(test_db_context):
+    """Test TaskManager create_video_processing_task."""
+    # Create task manager with mocked components
+    config = {"youtube_api_key": "test_key"}
+    task_manager = TaskManager(config, test_db_context)
 
-        assert status is not None
-        assert status["video_id"] == TEST_VIDEO_ID
-        assert status["status"] == "pending"
-        assert status["progress"] == 0
+    # Mock YouTube extractor for URL validation
+    mock_extractor = MagicMock()
+    mock_extractor.validate_video_url.return_value = (True, "test123")
+    task_manager.youtube_extractor = mock_extractor
 
-    @pytest.mark.asyncio
-    async def test_search_concepts(self, task_manager):
-        """Test searching for concepts."""
-        # Set up search engine mock to return results
-        task_manager.mock_search.search.return_value = MOCK_SEARCH_RESULTS
+    # Mock db_context.video_repository
+    mock_video_repo = MagicMock()
+    mock_video_repo.add_to_processing_queue.return_value = "queue123"
+    test_db_context.video_repository = mock_video_repo
 
-        # Execute search
-        results = await task_manager.search_concepts(
-            query="derivative",
-            domain="mathematics",
-            theory_practice_ratio=0.7
-        )
+    # Mock task_queue
+    task_manager.task_queue = MagicMock()
+    task_manager.task_queue.put = AsyncMock()
 
-        assert results == MOCK_SEARCH_RESULTS
-        task_manager.mock_search.search.assert_called_once()
+    # Create a video processing task
+    task_id = await task_manager.create_video_processing_task(
+        video_id=None,
+        video_url="https://www.youtube.com/watch?v=test123",
+        metadata={"course": "Test Course"},
+        priority=2,
+        language="en"
+    )
 
-    @pytest.mark.asyncio
-    async def test_get_concept_details(self, task_manager):
-        """Test getting concept details."""
-        # Set up search engine mock to return concept details
-        task_manager.mock_search.get_concept_details.return_value = MOCK_CONCEPT_DETAILS
+    # Verify task was created
+    assert task_id == "queue123"
+    mock_extractor.validate_video_url.assert_called_once_with("https://www.youtube.com/watch?v=test123")
+    mock_video_repo.add_to_processing_queue.assert_called_once()
+    task_manager.task_queue.put.assert_awaited_once()
 
-        # Get concept details
-        details = await task_manager.get_concept_details("concept1")
+@pytest.mark.asyncio
+async def test_task_manager_get_video_status(test_db_context):
+    """Test TaskManager get_video_processing_status."""
+    # Create task manager
+    config = {"youtube_api_key": "test_key"}
+    task_manager = TaskManager(config, test_db_context)
 
-        assert details == MOCK_CONCEPT_DETAILS
-        task_manager.mock_search.get_concept_details.assert_called_once_with("concept1")
+    # Mock cache
+    mock_cache = MagicMock()
+    mock_cache.get.return_value = None
+    task_manager.cache = mock_cache
 
-    @pytest.mark.asyncio
-    async def test_get_video_concepts(self, task_manager):
-        """Test getting concepts from a video."""
-        # Set up search engine mock to return video concepts
-        task_manager.mock_search.get_video_concepts.return_value = MOCK_VIDEO_CONCEPTS
+    # Mock active tasks
+    task_manager.active_tasks = {
+        "task123": {
+            "video_id": "test123",
+            "status": "processing",
+            "progress": 0.5,
+            "domain": "mathematics"
+        }
+    }
 
-        # Get video concepts
-        concepts = await task_manager.get_video_concepts(
-            video_id=TEST_VIDEO_ID,
-            context_type="theoretical"
-        )
+    # Get status for active task
+    status = await task_manager.get_video_processing_status("test123")
 
-        assert concepts == MOCK_VIDEO_CONCEPTS
-        task_manager.mock_search.get_video_concepts.assert_called_once_with(
-            TEST_VIDEO_ID, "theoretical"
-        )
+    # Verify status
+    assert status is not None
+    assert status["status"] == "processing"
+    assert status["progress"] == 0.5
+    assert status["domain"] == "mathematics"
 
-    @pytest.mark.asyncio
-    async def test_generate_learning_path(self, task_manager):
-        """Test generating a learning path."""
-        # Set up search engine mock to return learning path
-        task_manager.mock_search.generate_learning_path.return_value = MOCK_LEARNING_PATH
+    # Test status for non-existent video
+    # First mock the database query
+    mock_get_video_data = AsyncMock(return_value=None)
+    task_manager._get_video_data = mock_get_video_data
+    mock_get_queue_item = AsyncMock(return_value=None)
+    task_manager._get_queue_item = mock_get_queue_item
 
-        # Generate learning path
-        path = await task_manager.generate_learning_path(
-            concept_ids=["concept1"],
-            theory_practice_ratio=0.7,
-            domain="mathematics"
-        )
+    # Get status
+    status = await task_manager.get_video_processing_status("nonexistent")
 
-        assert path == MOCK_LEARNING_PATH
-        task_manager.mock_search.generate_learning_path.assert_called_once_with(
-            ["concept1"], 0.7, "mathematics"
-        )
+    # Verify status is None
+    assert status is None
+    mock_get_video_data.assert_awaited_once_with("nonexistent")
+    mock_get_queue_item.assert_awaited_once_with("nonexistent")
+
+@pytest.mark.asyncio
+async def test_task_manager_search_concepts(test_db_context):
+    """Test TaskManager search_concepts."""
+    # Create task manager
+    config = {"youtube_api_key": "test_key"}
+    task_manager = TaskManager(config, test_db_context)
+
+    # Mock cache
+    mock_cache = MagicMock()
+    mock_cache.get.return_value = None
+    task_manager.cache = mock_cache
+
+    # Mock search engine
+    mock_search_engine = MagicMock()
+    expected_results = {
+        "results": [{"id": "concept1", "text": "Calculus"}],
+        "totalResults": 1
+    }
+    mock_search_engine.search.return_value = expected_results
+    task_manager.search_engine = mock_search_engine
+
+    # Perform search
+    results = await task_manager.search_concepts(
+        query="calculus",
+        filters={"domain": "mathematics"},
+        theory_practice_ratio=0.7,
+        domain="mathematics",
+        page=1,
+        limit=10
+    )
+
+    # Verify results
+    assert results == expected_results
+    mock_search_engine.search.assert_called_once()
+    search_query = mock_search_engine.search.call_args[0][0]
+    assert search_query["original_text"] == "calculus"
+    assert search_query["filters"] == {"domain": "mathematics"}
+    assert search_query["theory_practice_ratio"] == 0.7
+    assert search_query["domain"] == "mathematics"
+    assert search_query["pagination"]["page"] == 1
+    assert search_query["pagination"]["limit"] == 10
+
+@pytest.mark.asyncio
+async def test_process_video_task_with_error(test_db_context):
+    """Test error handling in process_video_task."""
+    # Create task manager
+    config = {"youtube_api_key": "test_key"}
+    task_manager = TaskManager(config, test_db_context)
+
+    # Mock components to raise an exception
+    mock_extractor = MagicMock()
+    mock_extractor.extract_video_metadata.side_effect = ValueError("API error")
+    task_manager.youtube_extractor = mock_extractor
+
+    # Create a task
+    task = {
+        "id": "task123",
+        "type": "video_processing",
+        "video_id": "test123",
+        "video_url": "https://www.youtube.com/watch?v=test123",
+        "status": "pending",
+        "progress": 0.0
+    }
+
+    # Process the task (should catch the error)
+    await task_manager.process_video_task(task)
+
+    # Verify task status is updated with error
+    assert task["status"] == "error"
+    assert "error" in task
+    assert task["progress"] == 0.0

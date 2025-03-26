@@ -1,0 +1,3269 @@
+{
+  "status": "completed",
+  "video_id": "fNk_zzaMoSs",
+  "video_url": "https://www.youtube.com/watch?v=fNk_zzaMoSs  # Vectors, what even are they?",
+  "metadata": {
+    "video_id": "fNk_zzaMoSs",
+    "title": "Vectors | Chapter 1, Essence of linear algebra",
+    "channel": "3Blue1Brown",
+    "publication_date": "2016-08-06T00:05:49Z",
+    "duration_seconds": 592,
+    "category": "27",
+    "tags": [],
+    "description": "Beginning the linear algebra series with the basics.\nHelp fund future projects: https://www.patreon.com/3blue1brown\n\nMusic: https://vincerubinetti.bandcamp.com/track/grants-etude\n\nThanks to Elo Marie Viennot and Ambros Gleixner from HTW Berlin (www.htw-berlin.de) for contributing German translations and dubbing.\n\nThanks also to these viewers for their contributions to the subtitles\nArabic: @Cewkins, Hazem\nBengali: Md Rasheduzzaman\nCzech: @Chnapak\nGreek: Nikolaos Tsagkas\nHebrew: Omer Tuchfeld\nItalian: mattiacolucci\nSpanish: Juan Carlos Largo\nThai: own doggoV●ᴥ●V\n\n------------------\n\n3blue1brown is a channel about animating math, in all senses of the word animate.  And you know the drill with YouTube, if you want to stay posted about new videos, subscribe, and click the bell to receive notifications (if you're into that).\n\nIf you are new to this channel and want to see more, a good place to start is this playlist: https://goo.gl/WmnCQZ\n\nVarious social media stuffs:\nWebsite: https://www.3blue1brown.com\nTwitter: https://twitter.com/3Blue1Brown\nPatreon: https://patreon.com/3blue1brown\nFacebook: https://www.facebook.com/3blue1brown\nReddit: https://www.reddit.com/r/3Blue1Brown",
+    "language": "en",
+    "view_count": 9488863,
+    "educational_metadata": {
+      "course_name": null,
+      "instructor": null,
+      "institution": null
+    },
+    "domain": "mathematics",
+    "domain_confidence": 1.0
+  },
+  "transcript": {
+    "segments": [
+      {
+        "id": "segment_fNk_zzaMoSs_0",
+        "start_time": 10.92,
+        "end_time": 15.219999999999999,
+        "text": "The fundamental, root-of-it-all building block for linear algebra is the vector.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_1",
+        "start_time": 15.72,
+        "end_time": 19.84,
+        "text": "So it's worth making sure that we're all on the same page about what exactly a vector is.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_2",
+        "start_time": 20.38,
+        "end_time": 24.276999999999997,
+        "text": "You see, broadly speaking, there are three distinct but related ideas about vectors, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_3",
+        "start_time": 24.277,
+        "end_time": 26.523,
+        "text": "which I'll call the physics student perspective, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_4",
+        "start_time": 26.523,
+        "end_time": 30.1,
+        "text": "the computer science student perspective, and the mathematician's perspective.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_5",
+        "start_time": 30.88,
+        "end_time": 34.4,
+        "text": "The physics student perspective is that vectors are arrows pointing in space.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_6",
+        "start_time": 34.94,
+        "end_time": 38.384,
+        "text": "What defines a given vector is its length and the direction it's pointing, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_7",
+        "start_time": 38.384,
+        "end_time": 41.736,
+        "text": "but as long as those two facts are the same, you can move it all around, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_8",
+        "start_time": 41.736,
+        "end_time": 43.16,
+        "text": "and it's still the same vector.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_9",
+        "start_time": 44.04,
+        "end_time": 46.536,
+        "text": "Vectors that live in the flat plane are two-dimensional, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_10",
+        "start_time": 46.536,
+        "end_time": 50.04,
+        "text": "and those sitting in broader space that you and I live in are three-dimensional.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_11",
+        "start_time": 51.72,
+        "end_time": 55.64,
+        "text": "The computer science perspective is that vectors are ordered lists of numbers.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_12",
+        "start_time": 55.64,
+        "end_time": 59.326,
+        "text": "For example, let's say you were doing some analytics about house prices, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_13",
+        "start_time": 59.326,
+        "end_time": 62.76,
+        "text": "and the only features you cared about were square footage and price.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_14",
+        "start_time": 63.02,
+        "end_time": 65.44500000000001,
+        "text": "You might model each house with a pair of numbers, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_15",
+        "start_time": 65.445,
+        "end_time": 68.67999999999999,
+        "text": "the first indicating square footage and the second indicating price.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_16",
+        "start_time": 69.32,
+        "end_time": 71.03999999999999,
+        "text": "Notice the order matters here.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_17",
+        "start_time": 72.4,
+        "end_time": 75.912,
+        "text": "In the lingo, you'd be modeling houses as two-dimensional vectors, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_18",
+        "start_time": 75.912,
+        "end_time": 79.74000000000001,
+        "text": "where in this context, vector is pretty much just a fancy word for list, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_19",
+        "start_time": 79.74,
+        "end_time": 84.03999999999999,
+        "text": "and what makes it two-dimensional is the fact that the length of that list is two.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_20",
+        "start_time": 85.64,
+        "end_time": 89.349,
+        "text": "The mathematician, on the other hand, seeks to generalize both these views, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_21",
+        "start_time": 89.349,
+        "end_time": 93.694,
+        "text": "basically saying that a vector can be anything where there's a sensible notion of adding ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_22",
+        "start_time": 93.694,
+        "end_time": 96.135,
+        "text": "two vectors and multiplying a vector by a number, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_23",
+        "start_time": 96.135,
+        "end_time": 98.82000000000001,
+        "text": "operations that I'll talk about later on in this video.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_24",
+        "start_time": 99.58,
+        "end_time": 103.806,
+        "text": "The details of this view are rather abstract, and I actually think it's healthy to ignore ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_25",
+        "start_time": 103.806,
+        "end_time": 107.94,
+        "text": "it until the last video of this series, favoring a more concrete setting in the interim.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_26",
+        "start_time": 108.4,
+        "end_time": 111.226,
+        "text": "But the reason I bring it up here is that it hints at the ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_27",
+        "start_time": 111.226,
+        "end_time": 114.198,
+        "text": "fact that the ideas of vector addition and multiplication by ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_28",
+        "start_time": 114.198,
+        "end_time": 117.22,
+        "text": "numbers will play an important role throughout linear algebra.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_29",
+        "start_time": 118.0,
+        "end_time": 120.972,
+        "text": "But before I talk about those operations, let's just settle in ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_30",
+        "start_time": 120.972,
+        "end_time": 124.03999999999999,
+        "text": "on a specific thought to have in mind when I say the word vector.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_31",
+        "start_time": 124.74,
+        "end_time": 127.55099999999999,
+        "text": "Given the geometric focus that I'm shooting for here, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_32",
+        "start_time": 127.551,
+        "end_time": 130.258,
+        "text": "whenever I introduce a new topic involving vectors, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_33",
+        "start_time": 130.258,
+        "end_time": 133.381,
+        "text": "I want you to first think about an arrow, and specifically, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_34",
+        "start_time": 133.381,
+        "end_time": 137.025,
+        "text": "think about that arrow inside a coordinate system, like the xy-plane, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_35",
+        "start_time": 137.025,
+        "end_time": 138.9,
+        "text": "with its tail sitting at the origin.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_36",
+        "start_time": 139.68,
+        "end_time": 142.549,
+        "text": "This is a little bit different from the physics student perspective, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_37",
+        "start_time": 142.549,
+        "end_time": 144.92000000000002,
+        "text": "where vectors can freely sit anywhere they want in space.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_38",
+        "start_time": 145.42,
+        "end_time": 147.896,
+        "text": "In linear algebra, it's almost always the case ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_39",
+        "start_time": 147.896,
+        "end_time": 150.32,
+        "text": "that your vector will be rooted at the origin.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_40",
+        "start_time": 150.94,
+        "end_time": 154.606,
+        "text": "Then, once you understand a new concept in the context of arrows in space, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_41",
+        "start_time": 154.606,
+        "end_time": 157.637,
+        "text": "we'll translate it over to the list of numbers point of view, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_42",
+        "start_time": 157.637,
+        "end_time": 160.62,
+        "text": "which we can do by considering the coordinates of the vector.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_43",
+        "start_time": 161.44,
+        "end_time": 165.198,
+        "text": "Now, while I'm sure that many of you are already familiar with this coordinate system, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_44",
+        "start_time": 165.198,
+        "end_time": 168.655,
+        "text": "it's worth walking through explicitly, since this is where all of the important ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_45",
+        "start_time": 168.655,
+        "end_time": 171.68,
+        "text": "back and forth happens between the two perspectives of linear algebra.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_46",
+        "start_time": 172.74,
+        "end_time": 175.466,
+        "text": "Focusing our attention on two dimensions for the moment, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_47",
+        "start_time": 175.466,
+        "end_time": 179.58,
+        "text": "you have a horizontal line, called the x-axis, and a vertical line, called the y-axis.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_48",
+        "start_time": 180.26,
+        "end_time": 182.404,
+        "text": "The place where they intersect is called the origin, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_49",
+        "start_time": 182.404,
+        "end_time": 185.52,
+        "text": "which you should think of as the center of space and the root of all vectors.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_50",
+        "start_time": 186.38,
+        "end_time": 188.715,
+        "text": "After choosing an arbitrary length to represent one, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_51",
+        "start_time": 188.715,
+        "end_time": 191.36,
+        "text": "you make tick marks on each axis to represent this distance.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_52",
+        "start_time": 192.32,
+        "end_time": 194.654,
+        "text": "When I want to convey the idea of 2D space as a whole, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_53",
+        "start_time": 194.654,
+        "end_time": 196.733,
+        "text": "which you'll see comes up a lot in these videos, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_54",
+        "start_time": 196.733,
+        "end_time": 199.45000000000002,
+        "text": "I'll extend these tick marks to make grid lines, but right now, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_55",
+        "start_time": 199.45,
+        "end_time": 201.35999999999999,
+        "text": "they'll actually get a little bit in the way.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_56",
+        "start_time": 202.0,
+        "end_time": 205.757,
+        "text": "The coordinates of a vector is a pair of numbers that basically gives ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_57",
+        "start_time": 205.757,
+        "end_time": 210.16,
+        "text": "instructions for how to get from the tail of that vector at the origin to its tip.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_58",
+        "start_time": 210.88,
+        "end_time": 214.004,
+        "text": "The first number tells you how far to walk along the x-axis, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_59",
+        "start_time": 214.004,
+        "end_time": 218.256,
+        "text": "positive numbers indicating rightward motion, negative numbers indicating leftward ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_60",
+        "start_time": 218.256,
+        "end_time": 222.303,
+        "text": "motion, and the second number tells you how far to walk parallel to the y-axis ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_61",
+        "start_time": 222.303,
+        "end_time": 225.121,
+        "text": "after that, positive numbers indicating upward motion, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_62",
+        "start_time": 225.121,
+        "end_time": 227.58,
+        "text": "and negative numbers indicating downward motion.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_63",
+        "start_time": 228.14,
+        "end_time": 231.19099999999997,
+        "text": "To distinguish vectors from points, the convention is to write ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_64",
+        "start_time": 231.191,
+        "end_time": 234.34,
+        "text": "this pair of numbers vertically with square brackets around them.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_65",
+        "start_time": 236.34,
+        "end_time": 239.66,
+        "text": "Every pair of numbers gives you one and only one vector, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_66",
+        "start_time": 239.66,
+        "end_time": 243.68,
+        "text": "and every vector is associated with one and only one pair of numbers.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_67",
+        "start_time": 244.64,
+        "end_time": 245.5,
+        "text": "What about in three dimensions?",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_68",
+        "start_time": 246.2,
+        "end_time": 248.97,
+        "text": "Well, you add a third axis, called the z-axis, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_69",
+        "start_time": 248.97,
+        "end_time": 252.92,
+        "text": "which is perpendicular to both the x and y-axes, and in this case, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_70",
+        "start_time": 252.92,
+        "end_time": 256.339,
+        "text": "each vector is associated with ordered triplet of numbers.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_71",
+        "start_time": 256.86,
+        "end_time": 259.903,
+        "text": "The first tells you how far to move along the x-axis, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_72",
+        "start_time": 259.903,
+        "end_time": 263.34000000000003,
+        "text": "the second tells you how far to move parallel to the y-axis, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_73",
+        "start_time": 263.34,
+        "end_time": 267.67999999999995,
+        "text": "and the third one tells you how far to then move parallel to this new z-axis.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_74",
+        "start_time": 268.4,
+        "end_time": 271.86899999999997,
+        "text": "Every triplet of numbers gives you one unique vector in space, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_75",
+        "start_time": 271.869,
+        "end_time": 275.56,
+        "text": "and every vector in space gives you exactly one triplet of numbers.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_76",
+        "start_time": 276.9,
+        "end_time": 280.09999999999997,
+        "text": "All right, so back to vector addition and multiplication by numbers.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_77",
+        "start_time": 280.46,
+        "end_time": 284.78,
+        "text": "After all, every topic in linear algebra is going to center around these two operations.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_78",
+        "start_time": 285.44,
+        "end_time": 287.64,
+        "text": "Luckily, each one's pretty straightforward to define.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_79",
+        "start_time": 288.48,
+        "end_time": 291.56100000000004,
+        "text": "Let's say we have two vectors, one pointing up and a little to the right, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_80",
+        "start_time": 291.561,
+        "end_time": 293.56,
+        "text": "and the other one pointing right and down a bit.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_81",
+        "start_time": 293.96,
+        "end_time": 296.87899999999996,
+        "text": "To add these two vectors, move the second one so ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_82",
+        "start_time": 296.879,
+        "end_time": 299.68,
+        "text": "that its tail sits at the tip of the first one.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_83",
+        "start_time": 300.3,
+        "end_time": 304.456,
+        "text": "Then, if you draw a new vector from the tail of the first one to ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_84",
+        "start_time": 304.456,
+        "end_time": 308.74,
+        "text": "where the tip of the second one sits, that new vector is their sum.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_85",
+        "start_time": 312.08,
+        "end_time": 315.56899999999996,
+        "text": "This definition of addition, by the way, is pretty much the only time ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_86",
+        "start_time": 315.569,
+        "end_time": 318.86,
+        "text": "in linear algebra where we let vectors stray away from the origin.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_87",
+        "start_time": 319.72,
+        "end_time": 321.48,
+        "text": "Now, why is this a reasonable thing to do?",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_88",
+        "start_time": 321.74,
+        "end_time": 324.02,
+        "text": "Why this definition of addition and not some other one?",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_89",
+        "start_time": 325.52,
+        "end_time": 329.995,
+        "text": "Well, the way I like to think about it is that each vector represents a certain movement, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_90",
+        "start_time": 329.995,
+        "end_time": 332.68,
+        "text": "a step with a certain distance and direction in space.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_91",
+        "start_time": 333.98,
+        "end_time": 337.709,
+        "text": "If you take a step along the first vector, then take a step in the direction ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_92",
+        "start_time": 337.709,
+        "end_time": 341.196,
+        "text": "and distance described by the second vector, the overall effect is just ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_93",
+        "start_time": 341.196,
+        "end_time": 344.78000000000003,
+        "text": "the same as if you moved along the sum of those two vectors to start with.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_94",
+        "start_time": 345.26,
+        "end_time": 347.251,
+        "text": "You could think about this as an extension of ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_95",
+        "start_time": 347.251,
+        "end_time": 349.46,
+        "text": "how we think about adding numbers on a number line.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_96",
+        "start_time": 350.18,
+        "end_time": 353.521,
+        "text": "One way that we teach kids to think about this, say with 2 plus 5, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_97",
+        "start_time": 353.521,
+        "end_time": 357.96000000000004,
+        "text": "is to think of moving two steps to the right followed by another five steps to the right.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_98",
+        "start_time": 357.96,
+        "end_time": 361.71999999999997,
+        "text": "The overall effect is the same as if you just took seven steps to the right.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_99",
+        "start_time": 362.66,
+        "end_time": 365.48,
+        "text": "In fact, let's see how vector addition looks numerically.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_100",
+        "start_time": 366.02,
+        "end_time": 371.698,
+        "text": "The first vector here has coordinates 1, 2, and the second one has coordinates 3, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_101",
+        "start_time": 371.698,
+        "end_time": 372.46,
+        "text": "negative 1.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_102",
+        "start_time": 374.36,
+        "end_time": 377.343,
+        "text": "When you take the vector sum using this tip-to-tail method, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_103",
+        "start_time": 377.343,
+        "end_time": 381.42,
+        "text": "you can think of a four-step path from the origin to the tip of the second vector.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_104",
+        "start_time": 381.84,
+        "end_time": 385.61999999999995,
+        "text": "Walk 1 to the right, then 2 up, then 3 to the right, then 1 down.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_105",
+        "start_time": 386.92,
+        "end_time": 391.341,
+        "text": "Reorganizing these steps so that you first do all of the rightward motion, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_106",
+        "start_time": 391.341,
+        "end_time": 395.173,
+        "text": "then do all the vertical motion, you can read it as saying first ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_107",
+        "start_time": 395.173,
+        "end_time": 398.18,
+        "text": "move 1 plus 3 to the right, then move 2 minus 1 up.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_108",
+        "start_time": 400.08,
+        "end_time": 404.91999999999996,
+        "text": "So the new vector has coordinates 1 plus 3 and 2 plus negative 1.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_109",
+        "start_time": 405.6,
+        "end_time": 409.122,
+        "text": "In general, vector addition in this list of numbers conception ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_110",
+        "start_time": 409.122,
+        "end_time": 412.7,
+        "text": "looks like matching up their terms and adding each one together.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_111",
+        "start_time": 414.64,
+        "end_time": 418.36,
+        "text": "The other fundamental vector operation is multiplication by a number.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_112",
+        "start_time": 418.86,
+        "end_time": 421.38,
+        "text": "Now this is best understood just by looking at a few examples.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_113",
+        "start_time": 421.84,
+        "end_time": 424.99399999999997,
+        "text": "If you take the number 2 and multiply it by a given vector, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_114",
+        "start_time": 424.994,
+        "end_time": 429.62,
+        "text": "it means you stretch out that vector so that it's two times as long as when you started.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_115",
+        "start_time": 430.5,
+        "end_time": 433.065,
+        "text": "If you multiply that vector by, say, one-third, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_116",
+        "start_time": 433.065,
+        "end_time": 436.86,
+        "text": "it means you squish it down so that it's one-third the original length.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_117",
+        "start_time": 437.64,
+        "end_time": 441.317,
+        "text": "When you multiply it by a negative number, like negative 1.8, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_118",
+        "start_time": 441.317,
+        "end_time": 446.3,
+        "text": "then the vector first gets flipped around, then stretched out by that factor of 1.8.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_119",
+        "start_time": 447.36,
+        "end_time": 451.991,
+        "text": "This process of stretching or squishing or sometimes reversing the direction of ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_120",
+        "start_time": 451.991,
+        "end_time": 456.739,
+        "text": "a vector is called scaling, and whenever you catch a number like two or one-third ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_121",
+        "start_time": 456.739,
+        "end_time": 461.14,
+        "text": "or negative 1.8 acting like this, scaling some vector, you call it a scalar.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_122",
+        "start_time": 461.94,
+        "end_time": 466.252,
+        "text": "In fact, throughout linear algebra, one of the main things that numbers do is scale ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_123",
+        "start_time": 466.252,
+        "end_time": 470.82,
+        "text": "vectors, so it's common to use the word scalar pretty much interchangeably with the word ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_124",
+        "start_time": 470.82,
+        "end_time": 471.18,
+        "text": "number.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_125",
+        "start_time": 472.02,
+        "end_time": 475.53999999999996,
+        "text": "Numerically, stretching out a vector by a factor of, say, 2, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_126",
+        "start_time": 475.54,
+        "end_time": 479.58000000000004,
+        "text": "corresponds with multiplying each of its components by that factor, 2.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_127",
+        "start_time": 480.3,
+        "end_time": 483.115,
+        "text": "So in the conception of vectors as lists of numbers, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_128",
+        "start_time": 483.115,
+        "end_time": 487.098,
+        "text": "multiplying a given vector by a scalar means multiplying each one of those ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_129",
+        "start_time": 487.098,
+        "end_time": 488.48,
+        "text": "components by that scalar.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_130",
+        "start_time": 490.22,
+        "end_time": 494.644,
+        "text": "You'll see in the following videos what I mean when I say linear algebra topics tend to ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_131",
+        "start_time": 494.644,
+        "end_time": 497.108,
+        "text": "revolve around these two fundamental operations, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_132",
+        "start_time": 497.108,
+        "end_time": 499.22,
+        "text": "vector addition and scalar multiplication.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_133",
+        "start_time": 499.98,
+        "end_time": 502.879,
+        "text": "And I'll talk more in the last video about how and why the ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_134",
+        "start_time": 502.879,
+        "end_time": 505.336,
+        "text": "mathematician thinks only about these operations, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_135",
+        "start_time": 505.336,
+        "end_time": 509.12,
+        "text": "independent and abstracted away from however you choose to represent vectors.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_136",
+        "start_time": 509.8,
+        "end_time": 513.866,
+        "text": "In truth, it doesn't matter whether you think about vectors as fundamentally being arrows ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_137",
+        "start_time": 513.866,
+        "end_time": 517.255,
+        "text": "in space, like I'm suggesting you do, that happen to have a nice numerical ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_138",
+        "start_time": 517.255,
+        "end_time": 521.322,
+        "text": "representation, or fundamentally as lists of numbers that happen to have a nice geometric ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_139",
+        "start_time": 521.322,
+        "end_time": 522.0,
+        "text": "interpretation.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_140",
+        "start_time": 522.52,
+        "end_time": 526.024,
+        "text": "The usefulness of linear algebra has less to do with either one of these ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_141",
+        "start_time": 526.024,
+        "end_time": 529.72,
+        "text": "views than it does with the ability to translate back and forth between them.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_142",
+        "start_time": 530.14,
+        "end_time": 533.59,
+        "text": "It gives the data analyst a nice way to conceptualize many lists ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_143",
+        "start_time": 533.59,
+        "end_time": 537.041,
+        "text": "of numbers in a visual way, which can seriously clarify patterns ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_144",
+        "start_time": 537.041,
+        "end_time": 540.2800000000001,
+        "text": "in data and give a global view of what certain operations do.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_145",
+        "start_time": 540.82,
+        "end_time": 544.205,
+        "text": "And on the flip side, it gives people like physicists and computer ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_146",
+        "start_time": 544.205,
+        "end_time": 547.792,
+        "text": "graphics programmers a language to describe space and the manipulation ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_147",
+        "start_time": 547.792,
+        "end_time": 551.38,
+        "text": "of space using numbers that can be crunched and run through a computer.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_148",
+        "start_time": 552.3,
+        "end_time": 555.918,
+        "text": "When I do math-y animations, for example, I start by thinking about what's ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_149",
+        "start_time": 555.918,
+        "end_time": 560.116,
+        "text": "actually going on in space, and then get the computer to represent things numerically, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "practical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_150",
+        "start_time": 560.116,
+        "end_time": 563.06,
+        "text": "thereby figuring out where to place the pixels on the screen.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_151",
+        "start_time": 563.48,
+        "end_time": 566.58,
+        "text": "And doing that usually relies on a lot of linear algebra understanding.",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_152",
+        "start_time": 567.84,
+        "end_time": 575.702,
+        "text": "So there are your vector basics, and in the next video I'll ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_153",
+        "start_time": 575.702,
+        "end_time": 585.661,
+        "text": "start getting into some pretty neat concepts surrounding vectors like span, ",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "theoretical"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_154",
+        "start_time": 585.661,
+        "end_time": 591.8199999999999,
+        "text": "bases, and linear dependence. See you then! you",
+        "language": "en",
+        "video_id": "fNk_zzaMoSs",
+        "domain": "mathematics",
+        "content_type": "mixed"
+      }
+    ],
+    "sentences": [
+      {
+        "id": "segment_fNk_zzaMoSs_0_sentence_0",
+        "start_time": 10.92,
+        "end_time": 15.219999999999999,
+        "text": "The fundamental, root-of-it-all building block for linear algebra is the vector.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_0",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_1_sentence_0",
+        "start_time": 15.72,
+        "end_time": 19.84,
+        "text": "So it's worth making sure that we're all on the same page about what exactly a vector is.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_1",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_2_sentence_0",
+        "start_time": 20.38,
+        "end_time": 24.276999999999997,
+        "text": "You see, broadly speaking, there are three distinct but related ideas about vectors,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_2",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_3_sentence_0",
+        "start_time": 24.277,
+        "end_time": 26.523,
+        "text": "which I'll call the physics student perspective,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_3",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_4_sentence_0",
+        "start_time": 26.523,
+        "end_time": 30.1,
+        "text": "the computer science student perspective, and the mathematician's perspective.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_4",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_5_sentence_0",
+        "start_time": 30.88,
+        "end_time": 34.4,
+        "text": "The physics student perspective is that vectors are arrows pointing in space.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_5",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_6_sentence_0",
+        "start_time": 34.94,
+        "end_time": 38.384,
+        "text": "What defines a given vector is its length and the direction it's pointing,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_6",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_7_sentence_0",
+        "start_time": 38.384,
+        "end_time": 41.736,
+        "text": "but as long as those two facts are the same, you can move it all around,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_7",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_8_sentence_0",
+        "start_time": 41.736,
+        "end_time": 43.16,
+        "text": "and it's still the same vector.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_8",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_9_sentence_0",
+        "start_time": 44.04,
+        "end_time": 46.536,
+        "text": "Vectors that live in the flat plane are two-dimensional,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_9",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_10_sentence_0",
+        "start_time": 46.536,
+        "end_time": 50.04,
+        "text": "and those sitting in broader space that you and I live in are three-dimensional.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_10",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_11_sentence_0",
+        "start_time": 51.72,
+        "end_time": 55.64,
+        "text": "The computer science perspective is that vectors are ordered lists of numbers.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_11",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_12_sentence_0",
+        "start_time": 55.64,
+        "end_time": 59.326,
+        "text": "For example, let's say you were doing some analytics about house prices,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_12",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_13_sentence_0",
+        "start_time": 59.326,
+        "end_time": 62.76,
+        "text": "and the only features you cared about were square footage and price.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_13",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_14_sentence_0",
+        "start_time": 63.02,
+        "end_time": 65.44500000000001,
+        "text": "You might model each house with a pair of numbers,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_14",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_15_sentence_0",
+        "start_time": 65.445,
+        "end_time": 68.67999999999999,
+        "text": "the first indicating square footage and the second indicating price.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_15",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_16_sentence_0",
+        "start_time": 69.32,
+        "end_time": 71.03999999999999,
+        "text": "Notice the order matters here.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_16",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_17_sentence_0",
+        "start_time": 72.4,
+        "end_time": 75.912,
+        "text": "In the lingo, you'd be modeling houses as two-dimensional vectors,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_17",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_18_sentence_0",
+        "start_time": 75.912,
+        "end_time": 79.74000000000001,
+        "text": "where in this context, vector is pretty much just a fancy word for list,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_18",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_19_sentence_0",
+        "start_time": 79.74,
+        "end_time": 84.03999999999999,
+        "text": "and what makes it two-dimensional is the fact that the length of that list is two.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_19",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_20_sentence_0",
+        "start_time": 85.64,
+        "end_time": 89.349,
+        "text": "The mathematician, on the other hand, seeks to generalize both these views,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_20",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_21_sentence_0",
+        "start_time": 89.349,
+        "end_time": 93.694,
+        "text": "basically saying that a vector can be anything where there's a sensible notion of adding",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_21",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_22_sentence_0",
+        "start_time": 93.694,
+        "end_time": 96.135,
+        "text": "two vectors and multiplying a vector by a number,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_22",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_23_sentence_0",
+        "start_time": 96.135,
+        "end_time": 98.82000000000001,
+        "text": "operations that I'll talk about later on in this video.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_23",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_24_sentence_0",
+        "start_time": 99.58,
+        "end_time": 103.806,
+        "text": "The details of this view are rather abstract, and I actually think it's healthy to ignore",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_24",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_25_sentence_0",
+        "start_time": 103.806,
+        "end_time": 107.94,
+        "text": "it until the last video of this series, favoring a more concrete setting in the interim.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_25",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_26_sentence_0",
+        "start_time": 108.4,
+        "end_time": 111.226,
+        "text": "But the reason I bring it up here is that it hints at the",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_26",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_27_sentence_0",
+        "start_time": 111.226,
+        "end_time": 114.198,
+        "text": "fact that the ideas of vector addition and multiplication by",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_27",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_28_sentence_0",
+        "start_time": 114.198,
+        "end_time": 117.22,
+        "text": "numbers will play an important role throughout linear algebra.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_28",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_29_sentence_0",
+        "start_time": 118.0,
+        "end_time": 120.972,
+        "text": "But before I talk about those operations, let's just settle in",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_29",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_30_sentence_0",
+        "start_time": 120.972,
+        "end_time": 124.03999999999999,
+        "text": "on a specific thought to have in mind when I say the word vector.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_30",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_31_sentence_0",
+        "start_time": 124.74,
+        "end_time": 127.55099999999999,
+        "text": "Given the geometric focus that I'm shooting for here,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_31",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_32_sentence_0",
+        "start_time": 127.551,
+        "end_time": 130.258,
+        "text": "whenever I introduce a new topic involving vectors,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_32",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_33_sentence_0",
+        "start_time": 130.258,
+        "end_time": 133.381,
+        "text": "I want you to first think about an arrow, and specifically,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_33",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_34_sentence_0",
+        "start_time": 133.381,
+        "end_time": 137.025,
+        "text": "think about that arrow inside a coordinate system, like the xy-plane,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_34",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_35_sentence_0",
+        "start_time": 137.025,
+        "end_time": 138.9,
+        "text": "with its tail sitting at the origin.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_35",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_36_sentence_0",
+        "start_time": 139.68,
+        "end_time": 142.549,
+        "text": "This is a little bit different from the physics student perspective,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_36",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_37_sentence_0",
+        "start_time": 142.549,
+        "end_time": 144.92000000000002,
+        "text": "where vectors can freely sit anywhere they want in space.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_37",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_38_sentence_0",
+        "start_time": 145.42,
+        "end_time": 147.896,
+        "text": "In linear algebra, it's almost always the case",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_38",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_39_sentence_0",
+        "start_time": 147.896,
+        "end_time": 150.32,
+        "text": "that your vector will be rooted at the origin.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_39",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_40_sentence_0",
+        "start_time": 150.94,
+        "end_time": 154.606,
+        "text": "Then, once you understand a new concept in the context of arrows in space,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_40",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_41_sentence_0",
+        "start_time": 154.606,
+        "end_time": 157.637,
+        "text": "we'll translate it over to the list of numbers point of view,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_41",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_42_sentence_0",
+        "start_time": 157.637,
+        "end_time": 160.62,
+        "text": "which we can do by considering the coordinates of the vector.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_42",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_43_sentence_0",
+        "start_time": 161.44,
+        "end_time": 165.198,
+        "text": "Now, while I'm sure that many of you are already familiar with this coordinate system,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_43",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_44_sentence_0",
+        "start_time": 165.198,
+        "end_time": 168.655,
+        "text": "it's worth walking through explicitly, since this is where all of the important",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_44",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_45_sentence_0",
+        "start_time": 168.655,
+        "end_time": 171.68,
+        "text": "back and forth happens between the two perspectives of linear algebra.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_45",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_46_sentence_0",
+        "start_time": 172.74,
+        "end_time": 175.466,
+        "text": "Focusing our attention on two dimensions for the moment,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_46",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_47_sentence_0",
+        "start_time": 175.466,
+        "end_time": 179.58,
+        "text": "you have a horizontal line, called the x-axis, and a vertical line, called the y-axis.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_47",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_48_sentence_0",
+        "start_time": 180.26,
+        "end_time": 182.404,
+        "text": "The place where they intersect is called the origin,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_48",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_49_sentence_0",
+        "start_time": 182.404,
+        "end_time": 185.52,
+        "text": "which you should think of as the center of space and the root of all vectors.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_49",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_50_sentence_0",
+        "start_time": 186.38,
+        "end_time": 188.715,
+        "text": "After choosing an arbitrary length to represent one,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_50",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_51_sentence_0",
+        "start_time": 188.715,
+        "end_time": 191.36,
+        "text": "you make tick marks on each axis to represent this distance.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_51",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_52_sentence_0",
+        "start_time": 192.32,
+        "end_time": 194.654,
+        "text": "When I want to convey the idea of 2D space as a whole,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_52",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_53_sentence_0",
+        "start_time": 194.654,
+        "end_time": 196.733,
+        "text": "which you'll see comes up a lot in these videos,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_53",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_54_sentence_0",
+        "start_time": 196.733,
+        "end_time": 199.45000000000002,
+        "text": "I'll extend these tick marks to make grid lines, but right now,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_54",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_55_sentence_0",
+        "start_time": 199.45,
+        "end_time": 201.35999999999999,
+        "text": "they'll actually get a little bit in the way.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_55",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_56_sentence_0",
+        "start_time": 202.0,
+        "end_time": 205.757,
+        "text": "The coordinates of a vector is a pair of numbers that basically gives",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_56",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_57_sentence_0",
+        "start_time": 205.757,
+        "end_time": 210.16,
+        "text": "instructions for how to get from the tail of that vector at the origin to its tip.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_57",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_58_sentence_0",
+        "start_time": 210.88,
+        "end_time": 214.004,
+        "text": "The first number tells you how far to walk along the x-axis,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_58",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_59_sentence_0",
+        "start_time": 214.004,
+        "end_time": 218.256,
+        "text": "positive numbers indicating rightward motion, negative numbers indicating leftward",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_59",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_60_sentence_0",
+        "start_time": 218.256,
+        "end_time": 222.303,
+        "text": "motion, and the second number tells you how far to walk parallel to the y-axis",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_60",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_61_sentence_0",
+        "start_time": 222.303,
+        "end_time": 225.121,
+        "text": "after that, positive numbers indicating upward motion,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_61",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_62_sentence_0",
+        "start_time": 225.121,
+        "end_time": 227.58,
+        "text": "and negative numbers indicating downward motion.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_62",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_63_sentence_0",
+        "start_time": 228.14,
+        "end_time": 231.19099999999997,
+        "text": "To distinguish vectors from points, the convention is to write",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_63",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_64_sentence_0",
+        "start_time": 231.191,
+        "end_time": 234.34,
+        "text": "this pair of numbers vertically with square brackets around them.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_64",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_65_sentence_0",
+        "start_time": 236.34,
+        "end_time": 239.66,
+        "text": "Every pair of numbers gives you one and only one vector,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_65",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_66_sentence_0",
+        "start_time": 239.66,
+        "end_time": 243.68,
+        "text": "and every vector is associated with one and only one pair of numbers.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_66",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_67_sentence_0",
+        "start_time": 244.64,
+        "end_time": 245.5,
+        "text": "What about in three dimensions?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_67",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_68_sentence_0",
+        "start_time": 246.2,
+        "end_time": 248.97,
+        "text": "Well, you add a third axis, called the z-axis,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_68",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_69_sentence_0",
+        "start_time": 248.97,
+        "end_time": 252.92,
+        "text": "which is perpendicular to both the x and y-axes, and in this case,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_69",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_70_sentence_0",
+        "start_time": 252.92,
+        "end_time": 256.339,
+        "text": "each vector is associated with ordered triplet of numbers.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_70",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_71_sentence_0",
+        "start_time": 256.86,
+        "end_time": 259.903,
+        "text": "The first tells you how far to move along the x-axis,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_71",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_72_sentence_0",
+        "start_time": 259.903,
+        "end_time": 263.34000000000003,
+        "text": "the second tells you how far to move parallel to the y-axis,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_72",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_73_sentence_0",
+        "start_time": 263.34,
+        "end_time": 267.67999999999995,
+        "text": "and the third one tells you how far to then move parallel to this new z-axis.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_73",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_74_sentence_0",
+        "start_time": 268.4,
+        "end_time": 271.86899999999997,
+        "text": "Every triplet of numbers gives you one unique vector in space,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_74",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_75_sentence_0",
+        "start_time": 271.869,
+        "end_time": 275.56,
+        "text": "and every vector in space gives you exactly one triplet of numbers.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_75",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_76_sentence_0",
+        "start_time": 276.9,
+        "end_time": 280.09999999999997,
+        "text": "All right, so back to vector addition and multiplication by numbers.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_76",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_77_sentence_0",
+        "start_time": 280.46,
+        "end_time": 284.78,
+        "text": "After all, every topic in linear algebra is going to center around these two operations.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_77",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_78_sentence_0",
+        "start_time": 285.44,
+        "end_time": 287.64,
+        "text": "Luckily, each one's pretty straightforward to define.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_78",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_79_sentence_0",
+        "start_time": 288.48,
+        "end_time": 291.56100000000004,
+        "text": "Let's say we have two vectors, one pointing up and a little to the right,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_79",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_80_sentence_0",
+        "start_time": 291.561,
+        "end_time": 293.56,
+        "text": "and the other one pointing right and down a bit.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_80",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_81_sentence_0",
+        "start_time": 293.96,
+        "end_time": 296.87899999999996,
+        "text": "To add these two vectors, move the second one so",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_81",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_82_sentence_0",
+        "start_time": 296.879,
+        "end_time": 299.68,
+        "text": "that its tail sits at the tip of the first one.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_82",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_83_sentence_0",
+        "start_time": 300.3,
+        "end_time": 304.456,
+        "text": "Then, if you draw a new vector from the tail of the first one to",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_83",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_84_sentence_0",
+        "start_time": 304.456,
+        "end_time": 308.74,
+        "text": "where the tip of the second one sits, that new vector is their sum.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_84",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_85_sentence_0",
+        "start_time": 312.08,
+        "end_time": 315.56899999999996,
+        "text": "This definition of addition, by the way, is pretty much the only time",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_85",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_86_sentence_0",
+        "start_time": 315.569,
+        "end_time": 318.86,
+        "text": "in linear algebra where we let vectors stray away from the origin.",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_86",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_87_sentence_0",
+        "start_time": 319.72,
+        "end_time": 321.48,
+        "text": "Now, why is this a reasonable thing to do?",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_87",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_88_sentence_0",
+        "start_time": 321.74,
+        "end_time": 324.02,
+        "text": "Why this definition of addition and not some other one?",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_88",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_89_sentence_0",
+        "start_time": 325.52,
+        "end_time": 329.995,
+        "text": "Well, the way I like to think about it is that each vector represents a certain movement,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_89",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_90_sentence_0",
+        "start_time": 329.995,
+        "end_time": 332.68,
+        "text": "a step with a certain distance and direction in space.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_90",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_91_sentence_0",
+        "start_time": 333.98,
+        "end_time": 337.709,
+        "text": "If you take a step along the first vector, then take a step in the direction",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_91",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_92_sentence_0",
+        "start_time": 337.709,
+        "end_time": 341.196,
+        "text": "and distance described by the second vector, the overall effect is just",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_92",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_93_sentence_0",
+        "start_time": 341.196,
+        "end_time": 344.78000000000003,
+        "text": "the same as if you moved along the sum of those two vectors to start with.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_93",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_94_sentence_0",
+        "start_time": 345.26,
+        "end_time": 347.251,
+        "text": "You could think about this as an extension of",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_94",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_95_sentence_0",
+        "start_time": 347.251,
+        "end_time": 349.46,
+        "text": "how we think about adding numbers on a number line.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_95",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_96_sentence_0",
+        "start_time": 350.18,
+        "end_time": 353.521,
+        "text": "One way that we teach kids to think about this, say with 2 plus 5,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_96",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_97_sentence_0",
+        "start_time": 353.521,
+        "end_time": 357.96000000000004,
+        "text": "is to think of moving two steps to the right followed by another five steps to the right.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_97",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_98_sentence_0",
+        "start_time": 357.96,
+        "end_time": 361.71999999999997,
+        "text": "The overall effect is the same as if you just took seven steps to the right.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_98",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_99_sentence_0",
+        "start_time": 362.66,
+        "end_time": 365.48,
+        "text": "In fact, let's see how vector addition looks numerically.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_99",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_100_sentence_0",
+        "start_time": 366.02,
+        "end_time": 371.698,
+        "text": "The first vector here has coordinates 1, 2, and the second one has coordinates 3,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_100",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_101_sentence_0",
+        "start_time": 371.698,
+        "end_time": 372.46,
+        "text": "negative 1.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_101",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_102_sentence_0",
+        "start_time": 374.36,
+        "end_time": 377.343,
+        "text": "When you take the vector sum using this tip-to-tail method,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_102",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_103_sentence_0",
+        "start_time": 377.343,
+        "end_time": 381.42,
+        "text": "you can think of a four-step path from the origin to the tip of the second vector.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_103",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_104_sentence_0",
+        "start_time": 381.84,
+        "end_time": 385.61999999999995,
+        "text": "Walk 1 to the right, then 2 up, then 3 to the right, then 1 down.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_104",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_105_sentence_0",
+        "start_time": 386.92,
+        "end_time": 391.341,
+        "text": "Reorganizing these steps so that you first do all of the rightward motion,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_105",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_106_sentence_0",
+        "start_time": 391.341,
+        "end_time": 395.173,
+        "text": "then do all the vertical motion, you can read it as saying first",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_106",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_107_sentence_0",
+        "start_time": 395.173,
+        "end_time": 398.18,
+        "text": "move 1 plus 3 to the right, then move 2 minus 1 up.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_107",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_108_sentence_0",
+        "start_time": 400.08,
+        "end_time": 404.91999999999996,
+        "text": "So the new vector has coordinates 1 plus 3 and 2 plus negative 1.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_108",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_109_sentence_0",
+        "start_time": 405.6,
+        "end_time": 409.122,
+        "text": "In general, vector addition in this list of numbers conception",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_109",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_110_sentence_0",
+        "start_time": 409.122,
+        "end_time": 412.7,
+        "text": "looks like matching up their terms and adding each one together.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_110",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_111_sentence_0",
+        "start_time": 414.64,
+        "end_time": 418.36,
+        "text": "The other fundamental vector operation is multiplication by a number.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_111",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_112_sentence_0",
+        "start_time": 418.86,
+        "end_time": 421.38,
+        "text": "Now this is best understood just by looking at a few examples.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_112",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_113_sentence_0",
+        "start_time": 421.84,
+        "end_time": 424.99399999999997,
+        "text": "If you take the number 2 and multiply it by a given vector,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_113",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_114_sentence_0",
+        "start_time": 424.994,
+        "end_time": 429.62,
+        "text": "it means you stretch out that vector so that it's two times as long as when you started.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_114",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_115_sentence_0",
+        "start_time": 430.5,
+        "end_time": 433.065,
+        "text": "If you multiply that vector by, say, one-third,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_115",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_116_sentence_0",
+        "start_time": 433.065,
+        "end_time": 436.86,
+        "text": "it means you squish it down so that it's one-third the original length.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_116",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_117_sentence_0",
+        "start_time": 437.64,
+        "end_time": 441.317,
+        "text": "When you multiply it by a negative number, like negative 1.8,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_117",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_118_sentence_0",
+        "start_time": 441.317,
+        "end_time": 446.3,
+        "text": "then the vector first gets flipped around, then stretched out by that factor of 1.8.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_118",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_119_sentence_0",
+        "start_time": 447.36,
+        "end_time": 451.991,
+        "text": "This process of stretching or squishing or sometimes reversing the direction of",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_119",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_120_sentence_0",
+        "start_time": 451.991,
+        "end_time": 456.739,
+        "text": "a vector is called scaling, and whenever you catch a number like two or one-third",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_120",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_121_sentence_0",
+        "start_time": 456.739,
+        "end_time": 461.14,
+        "text": "or negative 1.8 acting like this, scaling some vector, you call it a scalar.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_121",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_122_sentence_0",
+        "start_time": 461.94,
+        "end_time": 466.252,
+        "text": "In fact, throughout linear algebra, one of the main things that numbers do is scale",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_122",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_123_sentence_0",
+        "start_time": 466.252,
+        "end_time": 470.82,
+        "text": "vectors, so it's common to use the word scalar pretty much interchangeably with the word",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_123",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_124_sentence_0",
+        "start_time": 470.82,
+        "end_time": 471.18,
+        "text": "number.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_124",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_125_sentence_0",
+        "start_time": 472.02,
+        "end_time": 475.53999999999996,
+        "text": "Numerically, stretching out a vector by a factor of, say, 2,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_125",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_126_sentence_0",
+        "start_time": 475.54,
+        "end_time": 479.58000000000004,
+        "text": "corresponds with multiplying each of its components by that factor, 2.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_126",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_127_sentence_0",
+        "start_time": 480.3,
+        "end_time": 483.115,
+        "text": "So in the conception of vectors as lists of numbers,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_127",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_128_sentence_0",
+        "start_time": 483.115,
+        "end_time": 487.098,
+        "text": "multiplying a given vector by a scalar means multiplying each one of those",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_128",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_129_sentence_0",
+        "start_time": 487.098,
+        "end_time": 488.48,
+        "text": "components by that scalar.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_129",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_130_sentence_0",
+        "start_time": 490.22,
+        "end_time": 494.644,
+        "text": "You'll see in the following videos what I mean when I say linear algebra topics tend to",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_130",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_131_sentence_0",
+        "start_time": 494.644,
+        "end_time": 497.108,
+        "text": "revolve around these two fundamental operations,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_131",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_132_sentence_0",
+        "start_time": 497.108,
+        "end_time": 499.22,
+        "text": "vector addition and scalar multiplication.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_132",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_133_sentence_0",
+        "start_time": 499.98,
+        "end_time": 502.879,
+        "text": "And I'll talk more in the last video about how and why the",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_133",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_134_sentence_0",
+        "start_time": 502.879,
+        "end_time": 505.336,
+        "text": "mathematician thinks only about these operations,",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_134",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_135_sentence_0",
+        "start_time": 505.336,
+        "end_time": 509.12,
+        "text": "independent and abstracted away from however you choose to represent vectors.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_135",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_136_sentence_0",
+        "start_time": 509.8,
+        "end_time": 513.866,
+        "text": "In truth, it doesn't matter whether you think about vectors as fundamentally being arrows",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_136",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_137_sentence_0",
+        "start_time": 513.866,
+        "end_time": 517.255,
+        "text": "in space, like I'm suggesting you do, that happen to have a nice numerical",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_137",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_138_sentence_0",
+        "start_time": 517.255,
+        "end_time": 521.322,
+        "text": "representation, or fundamentally as lists of numbers that happen to have a nice geometric",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_138",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_139_sentence_0",
+        "start_time": 521.322,
+        "end_time": 522.0,
+        "text": "interpretation.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_139",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_140_sentence_0",
+        "start_time": 522.52,
+        "end_time": 526.024,
+        "text": "The usefulness of linear algebra has less to do with either one of these",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_140",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_141_sentence_0",
+        "start_time": 526.024,
+        "end_time": 529.72,
+        "text": "views than it does with the ability to translate back and forth between them.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_141",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_142_sentence_0",
+        "start_time": 530.14,
+        "end_time": 533.59,
+        "text": "It gives the data analyst a nice way to conceptualize many lists",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_142",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_143_sentence_0",
+        "start_time": 533.59,
+        "end_time": 537.041,
+        "text": "of numbers in a visual way, which can seriously clarify patterns",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_143",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_144_sentence_0",
+        "start_time": 537.041,
+        "end_time": 540.2800000000001,
+        "text": "in data and give a global view of what certain operations do.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_144",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_145_sentence_0",
+        "start_time": 540.82,
+        "end_time": 544.205,
+        "text": "And on the flip side, it gives people like physicists and computer",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_145",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_146_sentence_0",
+        "start_time": 544.205,
+        "end_time": 547.792,
+        "text": "graphics programmers a language to describe space and the manipulation",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_146",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_147_sentence_0",
+        "start_time": 547.792,
+        "end_time": 551.38,
+        "text": "of space using numbers that can be crunched and run through a computer.",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_147",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_148_sentence_0",
+        "start_time": 552.3,
+        "end_time": 555.918,
+        "text": "When I do math-y animations, for example, I start by thinking about what's",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_148",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_149_sentence_0",
+        "start_time": 555.918,
+        "end_time": 560.116,
+        "text": "actually going on in space, and then get the computer to represent things numerically,",
+        "content_type": "practical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_149",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_150_sentence_0",
+        "start_time": 560.116,
+        "end_time": 563.06,
+        "text": "thereby figuring out where to place the pixels on the screen.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_150",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_151_sentence_0",
+        "start_time": 563.48,
+        "end_time": 566.58,
+        "text": "And doing that usually relies on a lot of linear algebra understanding.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_151",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_152_sentence_0",
+        "start_time": 567.84,
+        "end_time": 575.702,
+        "text": "So there are your vector basics, and in the next video I'll",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_152",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_153_sentence_0",
+        "start_time": 575.702,
+        "end_time": 585.661,
+        "text": "start getting into some pretty neat concepts surrounding vectors like span,",
+        "content_type": "theoretical",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_153",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_154_sentence_0",
+        "start_time": 585.661,
+        "end_time": 587.7139999999999,
+        "text": "bases, and linear dependence.",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_154",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_154_sentence_1",
+        "start_time": 587.7139999999999,
+        "end_time": 589.7669999999999,
+        "text": "See you then!",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_154",
+        "video_id": "fNk_zzaMoSs"
+      },
+      {
+        "id": "segment_fNk_zzaMoSs_154_sentence_2",
+        "start_time": 589.7669999999999,
+        "end_time": 591.8199999999999,
+        "text": "you",
+        "content_type": "mixed",
+        "domain": "mathematics",
+        "segment_id": "segment_fNk_zzaMoSs_154",
+        "video_id": "fNk_zzaMoSs"
+      }
+    ],
+    "language": "en",
+    "domain": "mathematics",
+    "video_id": "fNk_zzaMoSs"
+  },
+  "domain_features": {
+    "domain": "mathematics",
+    "key_concepts": [
+      {
+        "text": "vector",
+        "theoretical": true,
+        "frequency": 41,
+        "domain": "mathematics"
+      },
+      {
+        "text": "algebra",
+        "theoretical": true,
+        "frequency": 10,
+        "domain": "mathematics"
+      },
+      {
+        "text": "given vector is",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "direction it",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "new concept in",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "context of arrows",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "do by considering",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "coordinates of the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "place where they",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "little to the",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "only time",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "where we let",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "vector is called",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "number like two",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "conception of vectors",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      },
+      {
+        "text": "data analyst a",
+        "theoretical": true,
+        "frequency": 1,
+        "domain": "mathematics"
+      }
+    ],
+    "theoretical_segments": 18,
+    "practical_segments": 8
+  },
+  "theory_practice_results": {
+    "classification": "practical",
+    "confidence": 0.8838709677419355,
+    "theory_practice_ratio": 0.11612903225806452,
+    "theoretical_segments": 18,
+    "practical_segments": 8,
+    "mixed_segments": 129
+  },
+  "theory_practice_patterns": {
+    "theory_to_practice_sequences": [],
+    "practice_to_theory_sequences": []
+  },
+  "processing_time": 0.7097675800323486
+}

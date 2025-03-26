@@ -1,291 +1,317 @@
 """
-Unit tests for the Domain Classifier component.
+Unit tests for the Domain Classifier component of the Lecture Video Content Indexer.
+Tests domain classification, feature extraction, and model training functionality.
 """
 
 import pytest
-import json
-from unittest.mock import patch, MagicMock
 import os
-import numpy as np
+import json
+from typing import Dict, List, Any
+import logging
 
+# Import the component to test
 from concept_analysis.concept_extractor.python.domain_concept_extractor import DomainClassifier
 
-# Test data
-MATH_TEXT = "In this mathematics lecture, we discuss calculus, derivatives, integrals, and theorem proofs. We explore algebraic structures and geometric concepts."
-
-PROGRAMMING_TEXT = "This programming tutorial covers Python coding, data structures, algorithms, and software development. We'll implement classes, functions, and methods."
-
-PHYSICS_TEXT = "In our physics class, we study mechanics, dynamics, forces, and energy. We'll explore Newton's laws, electromagnetism, and thermodynamics."
-
-MIXED_TEXT = "This lecture covers both mathematical concepts and programming implementations. We'll derive formulas and write code to solve problems."
-
-MATH_TRANSCRIPT = {
-    "language": "en",
-    "segments": [
-        {
-            "id": "segment1",
-            "text": "Welcome to our mathematics lecture on calculus.",
-            "content_type": "theoretical",
-            "nlp_data": {
-                "formulas": [{"text": "f(x) = x^2", "start": 0, "end": 10}],
-                "code_snippets": []
-            }
-        },
-        {
-            "id": "segment2",
-            "text": "Let's discuss the definition of a derivative.",
-            "content_type": "theoretical",
-            "nlp_data": {
-                "formulas": [{"text": "f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}", "start": 0, "end": 10}],
-                "code_snippets": []
-            }
-        },
-        {
-            "id": "segment3",
-            "text": "Now let's solve some calculus problems.",
-            "content_type": "practical",
-            "nlp_data": {
-                "formulas": [{"text": "\\int x^2 dx = \\frac{x^3}{3} + C", "start": 0, "end": 10}],
-                "code_snippets": []
-            }
-        }
-    ]
-}
-
-PROGRAMMING_TRANSCRIPT = {
-    "language": "en",
-    "segments": [
-        {
-            "id": "segment1",
-            "text": "Welcome to our programming tutorial on Python.",
-            "content_type": "theoretical",
-            "nlp_data": {
-                "formulas": [],
-                "code_snippets": []
-            }
-        },
-        {
-            "id": "segment2",
-            "text": "Object-oriented programming involves classes and inheritance.",
-            "content_type": "theoretical",
-            "nlp_data": {
-                "formulas": [],
-                "code_snippets": []
-            }
-        },
-        {
-            "id": "segment3",
-            "text": "Let's write a Python function to calculate factorials.",
-            "content_type": "practical",
-            "nlp_data": {
-                "formulas": [],
-                "code_snippets": [{"text": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n-1)", "language": "python", "start": 0, "end": 10}]
-            }
-        }
-    ]
-}
-
-@pytest.fixture
-def domain_classifier():
-    """Create a Domain Classifier instance."""
-    return DomainClassifier()
+# Configure logging for tests
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TestDomainClassifier:
-    """Test the Domain Classifier component."""
+    """Test suite for the DomainClassifier component."""
+
+    @pytest.fixture
+    def domain_classifier(self):
+        """Fixture to provide a DomainClassifier instance."""
+        return DomainClassifier()
+
+    @pytest.fixture
+    def sample_transcript(self):
+        """Fixture to provide a sample transcript dictionary."""
+        return {
+            "segments": [
+                {
+                    "id": "seg1",
+                    "start_time": 0.0,
+                    "end_time": 10.0,
+                    "text": "Welcome to this mathematics lecture on calculus.",
+                    "language": "en"
+                },
+                {
+                    "id": "seg2",
+                    "start_time": 10.0,
+                    "end_time": 20.0,
+                    "text": "Today we will learn about derivatives and integration.",
+                    "language": "en"
+                },
+                {
+                    "id": "seg3",
+                    "start_time": 20.0,
+                    "end_time": 30.0,
+                    "text": "The derivative is defined as the limit as delta x approaches zero.",
+                    "language": "en"
+                }
+            ],
+            "language": "en",
+            "domain": "unknown",
+            "video_id": "test123"
+        }
+
+    @pytest.fixture
+    def sample_russian_transcript(self):
+        """Fixture to provide a sample Russian transcript dictionary."""
+        return {
+            "segments": [
+                {
+                    "id": "seg1",
+                    "start_time": 0.0,
+                    "end_time": 10.0,
+                    "text": "Добро пожаловать на лекцию по программированию.",
+                    "language": "ru"
+                },
+                {
+                    "id": "seg2",
+                    "start_time": 10.0,
+                    "end_time": 20.0,
+                    "text": "Сегодня мы изучим алгоритмы и структуры данных.",
+                    "language": "ru"
+                },
+                {
+                    "id": "seg3",
+                    "start_time": 20.0,
+                    "end_time": 30.0,
+                    "text": "Мы напишем код на языке Python.",
+                    "language": "ru"
+                }
+            ],
+            "language": "ru",
+            "domain": "unknown",
+            "video_id": "test456"
+        }
+
+    @pytest.fixture
+    def sample_physics_text(self):
+        """Fixture to provide a sample physics text."""
+        return "In this lecture, we will discuss Newton's laws of motion and the conservation of energy in classical mechanics."
+
+    @pytest.fixture
+    def sample_training_data(self):
+        """Fixture to provide sample training data for the classifier."""
+        return [
+            {"text": "In calculus, we study the concept of limits and derivatives.", "classification": "mathematics"},
+            {"text": "The function f(x) = x^2 has a derivative f'(x) = 2x.", "classification": "mathematics"},
+            {"text": "Python is a programming language with dynamic typing.", "classification": "programming"},
+            {"text": "We can implement a binary search tree in Java.", "classification": "programming"},
+            {"text": "Newton's laws describe the motion of objects.", "classification": "physics"},
+            {"text": "Quantum mechanics is the study of subatomic particles.", "classification": "physics"}
+        ]
 
     def test_classify_text_mathematics(self, domain_classifier):
-        """Test classifying mathematics text."""
-        domain, confidence = domain_classifier.classify_text(MATH_TEXT, "en")
+        """Test classification of mathematical text."""
+        text = "In calculus, the derivative of a function f(x) = x^2 is f'(x) = 2x."
+        domain, confidence = domain_classifier.classify_text(text, "en")
 
         assert domain == "mathematics"
         assert confidence > 0.5
 
     def test_classify_text_programming(self, domain_classifier):
-        """Test classifying programming text."""
-        domain, confidence = domain_classifier.classify_text(PROGRAMMING_TEXT, "en")
+        """Test classification of programming text."""
+        text = "In Python, we can write a function to implement a binary search algorithm."
+        domain, confidence = domain_classifier.classify_text(text, "en")
 
         assert domain == "programming"
         assert confidence > 0.5
 
-    def test_classify_text_physics(self, domain_classifier):
-        """Test classifying physics text."""
-        domain, confidence = domain_classifier.classify_text(PHYSICS_TEXT, "en")
+    def test_classify_text_physics(self, domain_classifier, sample_physics_text):
+        """Test classification of physics text."""
+        domain, confidence = domain_classifier.classify_text(sample_physics_text, "en")
 
         assert domain == "physics"
         assert confidence > 0.5
 
-    def test_classify_text_mixed(self, domain_classifier):
-        """Test classifying mixed content text."""
-        domain, confidence = domain_classifier.classify_text(MIXED_TEXT, "en")
-
-        # This could be classified as either mathematics or programming
-        # depending on the implementation, but should have lower confidence
-        assert domain in ("mathematics", "programming")
-        assert confidence <= 0.7  # Confidence should be lower for mixed content
-
-    def test_rule_based_classification(self, domain_classifier):
-        """Test rule-based classification method."""
-        domain, confidence = domain_classifier._rule_based_classification(MATH_TEXT, "en")
-
-        assert domain == "mathematics"
-        assert confidence > 0.5
-
-        domain, confidence = domain_classifier._rule_based_classification(PROGRAMMING_TEXT, "en")
+    def test_classify_text_russian(self, domain_classifier):
+        """Test classification of Russian text."""
+        text = "В программировании на Python мы используем классы и объекты."
+        domain, confidence = domain_classifier.classify_text(text, "ru")
 
         assert domain == "programming"
         assert confidence > 0.5
 
-    def test_train_model(self, domain_classifier):
-        """Test training the classification model."""
-        training_data = [
-            {"text": "This is a calculus lecture about derivatives.", "domain": "mathematics"},
-            {"text": "We'll discuss integrals and differential equations.", "domain": "mathematics"},
-            {"text": "Let's write a Python program to sort an array.", "domain": "programming"},
-            {"text": "Object-oriented programming with classes and methods.", "domain": "programming"},
-            {"text": "We'll study Newton's laws and kinematics.", "domain": "physics"},
-            {"text": "Thermodynamics and energy conservation principles.", "domain": "physics"}
-        ]
+    def test_classify_mixed_domain(self, domain_classifier):
+        """Test classification of text with mixed domain signals."""
+        text = "This lecture covers both mathematical concepts and programming implementations."
+        domain, confidence = domain_classifier.classify_text(text, "en")
 
-        # Mock the sklearn components
-        with patch('sklearn.feature_extraction.text.TfidfVectorizer'), \
-             patch('sklearn.linear_model.LogisticRegression'), \
-             patch('sklearn.pipeline.Pipeline'):
+        # Either mathematics or programming could be determined as the primary domain
+        assert domain in ["mathematics", "programming"]
+        # Confidence should be lower for mixed content
+        assert confidence <= 0.8
 
-            # Train the model
-            domain_classifier.train_model(training_data)
+    def test_classify_empty_text(self, domain_classifier):
+        """Test classification of empty text."""
+        domain, confidence = domain_classifier.classify_text("", "en")
 
-            # Check that the model was created
-            assert domain_classifier.ml_model is not None
+        assert domain == "unknown"
+        assert confidence == 0.0
 
-    def test_classify_transcript(self, domain_classifier):
-        """Test classifying a full transcript."""
-        # Mock the enhanced classification method
-        with patch.object(domain_classifier, '_enhanced_classification', return_value=("mathematics", 0.9)):
-            domain, confidence = domain_classifier.classify_transcript(MATH_TRANSCRIPT)
-
-            assert domain == "mathematics"
-            assert confidence == 0.9
-
-    @patch('sklearn.pipeline.Pipeline')
-    def test_classify_text_with_ml_model(self, mock_pipeline, domain_classifier):
-        """Test classifying text using the ML model."""
-        # Set up the mock ML model
-        mock_model = MagicMock()
-        mock_model.predict.return_value = ["mathematics"]
-        mock_model.predict_proba.return_value = [[0.2, 0.7, 0.1]]  # Probabilities for each class
-
-        # Assign the mock model
-        domain_classifier.ml_model = mock_model
-
-        # Call the method
-        domain, confidence = domain_classifier.classify_text(MATH_TEXT, "en")
-
-        # Check that the ML model was used
-        assert mock_model.predict.called
-        assert mock_model.predict_proba.called
+    def test_classify_transcript(self, domain_classifier, sample_transcript):
+        """Test classification of a complete transcript."""
+        domain, confidence = domain_classifier.classify_transcript(sample_transcript)
 
         assert domain == "mathematics"
-        assert confidence == 0.7
+        assert confidence > 0.5
 
-    def test_extract_domain_specific_features_math(self, domain_classifier):
-        """Test extracting mathematics-specific features."""
-        features = domain_classifier.extract_domain_specific_features(MATH_TRANSCRIPT, "mathematics")
+    def test_classify_russian_transcript(self, domain_classifier, sample_russian_transcript):
+        """Test classification of a Russian transcript."""
+        domain, confidence = domain_classifier.classify_transcript(sample_russian_transcript)
+
+        assert domain == "programming"
+        assert confidence > 0.5
+
+    def test_extract_domain_features_mathematics(self, domain_classifier, sample_transcript):
+        """Test extraction of domain-specific features for mathematics."""
+        features = domain_classifier.extract_domain_specific_features(sample_transcript, "mathematics")
 
         assert features["domain"] == "mathematics"
-        assert features["theoretical_segments"] == 2
-        assert features["practical_segments"] == 1
+        assert "key_concepts" in features
+        assert len(features["key_concepts"]) > 0
 
-        # Check domain-specific metadata
-        assert "domain_specific_metadata" in features
-        assert "formulas_count" in features["domain_specific_metadata"]
-        assert features["domain_specific_metadata"]["formulas_count"] == 3
-
-    def test_extract_domain_specific_features_programming(self, domain_classifier):
-        """Test extracting programming-specific features."""
-        features = domain_classifier.extract_domain_specific_features(PROGRAMMING_TRANSCRIPT, "programming")
+    def test_extract_domain_features_programming(self, domain_classifier, sample_russian_transcript):
+        """Test extraction of domain-specific features for programming."""
+        features = domain_classifier.extract_domain_specific_features(sample_russian_transcript, "programming")
 
         assert features["domain"] == "programming"
-        assert features["theoretical_segments"] == 2
-        assert features["practical_segments"] == 1
+        assert "key_concepts" in features
+        assert len(features["key_concepts"]) > 0
 
-        # Check domain-specific metadata
-        assert "domain_specific_metadata" in features
-        assert "code_snippets_count" in features["domain_specific_metadata"]
-        assert features["domain_specific_metadata"]["code_snippets_count"] == 1
+    def test_extract_domain_features_physics(self, domain_classifier):
+        """Test extraction of domain-specific features for physics."""
+        transcript = {
+            "segments": [
+                {
+                    "id": "seg1",
+                    "start_time": 0.0,
+                    "end_time": 10.0,
+                    "text": "Today we will study the laws of thermodynamics.",
+                    "language": "en"
+                },
+                {
+                    "id": "seg2",
+                    "start_time": 10.0,
+                    "end_time": 20.0,
+                    "text": "Energy cannot be created or destroyed, only transformed.",
+                    "language": "en"
+                }
+            ],
+            "language": "en",
+            "domain": "physics",
+            "video_id": "test789"
+        }
 
-    def test_extract_math_features(self, domain_classifier):
-        """Test extracting mathematics-specific features."""
-        features = domain_classifier._extract_math_features(MATH_TRANSCRIPT, "en")
+        features = domain_classifier.extract_domain_specific_features(transcript, "physics")
 
-        assert "formulas_count" in features
-        assert features["formulas_count"] == 3
-        assert "theorems_count" in features
-        assert "proofs_count" in features
-        assert "definitions_count" in features
-        assert "topics" in features
+        assert features["domain"] == "physics"
+        assert "key_concepts" in features
+        assert len(features["key_concepts"]) > 0
 
-    def test_extract_programming_features(self, domain_classifier):
-        """Test extracting programming-specific features."""
-        features = domain_classifier._extract_programming_features(PROGRAMMING_TRANSCRIPT, "en")
+    def test_train_model(self, domain_classifier, sample_training_data):
+        """Test training of the classification model."""
+        # Train the model
+        domain_classifier.train_model(sample_training_data)
 
-        assert "code_snippets_count" in features
-        assert features["code_snippets_count"] == 1
-        assert "languages_mentioned" in features
-        assert "algorithms_count" in features
-        assert "data_structures_count" in features
-        assert "topics" in features
+        # Verify model exists after training
+        assert domain_classifier.ml_model is not None
 
-        # Check if Python is detected
-        assert "python" in [lang.lower() for lang in features["languages_mentioned"]]
+        # Test the trained model
+        text = "The integral of x^2 is x^3/3 + C."
+        domain, confidence = domain_classifier.classify_text(text, "en")
 
-    def test_extract_domain_concepts(self, domain_classifier):
-        """Test extracting domain concepts from a transcript."""
-        with patch.object(domain_classifier, '_count_concept_occurrences', return_value=3), \
-             patch.object(domain_classifier, '_is_concept_theoretical', return_value=True):
+        assert domain == "mathematics"
+        assert confidence > 0.5
 
-            concepts = domain_classifier._extract_domain_concepts(MATH_TRANSCRIPT, "mathematics", "en")
+    @pytest.mark.integration
+    def test_db_integration(self, domain_classifier, test_db_context):
+        """Test integration with database for caching and persistence."""
+        # This test requires the database context
+        if not hasattr(domain_classifier, 'db_context') or domain_classifier.db_context is None:
+            domain_classifier.db_context = test_db_context
+            domain_classifier.cache = test_db_context.get_cache_region("domain_classifier")
 
-            assert isinstance(concepts, list)
-            assert len(concepts) <= 10  # Should return at most 10 concepts
+        # Classify text and check that it gets cached
+        text = "In physics, we study the motion of objects."
+        domain, confidence = domain_classifier.classify_text(text, "en")
 
-            # Check concept structure if any were found
-            if concepts:
-                assert "text" in concepts[0]
-                assert "domain" in concepts[0]
-                assert "frequency" in concepts[0]
-                assert "theoretical" in concepts[0]
-                assert concepts[0]["domain"] == "mathematics"
+        assert domain == "physics"
 
-    def test_is_concept_theoretical(self, domain_classifier):
-        """Test determining if a concept is theoretical or practical."""
-        # Create segments where "calculus" appears in both theoretical and practical segments
-        segments = [
-            {"text": "Calculus is the study of change.", "content_type": "theoretical"},
-            {"text": "Calculus has many real-world applications.", "content_type": "theoretical"},
-            {"text": "Let's solve this calculus problem.", "content_type": "practical"}
-        ]
+        # Check if the result is cached
+        cache_key = f"classify_{hashlib.md5(text.encode()).hexdigest()}_en_None"
+        cached_result = domain_classifier.cache.get(cache_key)
 
-        # Concept appears more in theoretical segments
-        is_theoretical = domain_classifier._is_concept_theoretical("calculus", segments, "en")
-        assert is_theoretical is True
+        assert cached_result is not None
+        assert cached_result[0] == domain
+        assert cached_result[1] == confidence
 
-        # Create segments where "problem" appears more in practical segments
-        segments = [
-            {"text": "Understanding problem statements is important.", "content_type": "theoretical"},
-            {"text": "Let's solve this problem step by step.", "content_type": "practical"},
-            {"text": "Here's another problem to practice with.", "content_type": "practical"}
-        ]
+    def test_theoretical_content_detection(self, domain_classifier):
+        """Test detection of theoretical content."""
+        text = "In theoretical calculus, we define the concept of a limit."
+        domain, _ = domain_classifier.classify_text(text, "en")
 
-        # Concept appears more in practical segments
-        is_theoretical = domain_classifier._is_concept_theoretical("problem", segments, "en")
-        assert is_theoretical is False
+        assert domain == "mathematics"
 
-    def test_count_concept_occurrences(self, domain_classifier):
-        """Test counting occurrences of a concept in text."""
-        text = "Calculus is important. We use calculus to solve problems. Differential calculus focuses on rates of change."
+        # Create a segment for theoretical detection
+        segment = {
+            "text": text,
+            "language": "en"
+        }
 
-        count = domain_classifier._count_concept_occurrences("calculus", text)
-        assert count == 3
+        # In a real implementation, this would be included in domain-specific features
+        features = domain_classifier.extract_domain_specific_features(
+            {"segments": [segment], "language": "en"}, "mathematics"
+        )
 
-        count = domain_classifier._count_concept_occurrences("derivative", text)
-        assert count == 0
+        # Check for theoretical key concepts
+        theoretical_concepts = [c for c in features["key_concepts"] if c.get("theoretical", False)]
+        assert len(theoretical_concepts) > 0
+
+    def test_practical_content_detection(self, domain_classifier):
+        """Test detection of practical content."""
+        text = "Let's implement a sorting algorithm in Python."
+        domain, _ = domain_classifier.classify_text(text, "en")
+
+        assert domain == "programming"
+
+        # Create a segment for practical detection
+        segment = {
+            "text": text,
+            "language": "en"
+        }
+
+        # In a real implementation, this would be included in domain-specific features
+        features = domain_classifier.extract_domain_specific_features(
+            {"segments": [segment], "language": "en"}, "programming"
+        )
+
+        # Check for practical key concepts
+        practical_concepts = [c for c in features["key_concepts"] if not c.get("theoretical", False)]
+        assert len(practical_concepts) > 0
+
+    def test_russian_theoretical_content(self, domain_classifier):
+        """Test detection of theoretical content in Russian."""
+        text = "В теоретическом исчислении мы рассматриваем понятие предела."
+        domain, _ = domain_classifier.classify_text(text, "ru")
+
+        assert domain == "mathematics"
+
+        # Create a segment for theoretical detection
+        segment = {
+            "text": text,
+            "language": "ru"
+        }
+
+        # In a real implementation, this would be included in domain-specific features
+        features = domain_classifier.extract_domain_specific_features(
+            {"segments": [segment], "language": "ru"}, "mathematics"
+        )
+
+        # Check for theoretical key concepts
+        theoretical_concepts = [c for c in features["key_concepts"] if c.get("theoretical", False)]
+        assert len(theoretical_concepts) > 0

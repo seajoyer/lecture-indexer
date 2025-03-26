@@ -152,7 +152,7 @@ class YouTubeDataExtractor:
 
     @youtube_api_retry(max_retries=3, base_delay=2.0)
     @time_function(threshold_ms=2000)
-    @measure_memory(threshold_mb=10)
+    @measure_memory(name="extract_video_metadata", threshold_mb=10)
     def extract_video_metadata(self, video_id: str) -> Dict[str, Any]:
         """
         Extracts metadata for a YouTube video with caching and performance monitoring.
@@ -322,7 +322,7 @@ class YouTubeDataExtractor:
 
     @youtube_api_retry(max_retries=3, base_delay=2.0)
     @time_function(threshold_ms=3000)
-    @measure_memory(threshold_mb=20)
+    @measure_memory(name="extract_transcript", threshold_mb=20)
     def extract_transcript(self, video_id: str, language_preference: List[str] = ['en', 'ru']) -> List[Dict]:
         """
         Extracts transcript for a YouTube video with preference for specified languages.

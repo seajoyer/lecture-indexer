@@ -573,7 +573,7 @@ class DomainClassifier:
         return base_domain, base_confidence
 
     @time_function(threshold_ms=2000)
-    @measure_memory(threshold_mb=50)
+    @measure_memory(name="extract_domain_specific_features", threshold_mb=50)
     def extract_domain_specific_features(self, transcript: Dict[str, Any], domain: str) -> Dict[str, Any]:
         """
         Extract domain-specific features from a transcript with improved concept detection.
@@ -1050,14 +1050,14 @@ class DomainClassifier:
 
             if concept_lower in text:
                 # Check if concept is defined
-                if re.search(f'{concept_lower}\s+(is|are|refers to|means|define|represent)', text) or \
-                   re.search(f'(define|definition of|concept of|explain)\s+{concept_lower}', text):
+                if re.search(f'{concept_lower}\\s+(is|are|refers to|means|define|represent)', text) or \
+                    re.search(f'(define|definition of|concept of|explain)\\s+{concept_lower}', text):
                     relevance += 0.4
                     break
 
                 # Check if concept is emphasized
-                elif re.search(f'important\s+{concept_lower}|key\s+{concept_lower}', text) or \
-                     re.search(f'{concept_lower}\s+is important', text):
+                elif re.search(f'important\\s+{concept_lower}|key\\s+{concept_lower}', text) or \
+                    re.search(f'{concept_lower}\\s+is important', text):
                     relevance += 0.3
                     break
 
