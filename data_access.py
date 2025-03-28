@@ -68,6 +68,8 @@ class DataAccess:
         conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging for better concurrency
         conn.execute("PRAGMA synchronous = NORMAL")  # Better performance with reasonable safety
         conn.execute("PRAGMA cache_size = 10000")  # Larger cache for better performance
+        conn.execute("PRAGMA temp_store = MEMORY")  # Store temp tables in memory
+        conn.execute("PRAGMA mmap_size = 30000000")  # Memory-mapped I/O (30MB)
 
         return conn
 
@@ -150,6 +152,9 @@ class DataAccess:
         -- Create index on theory_practice_ratio for filtering
         CREATE INDEX IF NOT EXISTS idx_videos_theory_practice ON videos(theory_practice_ratio);
 
+        -- Create index on language for multilingual filtering
+        CREATE INDEX IF NOT EXISTS idx_videos_language ON videos(language);
+
         -- Segments table for storing transcript segments
         CREATE TABLE IF NOT EXISTS segments (
             segment_id TEXT PRIMARY KEY,
@@ -158,6 +163,7 @@ class DataAccess:
             end_time REAL,
             text TEXT,
             context_type TEXT,
+            language TEXT,
             FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE
         );
 
@@ -170,12 +176,16 @@ class DataAccess:
         -- Create index on start_time for timeline ordering
         CREATE INDEX IF NOT EXISTS idx_segments_start_time ON segments(start_time);
 
+        -- Add language index for multilingual search
+        CREATE INDEX IF NOT EXISTS idx_segments_language ON segments(language);
+
         -- Concepts table for storing concept information
         CREATE TABLE IF NOT EXISTS concepts (
             concept_id TEXT PRIMARY KEY,
             text TEXT NOT NULL,
             domain TEXT,
             concept_class TEXT,
+            language TEXT,  -- Store concept language
             total_occurrences INTEGER DEFAULT 0
         );
 
@@ -183,6 +193,7 @@ class DataAccess:
         CREATE INDEX IF NOT EXISTS idx_concepts_domain ON concepts(domain);
         CREATE INDEX IF NOT EXISTS idx_concepts_class ON concepts(concept_class);
         CREATE INDEX IF NOT EXISTS idx_concepts_text ON concepts(text);
+        CREATE INDEX IF NOT EXISTS idx_concepts_language ON concepts(language);
 
         -- Occurrences table for concept-segment associations
         CREATE TABLE IF NOT EXISTS occurrences (
@@ -204,6 +215,10 @@ class DataAccess:
         CREATE INDEX IF NOT EXISTS idx_occurrences_video_id ON occurrences(video_id);
         CREATE INDEX IF NOT EXISTS idx_occurrences_context_type ON occurrences(context_type);
 
+        -- Add a composite index for efficient related concept lookup
+        CREATE INDEX IF NOT EXISTS idx_occurrences_segment_concept ON occurrences(segment_id, concept_id);
+        CREATE INDEX IF NOT EXISTS idx_occurrences_video_segment ON occurrences(video_id, segment_id);
+
         -- Create FTS table for search with improved tokenization and ranking
         CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
             id,
@@ -212,6 +227,7 @@ class DataAccess:
             context_type,
             item_type,
             video_id,
+            language,  -- Add language column for multilingual search
             tokenize='porter unicode61 remove_diacritics 2'
         );
 
@@ -225,6 +241,15 @@ class DataAccess:
             created_at TEXT,
             updated_at TEXT
         );
+
+        -- Create language_resources table for storing language-specific resources
+        CREATE TABLE IF NOT EXISTS language_resources (
+            language_code TEXT PRIMARY KEY,
+            stopwords TEXT,  -- JSON array of stopwords
+            theoretical_patterns TEXT,  -- JSON array of theoretical patterns
+            practical_patterns TEXT,  -- JSON array of practical patterns
+            updated_at TEXT
+        );
         """
 
         try:
@@ -235,6 +260,232 @@ class DataAccess:
         except Exception as e:
             logger.error(f"Error initializing database schema: {e}")
             raise
+
+    # The optimized list_concepts query
+    def list_concepts(self, domain_filter=None, video_filter=None, playlist_filter=None, language=None):
+        """
+        List all concepts with improved query performance
+
+        Args:
+            domain_filter: Optional domain filter
+            video_filter: Optional video ID filter
+            playlist_filter: Optional playlist ID filter
+            language: Optional language filter
+
+        Returns:
+            List of concepts with stats
+        """
+        try:
+            # Get video IDs from playlist if specified
+            video_ids = []
+            if playlist_filter:
+                video_ids = self._get_playlist_video_ids(playlist_filter)
+                if not video_ids:
+                    logger.warning(f"No videos found for playlist {playlist_filter}")
+                    return []
+
+            # Build optimized query with pre-aggregated related concept counts
+            query = """
+            WITH concept_stats AS (
+                -- Pre-compute related concept counts for each concept
+                SELECT c1.concept_id,
+                       COUNT(DISTINCT c2.concept_id) as related_count
+                FROM occurrences o1
+                JOIN occurrences o2 ON o1.segment_id = o2.segment_id AND o1.video_id = o2.video_id
+                JOIN concepts c1 ON o1.concept_id = c1.concept_id
+                JOIN concepts c2 ON o2.concept_id = c2.concept_id
+                WHERE o1.concept_id != o2.concept_id
+                GROUP BY c1.concept_id
+            )
+            SELECT c.*,
+                   COUNT(DISTINCT o.video_id) as video_count,
+                   COUNT(DISTINCT o.occurrence_id) as occurrence_count,
+                   COALESCE(cs.related_count, 0) as related_concepts_count
+            FROM concepts c
+            JOIN occurrences o ON c.concept_id = o.concept_id
+            JOIN videos v ON o.video_id = v.video_id
+            LEFT JOIN concept_stats cs ON c.concept_id = cs.concept_id
+            """
+
+            # Add WHERE clause if we have filters
+            where_clauses = []
+            params = []
+
+            if domain_filter:
+                where_clauses.append("c.domain = ?")
+                params.append(domain_filter)
+
+            if video_filter:
+                where_clauses.append("o.video_id = ?")
+                params.append(video_filter)
+
+            if language:
+                where_clauses.append("(c.language = ? OR c.language IS NULL)")
+                params.append(language)
+
+            if video_ids:
+                placeholders = ",".join(['?'] * len(video_ids))
+                where_clauses.append(f"o.video_id IN ({placeholders})")
+                params.extend(video_ids)
+
+            if where_clauses:
+                query += " WHERE " + " AND ".join(where_clauses)
+
+            # Group and order with enhanced sorting
+            query += """
+            GROUP BY c.concept_id
+            ORDER BY
+                c.domain,
+                c.concept_class,
+                occurrence_count DESC,
+                related_concepts_count DESC
+            """
+
+            # Execute the query with a custom timeout to avoid long-running queries
+            return self._execute_query_with_timeout(query, tuple(params), 10)  # 10 second timeout
+        except Exception as e:
+            logger.error(f"Error listing concepts: {e}")
+            return []
+
+    def get_language_resources(self, language_code):
+        """
+        Get language-specific resources from the database.
+
+        Args:
+            language_code: Language code (e.g., 'en', 'ru')
+
+        Returns:
+            Dictionary with language resources
+        """
+        import json
+
+        query = "SELECT * FROM language_resources WHERE language_code = ?"
+        results = self.execute_query(query, (language_code,))
+
+        if not results:
+            return None
+
+        # Parse JSON fields
+        resources = dict(results[0])
+
+        # Convert JSON strings to Python objects
+        for field in ['stopwords', 'theoretical_patterns', 'practical_patterns']:
+            if resources.get(field):
+                try:
+                    resources[field] = json.loads(resources[field])
+                except:
+                    resources[field] = []
+
+        return resources
+
+    def save_language_resources(self, language_code, resources):
+        """
+        Save language-specific resources to the database.
+
+        Args:
+            language_code: Language code
+            resources: Dictionary with language resources
+
+        Returns:
+            True if successful, False otherwise
+        """
+        import json
+
+        try:
+            # Convert Python objects to JSON strings
+            data = {
+                'language_code': language_code,
+                'stopwords': json.dumps(resources.get('stopwords', [])),
+                'theoretical_patterns': json.dumps(resources.get('theoretical_patterns', [])),
+                'practical_patterns': json.dumps(resources.get('practical_patterns', [])),
+                'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+            # Check if language exists
+            existing = self.get_language_resources(language_code)
+
+            if existing:
+                # Update existing
+                query = """
+                UPDATE language_resources SET
+                    stopwords = ?,
+                    theoretical_patterns = ?,
+                    practical_patterns = ?,
+                    updated_at = ?
+                WHERE language_code = ?
+                """
+                self.execute_update(query, (
+                    data['stopwords'],
+                    data['theoretical_patterns'],
+                    data['practical_patterns'],
+                    data['updated_at'],
+                    language_code
+                ))
+            else:
+                # Insert new
+                query = """
+                INSERT INTO language_resources (
+                    language_code, stopwords, theoretical_patterns,
+                    practical_patterns, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """
+                self.execute_update(query, (
+                    language_code,
+                    data['stopwords'],
+                    data['theoretical_patterns'],
+                    data['practical_patterns'],
+                    data['updated_at']
+                ))
+
+            return True
+        except Exception as e:
+            logger.error(f"Error saving language resources: {e}")
+            return False
+
+    def _execute_query_with_timeout(self, query, params=(), timeout_seconds=5):
+        """
+        Execute a query with a timeout to avoid long-running queries.
+
+        Args:
+            query: SQL query
+            params: Query parameters
+            timeout_seconds: Maximum execution time in seconds
+
+        Returns:
+            Query results or empty list on timeout
+        """
+        try:
+            with self.get_connection() as conn:
+                # Set query timeout
+                conn.execute(f"PRAGMA busy_timeout = {timeout_seconds * 1000}")
+
+                # Execute with timeout
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+
+                # Get results
+                columns = [col[0] for col in cursor.description] if cursor.description else []
+                results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                return results
+        except sqlite3.OperationalError as e:
+            if "timeout" in str(e).lower():
+                logger.warning(f"Query timed out after {timeout_seconds} seconds: {query[:100]}...")
+                return []
+            else:
+                logger.error(f"Database error: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Error executing query: {e}")
+            raise
+
+    def _get_playlist_video_ids(self, playlist_id):
+        """Get video IDs for a playlist"""
+        query = "SELECT video_ids FROM playlists WHERE playlist_id = ?"
+        results = self.execute_query(query, (playlist_id,))
+
+        if results and results[0]["video_ids"]:
+            return results[0]["video_ids"].split(",")
+        return []
 
     def execute_query(self, query: str, params: Union[tuple, list] = ()) -> List[Dict[str, Any]]:
         """
@@ -732,9 +983,10 @@ class DataAccess:
 
     # CONCEPT OPERATIONS
 
+    # Update the save_concept method to handle languages
     def save_concept(self, concept_data: Dict[str, Any]) -> Optional[str]:
         """
-        Save or update a concept with improved validation.
+        Save or update a concept with improved validation and language support.
 
         Args:
             concept_data: Concept data dictionary
@@ -751,13 +1003,14 @@ class DataAccess:
             return None
 
         domain = concept_data.get("domain", "unknown")
+        language = concept_data.get("language", "en")
 
         # Generate concept ID if not provided
         concept_id = concept_data.get("concept_id")
         if not concept_id:
-            # Create deterministic ID based on text and domain
+            # Create deterministic ID based on text, domain and language
             text_for_hash = concept_text.lower().strip()
-            concept_id = hashlib.md5(f"{text_for_hash}:{domain}".encode()).hexdigest()
+            concept_id = hashlib.md5(f"{text_for_hash}:{domain}:{language}".encode()).hexdigest()
 
         # Determine concept class
         concept_class = concept_data.get("concept_class", "")
@@ -776,6 +1029,7 @@ class DataAccess:
                     text = ?,
                     domain = ?,
                     concept_class = ?,
+                    language = ?,
                     total_occurrences = ?
                 WHERE concept_id = ?
                 """
@@ -783,6 +1037,7 @@ class DataAccess:
                     concept_text,
                     domain,
                     concept_class,
+                    language,
                     concept_data.get("total_occurrences", 0),
                     concept_id
                 ))
@@ -790,14 +1045,15 @@ class DataAccess:
                 # Insert new concept
                 query = """
                 INSERT INTO concepts (
-                    concept_id, text, domain, concept_class, total_occurrences
-                ) VALUES (?, ?, ?, ?, ?)
+                    concept_id, text, domain, concept_class, language, total_occurrences
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     concept_id,
                     concept_text,
                     domain,
                     concept_class,
+                    language,
                     concept_data.get("total_occurrences", 0)
                 ))
 
@@ -809,10 +1065,10 @@ class DataAccess:
 
             self.execute_update(
                 """
-                INSERT INTO search_index (id, text, domain, context_type, item_type, video_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (concept_id, concept_text, domain, concept_class, "concept", None)
+                (concept_id, concept_text, domain, concept_class, "concept", None, language)
             )
 
             # Save occurrences if provided
@@ -821,50 +1077,8 @@ class DataAccess:
                 # Find segments containing this concept
                 segments = self.get_video_segments(video_id)
 
-                occurrences = []
-                for segment in segments:
-                    segment_text = segment["text"].lower()
-                    concept_text_lower = concept_text.lower()
-
-                    # Check if concept appears in segment
-                    # Split the concept text to handle multi-word concepts
-                    concept_parts = concept_text_lower.split()
-                    if len(concept_parts) == 1:
-                        # For single-word concepts, ensure it's a complete word
-                        if re.search(r'\b' + re.escape(concept_text_lower) + r'\b', segment_text):
-                            occurrence_id = hashlib.md5(
-                                f"{concept_id}:{segment['segment_id']}".encode()
-                            ).hexdigest()
-
-                            occurrences.append({
-                                "occurrence_id": occurrence_id,
-                                "concept_id": concept_id,
-                                "video_id": video_id,
-                                "segment_id": segment["segment_id"],
-                                "start_time": segment["start_time"],
-                                "end_time": segment["end_time"],
-                                "context_type": segment["context_type"],
-                                "context_text": segment["text"]
-                            })
-                    else:
-                        # For multi-word concepts, check if all parts appear in the right order
-                        if all(part in segment_text for part in concept_parts):
-                            # More thorough check for sequence
-                            if " ".join(concept_parts) in segment_text:
-                                occurrence_id = hashlib.md5(
-                                    f"{concept_id}:{segment['segment_id']}".encode()
-                                ).hexdigest()
-
-                                occurrences.append({
-                                    "occurrence_id": occurrence_id,
-                                    "concept_id": concept_id,
-                                    "video_id": video_id,
-                                    "segment_id": segment["segment_id"],
-                                    "start_time": segment["start_time"],
-                                    "end_time": segment["end_time"],
-                                    "context_type": segment["context_type"],
-                                    "context_text": segment["text"]
-                                })
+                # Create occurrences
+                occurrences = self._find_concept_occurrences(concept_id, concept_text, segments, video_id)
 
                 if occurrences:
                     self.save_occurrences(concept_id, occurrences)
@@ -878,6 +1092,77 @@ class DataAccess:
         except Exception as e:
             logger.error(f"Error saving concept {concept_text}: {e}")
             return None
+
+    def _find_concept_occurrences(self, concept_id, concept_text, segments, video_id):
+        """
+        Find segment occurrences of a concept with improved detection.
+
+        Args:
+            concept_id: Concept ID
+            concept_text: Concept text
+            segments: Video segments
+            video_id: Video ID
+
+        Returns:
+            List of occurrence dictionaries
+        """
+        import hashlib
+        import re
+
+        occurrences = []
+        concept_text_lower = concept_text.lower()
+        concept_parts = concept_text_lower.split()
+
+        # Single word vs multi-word search strategies
+        if len(concept_parts) == 1:
+            # For single words, search for exact word matches with word boundaries
+            pattern = re.compile(r'\b' + re.escape(concept_text_lower) + r'\b', re.IGNORECASE)
+
+            for segment in segments:
+                segment_text = segment.get("text", "").lower()
+                if pattern.search(segment_text):
+                    occurrence_id = hashlib.md5(
+                        f"{concept_id}:{segment['segment_id']}".encode()
+                    ).hexdigest()
+
+                    occurrences.append({
+                        "occurrence_id": occurrence_id,
+                        "concept_id": concept_id,
+                        "video_id": video_id,
+                        "segment_id": segment["segment_id"],
+                        "start_time": segment.get("start_time", 0),
+                        "end_time": segment.get("end_time", 0),
+                        "context_type": segment.get("context_type", "mixed"),
+                        "context_text": segment.get("text", "")
+                    })
+        else:
+            # For multi-word concepts, check if all parts appear and at least one exact match
+            for segment in segments:
+                segment_text = segment.get("text", "").lower()
+
+                # Check for approximate match (all words present)
+                if all(part in segment_text for part in concept_parts):
+                    # Verify with more strict matching for phrases
+                    concept_phrase = " ".join(concept_parts)
+
+                    # Try to find an exact match of the phrase
+                    if concept_phrase in segment_text or re.search(r'\b' + re.escape(concept_phrase) + r'\b', segment_text):
+                        occurrence_id = hashlib.md5(
+                            f"{concept_id}:{segment['segment_id']}".encode()
+                        ).hexdigest()
+
+                        occurrences.append({
+                            "occurrence_id": occurrence_id,
+                            "concept_id": concept_id,
+                            "video_id": video_id,
+                            "segment_id": segment["segment_id"],
+                            "start_time": segment.get("start_time", 0),
+                            "end_time": segment.get("end_time", 0),
+                            "context_type": segment.get("context_type", "mixed"),
+                            "context_text": segment.get("text", "")
+                        })
+
+        return occurrences
 
     def get_concept(self, concept_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1067,7 +1352,7 @@ class DataAccess:
 
     # SEARCH OPERATIONS
 
-    def build_enhanced_search_query(self, query_text: str, domain: Optional[str] = None) -> str:
+    def build_enhanced_search_query(self, query_text: str, domain: Optional[str] = None, language: Optional[str] = None) -> str:
         """
         Build an enhanced search query with improved handling of different languages
         and special characters.
@@ -1075,6 +1360,7 @@ class DataAccess:
         Args:
             query_text: Original query text
             domain: Optional domain for domain-specific handling
+            language: Optional language for language-specific query handling
 
         Returns:
             Enhanced search query for SQLite FTS5
@@ -1085,7 +1371,9 @@ class DataAccess:
             return ""
 
         # For non-Latin queries, use a simpler approach to avoid syntax errors
-        if any(ord(c) > 127 for c in query_text):
+        is_non_latin = any(ord(c) > 127 for c in query_text) or language == 'ru'
+
+        if is_non_latin:
             # For non-Latin text (e.g., Russian), use a safe approach
             # Split by whitespace and quote each term
             terms = query_text.split()
@@ -1164,7 +1452,7 @@ class DataAccess:
 
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Perform enhanced search using SQLite FTS with improvements.
+        Perform enhanced search using SQLite FTS with multilingual support.
 
         Args:
             query: Query parameters dictionary
@@ -1180,6 +1468,7 @@ class DataAccess:
             filters = query.get("filters", {})
             theory_practice_ratio = query.get("theory_practice_ratio")
             domain = query.get("domain")
+            language = query.get("language")  # Extract language filter
             pagination = query.get("pagination", {})
 
             offset = pagination.get("offset", 0)
@@ -1193,7 +1482,7 @@ class DataAccess:
                 }
 
             # Generate cache key
-            cache_key = f"search_{query_text}_{domain}_{theory_practice_ratio}_{offset}_{limit}"
+            cache_key = f"search_{query_text}_{domain}_{theory_practice_ratio}_{offset}_{limit}_{language}"
             if filters:
                 cache_key += f"_filters:{hash(str(filters))}"
 
@@ -1203,18 +1492,18 @@ class DataAccess:
                 return cached_result
 
             # Build enhanced search query for non-exact matching
-            search_query = self.build_enhanced_search_query(query_text, domain)
+            search_query = self.build_enhanced_search_query(query_text, domain, language)
 
             # Build SQL query with improved JOINs for better performance
             sql = """
             WITH matched_items AS (
                 SELECT si.id, si.text, si.domain, si.context_type, si.item_type, si.video_id,
-                    rank
+                    si.language, rank
                 FROM search_index si
                 WHERE search_index MATCH ?
             )
 
-            SELECT mi.id, mi.text, mi.domain, mi.context_type, mi.item_type, mi.video_id,
+            SELECT mi.id, mi.text, mi.domain, mi.context_type, mi.item_type, mi.video_id, mi.language,
                 v.title as video_title,
                 CASE WHEN mi.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
                 CASE WHEN mi.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
@@ -1233,6 +1522,10 @@ class DataAccess:
             if domain:
                 where_clauses.append("mi.domain = ?")
                 params.append(domain)
+
+            if language:
+                where_clauses.append("(mi.language = ? OR mi.language IS NULL)")
+                params.append(language)
 
             if "video_id" in filters:
                 where_clauses.append("mi.video_id = ?")
@@ -1277,6 +1570,10 @@ class DataAccess:
                 count_sql += " AND domain = ?"
                 count_params.append(domain)
 
+            if language:
+                count_sql += " AND (language = ? OR language IS NULL)"
+                count_params.append(language)
+
             if "video_id" in filters:
                 count_sql += " AND video_id = ?"
                 count_params.append(filters["video_id"])
@@ -1311,7 +1608,8 @@ class DataAccess:
                     "video_title": r["video_title"],
                     "start_time": r["start_time"],
                     "end_time": r["end_time"],
-                    "context_text": r["context_text"]
+                    "context_text": r["context_text"],
+                    "language": r["language"]  # Include language in result
                 }
 
                 # Get additional data for concepts

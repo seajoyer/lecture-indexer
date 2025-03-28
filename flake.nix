@@ -54,6 +54,8 @@
           pylint
           black
           isort
+
+          langdetect
         ]);
 
         # Download spaCy models

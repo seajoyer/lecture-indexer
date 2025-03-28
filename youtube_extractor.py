@@ -1,6 +1,6 @@
 """
-Simplified YouTube data extractor for the Lecture Video Content Indexer.
-Handles extraction of video metadata and transcripts with minimal complexity.
+Enhanced YouTube data extractor for the Lecture Video Content Indexer.
+Handles extraction of video metadata and transcripts with improved multilingual support.
 """
 
 import re
@@ -9,6 +9,10 @@ import googleapiclient.discovery
 import googleapiclient.errors
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 from typing import Dict, List, Tuple, Any, Optional
+import json
+import unicodedata
+import langdetect
+from langdetect.lang_detect_exception import LangDetectException
 
 # Import simplified modules
 from cache_manager import cache_get, cache_set
@@ -20,7 +24,7 @@ logger = logging.getLogger(__name__)
 class YouTubeExtractor:
     """
     Extracts video metadata and transcripts from YouTube videos.
-    Simplified version with reduced complexity and dependencies.
+    Enhanced version with improved multilingual support and language detection.
     """
 
     def __init__(self, api_key: str):
@@ -32,7 +36,36 @@ class YouTubeExtractor:
         """
         self.api_key = api_key
         self._youtube = None
-        logger.info("YouTubeExtractor initialized")
+
+        # Initialize language detection
+        self._init_language_detection()
+
+        logger.info("YouTubeExtractor initialized with enhanced multilingual support")
+
+    def _init_language_detection(self):
+        """Initialize language detection capabilities."""
+        try:
+            # Set a fixed seed for consistent language detection
+            langdetect.DetectorFactory.seed = 0
+
+            # Initialize language metadata for supported languages
+            self.language_metadata = {
+                'en': {
+                    'name': 'English',
+                    'codes': ['en', 'en-US', 'en-GB', 'en-CA', 'en-AU'],
+                    'script': 'Latin'
+                },
+                'ru': {
+                    'name': 'Russian',
+                    'codes': ['ru', 'ru-RU'],
+                    'script': 'Cyrillic'
+                }
+                # Add more languages as needed
+            }
+
+            logger.info("Language detection initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize language detection: {e}")
 
     @property
     def youtube(self):
@@ -111,7 +144,7 @@ class YouTubeExtractor:
     @time_function(2000)  # Log warning if takes more than 2 seconds
     def extract_video_metadata(self, video_id: str) -> Dict[str, Any]:
         """
-        Extracts metadata for a YouTube video.
+        Extracts metadata for a YouTube video with enhanced language detection.
 
         Args:
             video_id: YouTube video ID
@@ -158,19 +191,14 @@ class YouTubeExtractor:
             duration_str = content_details.get('duration', 'PT0S')
             duration_seconds = self._parse_duration(duration_str)
 
-            # Detect language from metadata
-            language = snippet.get('defaultLanguage', snippet.get('defaultAudioLanguage', ''))
-            if language.startswith('ru'):
-                language = 'ru'
-            elif language.startswith('en'):
-                language = 'en'
-            else:
-                language = ''  # Will be determined from transcript later
+            # Enhanced language detection from metadata
+            language = self._detect_language_from_metadata(snippet)
 
-            # Perform initial domain classification based on title and description
-            domain, domain_confidence = self._initial_domain_classification(
+            # Perform enhanced domain classification based on title and description
+            domain, domain_confidence = self._enhanced_domain_classification(
                 snippet.get('title', ''),
-                snippet.get('description', '')
+                snippet.get('description', ''),
+                language
             )
 
             # Create metadata object
@@ -215,6 +243,110 @@ class YouTubeExtractor:
 
             raise ValueError(error_message)
 
+    def _detect_language_from_metadata(self, snippet: Dict) -> str:
+        """
+        Enhanced language detection from video metadata.
+
+        Args:
+            snippet: Video snippet from YouTube API
+
+        Returns:
+            Language code (2-letter)
+        """
+        # First try to get language from YouTube metadata
+        meta_language = snippet.get('defaultLanguage', snippet.get('defaultAudioLanguage', ''))
+
+        # Clean up language code
+        if meta_language:
+            # Extract base language code
+            language_base = meta_language.split('-')[0].lower()
+
+            # If it's a supported language, return it
+            if language_base in self.language_metadata:
+                return language_base
+
+        # If no language in metadata or unsupported, try to detect from title/description
+        title = snippet.get('title', '')
+        description = snippet.get('description', '')
+
+        # Combine title and description for better detection
+        combined_text = f"{title} {description}"
+
+        # Get the dominant script (writing system)
+        script = self._detect_script(combined_text)
+
+        # Map scripts to likely languages
+        script_to_language = {
+            'Cyrillic': 'ru',
+            'Latin': 'en'
+            # Add more mappings as needed
+        }
+
+        if script in script_to_language:
+            return script_to_language[script]
+
+        # Fallback - try langdetect
+        try:
+            if combined_text:
+                detected = langdetect.detect(combined_text)
+                if detected in self.language_metadata:
+                    return detected
+        except LangDetectException:
+            pass
+
+        # Default to English if detection fails
+        return 'en'
+
+    def _detect_script(self, text: str) -> str:
+        """
+        Detect the dominant script/writing system of a text.
+
+        Args:
+            text: Text to analyze
+
+        Returns:
+            Script name
+        """
+        if not text:
+            return 'Latin'  # Default
+
+        # Count characters by script
+        script_counts = {}
+
+        for char in text:
+            if not char.isalpha():
+                continue
+
+            # Get character name which includes script information
+            try:
+                char_name = unicodedata.name(char)
+
+                # Extract script from character name
+                for script in ['LATIN', 'CYRILLIC', 'GREEK', 'ARABIC', 'HEBREW', 'CJK']:
+                    if script in char_name:
+                        script_counts[script] = script_counts.get(script, 0) + 1
+                        break
+            except ValueError:
+                continue
+
+        # Return the dominant script
+        if not script_counts:
+            return 'Latin'  # Default
+
+        dominant_script = max(script_counts.items(), key=lambda x: x[1])[0]
+
+        # Map to proper case
+        script_map = {
+            'LATIN': 'Latin',
+            'CYRILLIC': 'Cyrillic',
+            'GREEK': 'Greek',
+            'ARABIC': 'Arabic',
+            'HEBREW': 'Hebrew',
+            'CJK': 'CJK'
+        }
+
+        return script_map.get(dominant_script, 'Latin')
+
     def _get_mock_metadata(self, video_id: str) -> Dict[str, Any]:
         """
         Generate mock metadata for testing purposes.
@@ -244,7 +376,7 @@ class YouTubeExtractor:
     @time_function(3000)  # Log warning if takes more than 3 seconds
     def extract_transcript(self, video_id: str, language_preference: List[str] = ['en', 'ru']) -> List[Dict]:
         """
-        Extracts transcript for a YouTube video with preference for specified languages.
+        Extracts transcript for a YouTube video with improved multilingual support.
 
         Args:
             video_id: YouTube video ID
@@ -274,47 +406,90 @@ class YouTubeExtractor:
             # Get available transcript list
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-            # Try to get manually created transcript in preferred languages
-            for lang in language_preference:
-                try:
-                    transcript = transcript_list.find_manually_created_transcript([lang])
-                    logger.info(f"Found manually created transcript in {lang}")
-                    transcript_data = self._format_transcript(transcript.fetch(), lang)
-                    cache_set("transcript", cache_key, transcript_data)
-                    return transcript_data
-                except Exception:
-                    logger.debug(f"No manually created transcript in {lang}")
+            # Get all available languages
+            available_langs = {
+                **transcript_list._manually_created_transcripts,
+                **transcript_list._generated_transcripts
+            }
 
-            # Try to get generated transcript in preferred languages
-            for lang in language_preference:
-                try:
-                    transcript = transcript_list.find_generated_transcript([lang])
-                    logger.info(f"Found generated transcript in {lang}")
-                    transcript_data = self._format_transcript(transcript.fetch(), lang)
-                    cache_set("transcript", cache_key, transcript_data)
-                    return transcript_data
-                except Exception:
-                    logger.debug(f"No generated transcript in {lang}")
+            logger.info(f"Available transcript languages: {list(available_langs.keys())}")
 
-            # If no preferred language transcript is found, get the default one
-            try:
-                default_transcript = transcript_list.find_transcript(['en'])
-                logger.info(f"Using default transcript")
-                transcript_data = self._format_transcript(default_transcript.fetch(), 'en')
+            # Expand language codes to include regional variants
+            expanded_preferences = []
+            for lang in language_preference:
+                # Add base code
+                expanded_preferences.append(lang)
+
+                # Add known variants
+                if lang in self.language_metadata:
+                    expanded_preferences.extend(self.language_metadata[lang]['codes'])
+
+            # Deduplicate
+            expanded_preferences = list(dict.fromkeys(expanded_preferences))
+
+            # Try to match preferred languages
+            for lang_code in expanded_preferences:
+                # Try manually created transcripts first
+                for available_lang in transcript_list._manually_created_transcripts:
+                    # Check if language code matches or starts with preferred code
+                    if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
+                        try:
+                            transcript = transcript_list._manually_created_transcripts[available_lang]
+                            logger.info(f"Found manually created transcript in {available_lang}")
+
+                            # Extract base language code
+                            base_lang = lang_code.split('-')[0]
+
+                            transcript_data = self._format_transcript(transcript.fetch(), base_lang)
+                            cache_set("transcript", cache_key, transcript_data)
+                            return transcript_data
+                        except Exception as e:
+                            logger.debug(f"Error fetching manual transcript in {available_lang}: {e}")
+
+                # Then try generated transcripts
+                for available_lang in transcript_list._generated_transcripts:
+                    if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
+                        try:
+                            transcript = transcript_list._generated_transcripts[available_lang]
+                            logger.info(f"Found generated transcript in {available_lang}")
+
+                            # Extract base language code
+                            base_lang = lang_code.split('-')[0]
+
+                            transcript_data = self._format_transcript(transcript.fetch(), base_lang)
+                            cache_set("transcript", cache_key, transcript_data)
+                            return transcript_data
+                        except Exception as e:
+                            logger.debug(f"Error fetching generated transcript in {available_lang}: {e}")
+
+            # If no preferred language transcript is found, get any available transcript
+            if transcript_list._manually_created_transcripts:
+                # Prefer manually created transcripts
+                lang = list(transcript_list._manually_created_transcripts.keys())[0]
+                transcript = transcript_list._manually_created_transcripts[lang]
+                logger.info(f"Using fallback manual transcript in {lang}")
+
+                # Extract base language code
+                base_lang = lang.split('-')[0]
+
+                transcript_data = self._format_transcript(transcript.fetch(), base_lang)
                 cache_set("transcript", cache_key, transcript_data)
                 return transcript_data
-            except:
-                # Try one more fallback: use any available transcript
-                available_langs = transcript_list._manually_created_transcripts.keys()
-                if available_langs:
-                    lang = list(available_langs)[0]
-                    transcript = transcript_list._manually_created_transcripts[lang]
-                    logger.info(f"Found fallback transcript in {lang}")
-                    transcript_data = self._format_transcript(transcript.fetch(), lang)
-                    cache_set("transcript", cache_key, transcript_data)
-                    return transcript_data
+            elif transcript_list._generated_transcripts:
+                # Use generated transcript if no manual one available
+                lang = list(transcript_list._generated_transcripts.keys())[0]
+                transcript = transcript_list._generated_transcripts[lang]
+                logger.info(f"Using fallback generated transcript in {lang}")
 
-                raise ValueError(f"No transcript found for video: {video_id}")
+                # Extract base language code
+                base_lang = lang.split('-')[0]
+
+                transcript_data = self._format_transcript(transcript.fetch(), base_lang)
+                cache_set("transcript", cache_key, transcript_data)
+                return transcript_data
+
+            # If we get here, no transcript was found
+            raise ValueError(f"No transcript found for video: {video_id}")
 
         except TranscriptsDisabled:
             error_message = f"Transcripts are disabled for video: {video_id}"
@@ -409,13 +584,14 @@ class YouTubeExtractor:
 
         return hours * 3600 + minutes * 60 + seconds
 
-    def _initial_domain_classification(self, title: str, description: str) -> Tuple[str, float]:
+    def _enhanced_domain_classification(self, title: str, description: str, language: str = 'en') -> Tuple[str, float]:
         """
-        Simple domain classification based on keywords in title and description.
+        Enhanced domain classification with multilingual support.
 
         Args:
             title: Video title
             description: Video description
+            language: Detected language code
 
         Returns:
             Tuple of (domain, confidence)
@@ -423,44 +599,78 @@ class YouTubeExtractor:
         # Combine text for analysis
         combined_text = f"{title} {description}".lower()
 
-        # Define domain-specific keywords
-        math_keywords = [
-            'math', 'mathematics', 'calculus', 'algebra', 'geometry', 'theorem', 'proof',
-            'equation', 'function', 'derivative', 'integral'
-        ]
-
-        programming_keywords = [
-            'programming', 'algorithm', 'code', 'software', 'development', 'computer science',
-            'python', 'java', 'c++', 'javascript', 'data structure'
-        ]
-
-        physics_keywords = [
-            'physics', 'mechanics', 'dynamics', 'kinematics', 'electromagnetism',
-            'thermodynamics', 'quantum', 'relativity', 'force', 'energy'
-        ]
-
-        # Count keyword matches for each domain
-        math_count = sum(1 for keyword in math_keywords if keyword in combined_text)
-        programming_count = sum(1 for keyword in programming_keywords if keyword in combined_text)
-        physics_count = sum(1 for keyword in physics_keywords if keyword in combined_text)
-
-        # Get the domain with highest count
-        counts = {
-            'mathematics': math_count,
-            'programming': programming_count,
-            'physics': physics_count
+        # Define multilingual domain-specific keywords
+        domain_keywords = {
+            "mathematics": {
+                "en": [
+                    'math', 'mathematics', 'calculus', 'algebra', 'geometry', 'theorem', 'proof',
+                    'equation', 'function', 'derivative', 'integral', 'statistics', 'probability'
+                ],
+                "ru": [
+                    'математика', 'матем', 'алгебра', 'геометрия', 'теорема', 'доказательство',
+                    'уравнение', 'функция', 'производная', 'интеграл', 'статистика', 'вероятность'
+                ]
+            },
+            "programming": {
+                "en": [
+                    'programming', 'algorithm', 'code', 'software', 'development', 'computer science',
+                    'python', 'java', 'c++', 'javascript', 'data structure', 'database', 'web'
+                ],
+                "ru": [
+                    'программирование', 'алгоритм', 'код', 'программа', 'разработка', 'информатика',
+                    'python', 'java', 'с++', 'javascript', 'структура данных', 'база данных', 'веб'
+                ]
+            },
+            "physics": {
+                "en": [
+                    'physics', 'mechanics', 'dynamics', 'kinematics', 'electromagnetism',
+                    'thermodynamics', 'quantum', 'relativity', 'force', 'energy', 'momentum'
+                ],
+                "ru": [
+                    'физика', 'механика', 'динамика', 'кинематика', 'электромагнетизм',
+                    'термодинамика', 'квантовая', 'относительность', 'сила', 'энергия', 'импульс'
+                ]
+            }
         }
 
-        max_count = max(counts.values())
+        # Get language-specific keywords, fall back to English if not available
+        lang_key = language if language in ['en', 'ru'] else 'en'
+
+        # Count keyword matches for each domain
+        domain_scores = {}
+
+        for domain, keywords_dict in domain_keywords.items():
+            keywords = keywords_dict.get(lang_key, keywords_dict.get('en', []))
+            count = sum(1 for keyword in keywords if keyword in combined_text)
+            domain_scores[domain] = count
+
+            # Add weighted category ID score for English YouTube categories
+            if language == 'en':
+                if 'math' in combined_text and domain == 'mathematics':
+                    domain_scores[domain] += 2
+                elif 'programming' in combined_text and domain == 'programming':
+                    domain_scores[domain] += 2
+                elif 'physics' in combined_text and domain == 'physics':
+                    domain_scores[domain] += 2
+
+        # Get the domain with highest count
+        max_count = max(domain_scores.values()) if domain_scores else 0
+
         if max_count == 0:
             return ('unknown', 0.0)
 
         # Get domain with highest count
-        max_domains = [domain for domain, count in counts.items() if count == max_count]
+        max_domains = [domain for domain, count in domain_scores.items() if count == max_count]
+
         if len(max_domains) == 1:
             domain = max_domains[0]
-            total_count = sum(counts.values())
+            total_count = sum(domain_scores.values())
             confidence = max_count / total_count if total_count > 0 else 0.0
+
+            # Boost confidence for strong matches
+            if max_count >= 3:
+                confidence = min(confidence + 0.2, 0.95)
+
             return (domain, confidence)
         else:
             # If tie, return the first domain with medium confidence
@@ -468,7 +678,7 @@ class YouTubeExtractor:
 
     def _format_transcript(self, transcript_data: List[Dict], language: str) -> List[Dict]:
         """
-        Formats transcript data into a standardized structure.
+        Formats transcript data into a standardized structure with language detection.
 
         Args:
             transcript_data: Raw transcript data from YouTube API
@@ -478,6 +688,21 @@ class YouTubeExtractor:
             List of formatted transcript segments
         """
         formatted_transcript = []
+
+        # If language wasn't provided, try to detect from transcript text
+        if not language:
+            # Combine some segments for better language detection
+            sample_text = " ".join([segment.get('text', '') for segment in transcript_data[:10]])
+            try:
+                detected_lang = langdetect.detect(sample_text)
+                # Use only the base language code
+                language = detected_lang.split('-')[0]
+            except:
+                # Default to English if detection fails
+                language = 'en'
+
+        # Normalize language code to 2-letter code
+        language = language[:2].lower()
 
         for segment in transcript_data:
             formatted_segment = {

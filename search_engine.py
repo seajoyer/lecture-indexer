@@ -76,7 +76,7 @@ class SearchEngine:
     @time_function(2000)  # Log warning if takes more than 2 seconds
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Enhanced search for content matching the query with improved ranking.
+        Enhanced search for content matching the query with improved ranking and language support.
 
         Args:
             query: Structured query dictionary
@@ -92,6 +92,7 @@ class SearchEngine:
             filters = query.get("filters", {})
             theory_practice_ratio = query.get("theory_practice_ratio")
             domain = query.get("domain")
+            language = query.get("language")  # Extract language parameter
             pagination = query.get("pagination", {})
 
             # Apply pagination parameters
@@ -109,19 +110,22 @@ class SearchEngine:
                 }
 
             # Generate cache key for this query
-            cache_key = self._generate_cache_key(query_text, filters, theory_practice_ratio, domain, offset, limit)
+            cache_key = self._generate_cache_key(query_text, filters, theory_practice_ratio, domain, offset, limit, language)
             cached_results = cache_get("search", cache_key)
 
             if cached_results:
                 logger.info(f"Using cached search results for query: {query_text}")
                 return cached_results
 
+            # Add language to the query for data access layer
+            query["language"] = language
+
             # Execute base search through data access layer
             base_results = self.data_access.search(query)
 
             if not base_results.get("results"):
                 # Try synonym expansion if no results
-                expanded_query = self._expand_query_with_synonyms(query_text, domain)
+                expanded_query = self._expand_query_with_synonyms(query_text, domain, language)
                 if expanded_query and expanded_query != query_text:
                     logger.info(f"No results for '{query_text}', trying with synonyms: '{expanded_query}'")
                     query["original_text"] = expanded_query
@@ -132,7 +136,8 @@ class SearchEngine:
                 base_results,
                 query_text,
                 theory_practice_ratio,
-                domain
+                domain,
+                language
             )
 
             # Cache the enhanced results
@@ -164,7 +169,8 @@ class SearchEngine:
         theory_practice_ratio: Optional[float],
         domain: Optional[str],
         offset: int,
-        limit: int
+        limit: int,
+        language: Optional[str] = None
     ) -> str:
         """Generate a consistent cache key for search queries."""
         key_parts = [f"q:{query_text}"]
@@ -185,6 +191,10 @@ class SearchEngine:
         if domain:
             key_parts.append(f"dom:{domain}")
 
+        # Add language
+        if language:
+            key_parts.append(f"lang:{language}")
+
         # Add pagination
         key_parts.append(f"off:{offset}")
         key_parts.append(f"lim:{limit}")
@@ -197,78 +207,145 @@ class SearchEngine:
 
         return f"search_{combined}"
 
-    def _expand_query_with_synonyms(self, query_text: str, domain: Optional[str] = None) -> str:
+    def _expand_query_with_synonyms(self, query_text: str, domain: Optional[str] = None, language: Optional[str] = None) -> str:
         """
         Expand query with domain-specific synonyms to improve recall.
 
         Args:
             query_text: Original query text
             domain: Optional domain to use domain-specific synonyms
+            language: Optional language for multilingual synonym expansion
 
         Returns:
             Expanded query text
         """
-        # Domain-specific synonyms for common terms
+        # Make sure query_text is not None
+        if not query_text:
+            return ""
+
+        lang = language if language in ['en', 'ru'] else 'en'
+
+        # Domain-specific synonyms for common terms by language
         domain_synonyms = {
             "mathematics": {
-                # Common mathematical term synonyms
-                "derivative": ["differentiation", "differential"],
-                "integral": ["integration", "antiderivative"],
-                "equation": ["formula", "relation"],
-                "function": ["mapping", "transformation"],
-                "variable": ["parameter", "unknown"],
-                "theorem": ["proposition", "lemma", "corollary"],
-                "vector": ["direction", "array"],
-                "matrix": ["array", "grid"],
-                "set": ["collection", "group"],
-                "limit": ["convergence", "boundary"]
+                "en": {
+                    # Common mathematical term synonyms
+                    "derivative": ["differentiation", "differential"],
+                    "integral": ["integration", "antiderivative"],
+                    "equation": ["formula", "relation"],
+                    "function": ["mapping", "transformation"],
+                    "variable": ["parameter", "unknown"],
+                    "theorem": ["proposition", "lemma", "corollary"],
+                    "vector": ["direction", "array"],
+                    "matrix": ["array", "grid"],
+                    "set": ["collection", "group"],
+                    "limit": ["convergence", "boundary"]
+                },
+                "ru": {
+                    # Russian mathematical synonyms
+                    "производная": ["дифференцирование", "дифференциал"],
+                    "интеграл": ["интегрирование", "первообразная"],
+                    "уравнение": ["формула", "соотношение"],
+                    "функция": ["отображение", "преобразование"],
+                    "переменная": ["параметр", "неизвестная"],
+                    "теорема": ["утверждение", "лемма", "следствие"],
+                    "вектор": ["направление", "массив"],
+                    "матрица": ["массив", "таблица"],
+                    "множество": ["набор", "группа"],
+                    "предел": ["сходимость", "граница"]
+                }
             },
             "programming": {
-                # Common programming term synonyms
-                "function": ["method", "procedure", "routine"],
-                "class": ["object", "type", "struct"],
-                "algorithm": ["procedure", "routine", "process"],
-                "variable": ["field", "property", "attribute"],
-                "loop": ["iteration", "repetition", "cycle"],
-                "array": ["list", "collection", "sequence"],
-                "database": ["data store", "repository"],
-                "inheritance": ["subclassing", "extension"],
-                "interface": ["contract", "protocol"],
-                "recursion": ["self-reference", "recurrence"]
+                "en": {
+                    # Common programming term synonyms
+                    "function": ["method", "procedure", "routine"],
+                    "class": ["object", "type", "struct"],
+                    "algorithm": ["procedure", "routine", "process"],
+                    "variable": ["field", "property", "attribute"],
+                    "loop": ["iteration", "repetition", "cycle"],
+                    "array": ["list", "collection", "sequence"],
+                    "database": ["data store", "repository"],
+                    "inheritance": ["subclassing", "extension"],
+                    "interface": ["contract", "protocol"],
+                    "recursion": ["self-reference", "recurrence"]
+                },
+                "ru": {
+                    # Russian programming synonyms
+                    "функция": ["метод", "процедура", "подпрограмма"],
+                    "класс": ["объект", "тип", "структура"],
+                    "алгоритм": ["процедура", "процесс", "последовательность"],
+                    "переменная": ["поле", "свойство", "атрибут"],
+                    "цикл": ["итерация", "повторение"],
+                    "массив": ["список", "коллекция", "последовательность"],
+                    "база данных": ["хранилище данных", "репозиторий"],
+                    "наследование": ["расширение", "подклассирование"],
+                    "интерфейс": ["контракт", "протокол"],
+                    "рекурсия": ["самовызов", "рекуррентность"]
+                }
             },
             "physics": {
-                # Common physics term synonyms
-                "force": ["interaction", "push", "pull"],
-                "energy": ["work", "power"],
-                "velocity": ["speed", "rate"],
-                "acceleration": ["rate of change of velocity"],
-                "momentum": ["inertia", "impulse"],
-                "field": ["domain", "space"],
-                "wave": ["oscillation", "vibration"],
-                "particle": ["body", "corpuscle"],
-                "charge": ["electric charge", "electrostatic charge"],
-                "mass": ["inertia", "matter"]
+                "en": {
+                    # Common physics term synonyms
+                    "force": ["interaction", "push", "pull"],
+                    "energy": ["work", "power"],
+                    "velocity": ["speed", "rate"],
+                    "acceleration": ["rate of change of velocity"],
+                    "momentum": ["inertia", "impulse"],
+                    "field": ["domain", "space"],
+                    "wave": ["oscillation", "vibration"],
+                    "particle": ["body", "corpuscle"],
+                    "charge": ["electric charge", "electrostatic charge"],
+                    "mass": ["inertia", "matter"]
+                },
+                "ru": {
+                    # Russian physics synonyms
+                    "сила": ["взаимодействие", "воздействие"],
+                    "энергия": ["работа", "мощность"],
+                    "скорость": ["быстрота", "темп"],
+                    "ускорение": ["изменение скорости"],
+                    "импульс": ["количество движения", "момент"],
+                    "поле": ["область", "пространство"],
+                    "волна": ["колебание", "вибрация"],
+                    "частица": ["тело", "корпускула"],
+                    "заряд": ["электрический заряд", "электростатический заряд"],
+                    "масса": ["инерция", "вещество", "материя"]
+                }
             }
         }
 
-        # General academic synonyms
+        # General academic synonyms by language
         general_synonyms = {
-            "concept": ["idea", "notion", "principle"],
-            "theory": ["principle", "hypothesis", "postulate"],
-            "example": ["instance", "illustration", "demonstration"],
-            "application": ["use case", "implementation", "usage"],
-            "problem": ["challenge", "question", "issue"],
-            "solution": ["answer", "resolution", "approach"],
-            "method": ["technique", "approach", "procedure"]
+            "en": {
+                "concept": ["idea", "notion", "principle"],
+                "theory": ["principle", "hypothesis", "postulate"],
+                "example": ["instance", "illustration", "demonstration"],
+                "application": ["use case", "implementation", "usage"],
+                "problem": ["challenge", "question", "issue"],
+                "solution": ["answer", "resolution", "approach"],
+                "method": ["technique", "approach", "procedure"]
+            },
+            "ru": {
+                "концепция": ["идея", "понятие", "принцип"],
+                "теория": ["принцип", "гипотеза", "постулат"],
+                "пример": ["случай", "иллюстрация", "демонстрация"],
+                "применение": ["использование", "реализация", "использование"],
+                "проблема": ["задача", "вопрос", "вызов"],
+                "решение": ["ответ", "подход", "метод"],
+                "метод": ["техника", "подход", "процедура", "способ"]
+            }
         }
 
         # Use domain-specific synonyms if domain is provided
-        synonyms = general_synonyms.copy()
+        synonyms = general_synonyms.get(lang, general_synonyms['en']).copy()
         if domain and domain in domain_synonyms:
-            synonyms.update(domain_synonyms[domain])
+            domain_lang_synonyms = domain_synonyms[domain].get(lang, domain_synonyms[domain].get('en', {}))
+            synonyms.update(domain_lang_synonyms)
+
+        # Convert query to lowercase for consistent matching
+        query_text_lower = query_text.lower()
 
         # Split query into tokens
-        tokens = re.findall(r'\b\w+\b', query_text.lower())
+        tokens = re.findall(r'\b\w+\b', query_text_lower)
 
         # Check if any tokens have synonyms
         has_synonyms = False
@@ -296,7 +373,8 @@ class SearchEngine:
         base_results: Dict[str, Any],
         query_text: str,
         theory_practice_ratio: Optional[float],
-        domain: Optional[str]
+        domain: Optional[str],
+        language: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Enhance search results with improved ranking and organization.
@@ -306,6 +384,7 @@ class SearchEngine:
             query_text: Original query text
             theory_practice_ratio: Theory/practice preference ratio
             domain: Optional domain filter
+            language: Optional language filter
 
         Returns:
             Enhanced search results
@@ -313,7 +392,7 @@ class SearchEngine:
         results = base_results.get("results", [])
 
         # Apply advanced ranking to results
-        ranked_results = self._rank_results(results, query_text, theory_practice_ratio)
+        ranked_results = self._rank_results(results, query_text, theory_practice_ratio, language)
 
         # Calculate result type statistics
         total_results = base_results.get("totalResults", 0)
@@ -331,6 +410,7 @@ class SearchEngine:
         # Extract concepts and calculate domain distribution
         concepts = {}
         domain_counts = Counter()
+        language_counts = Counter()  # Track languages
 
         for result in ranked_results:
             if result.get("result_type") == "concept":
@@ -340,6 +420,11 @@ class SearchEngine:
             result_domain = result.get("domain")
             if result_domain:
                 domain_counts[result_domain] += 1
+
+            # Track language distribution
+            result_language = result.get("language")
+            if result_language:
+                language_counts[result_language] += 1
 
         enhanced_results = {
             "results": ranked_results,
@@ -352,11 +437,15 @@ class SearchEngine:
             "domainDistribution": [
                 {"domain": domain, "count": count}
                 for domain, count in domain_counts.most_common()
+            ],
+            "languageDistribution": [
+                {"language": lang, "count": count}
+                for lang, count in language_counts.most_common()
             ]
         }
 
         # Generate query-dependent suggestions
-        suggestions = self._generate_search_suggestions(query_text, ranked_results, domain)
+        suggestions = self._generate_search_suggestions(query_text, ranked_results, domain, language)
         if suggestions:
             enhanced_results["suggestions"] = suggestions
 
@@ -366,21 +455,27 @@ class SearchEngine:
         self,
         results: List[Dict[str, Any]],
         query_text: str,
-        theory_practice_ratio: Optional[float]
+        theory_practice_ratio: Optional[float],
+        language: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Apply advanced ranking algorithm to search results.
+        Apply advanced ranking algorithm to search results with language support.
 
         Args:
             results: List of search results
             query_text: Original query text
             theory_practice_ratio: Theory/practice preference ratio
+            language: Optional language code for language-specific ranking
 
         Returns:
             Ranked list of search results
         """
         if not results:
             return []
+
+        # Ensure query_text is not None
+        if query_text is None:
+            query_text = ""
 
         # Prepare query terms for matching
         query_terms = set(re.findall(r'\b\w+\b', query_text.lower()))
@@ -392,16 +487,16 @@ class SearchEngine:
             # Initialize base score
             score = 1.0
 
-            # Factor 1: Match quality
-            result_text = result.get("text", "").lower()
+            # Factor 1: Match quality - ensure text is not None
+            result_text = (result.get("text") or "").lower()
             exact_matches = sum(1 for term in query_terms if f" {term} " in f" {result_text} ")
             partial_matches = sum(1 for term in query_terms if term in result_text) - exact_matches
 
             score += exact_matches * self.ranking_weights["exact_match"]
             score += partial_matches * self.ranking_weights["partial_match"]
 
-            # Check for matches in video title
-            video_title = result.get("video_title", "").lower()
+            # Check for matches in video title - ensure video_title is not None
+            video_title = (result.get("video_title") or "").lower()
             if any(term in video_title for term in query_terms):
                 score += self.ranking_weights["title_match"]
 
@@ -429,6 +524,12 @@ class SearchEngine:
             else:
                 score += self.ranking_weights["segment"]
 
+            # Factor 4: Language match boost
+            # If user specified a language and it matches the result's language
+            result_language = result.get("language")
+            if language and result_language and language == result_language:
+                score += 0.5  # Boost score for language match
+
             # Store score and add to results
             result["relevance_score"] = round(score, 2)
             scored_results.append(result)
@@ -442,23 +543,25 @@ class SearchEngine:
         self,
         query_text: str,
         results: List[Dict[str, Any]],
-        domain: Optional[str]
+        domain: Optional[str],
+        language: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Generate helpful search suggestions based on current results.
+        Generate helpful search suggestions based on current results with language support.
 
         Args:
             query_text: Original query text
             results: Search results
             domain: Current domain filter
+            language: Optional language code
 
         Returns:
             List of search suggestion dictionaries
         """
         suggestions = []
 
-        # Don't generate suggestions for very short queries
-        if len(query_text) < 3:
+        # Ensure query_text is not None and has sufficient length
+        if not query_text or len(query_text) < 3:
             return []
 
         # Extract domains from results
@@ -472,39 +575,76 @@ class SearchEngine:
                         "type": "domain_filter",
                         "text": f'Search within "{result_domain}" domain',
                         "domain": result_domain,
-                        "query": query_text
+                        "query": query_text,
+                        "language": language  # Pass language to suggestion
                     })
 
+        # Language-specific concept and practice terms
+        concept_terms = {
+            "en": ["definition", "explain", "concept", "theory", "mean"],
+            "ru": ["определение", "объяснить", "концепция", "теория", "означать"]
+        }
+
+        practical_terms = {
+            "en": ["example", "how to", "application", "implement", "code"],
+            "ru": ["пример", "как", "применение", "реализация", "код"]
+        }
+
+        # Use appropriate language terms and ensure lowercase comparison
+        lang_key = language if language in concept_terms else "en"
+        current_concept_terms = concept_terms[lang_key]
+        current_practical_terms = practical_terms[lang_key]
+
+        # Convert query to lowercase safely
+        query_text_lower = query_text.lower()
+
         # Suggest concept-focused search if general terms found
-        concept_terms = ["definition", "explain", "concept", "theory", "mean"]
-        if any(term in query_text.lower() for term in concept_terms):
+        if any(term in query_text_lower for term in current_concept_terms):
             suggestions.append({
                 "type": "theory_focus",
                 "text": f"Focus on theoretical explanations of {query_text}",
                 "theory_practice_ratio": 0.8,
-                "query": query_text
+                "query": query_text,
+                "language": language
             })
 
         # Suggest example-focused search if practical terms found
-        practical_terms = ["example", "how to", "application", "implement", "code"]
-        if any(term in query_text.lower() for term in practical_terms):
+        if any(term in query_text_lower for term in current_practical_terms):
             suggestions.append({
                 "type": "practice_focus",
                 "text": f"Find practical examples of {query_text}",
                 "theory_practice_ratio": 0.2,
-                "query": query_text
+                "query": query_text,
+                "language": language
             })
 
         # Suggest learning path for complex subjects
         if len(results) > 5 and any(r.get("result_type") == "concept" for r in results):
             concept_ids = [r.get("concept_id") for r in results
-                          if r.get("result_type") == "concept" and r.get("concept_id")]
+                        if r.get("result_type") == "concept" and r.get("concept_id")]
             if concept_ids:
                 suggestions.append({
                     "type": "learning_path",
                     "text": f"Create a learning path for {query_text}",
-                    "concept_ids": concept_ids[:10]  # Limit to first 10 concepts
+                    "concept_ids": concept_ids[:10],  # Limit to first 10 concepts
+                    "language": language
                 })
+
+        # Language-specific suggestions
+        if language != "en" and any(r.get("language") == "en" for r in results):
+            suggestions.append({
+                "type": "language_suggestion",
+                "text": f"Search for English content on '{query_text}'",
+                "language": "en",
+                "query": query_text
+            })
+        elif language != "ru" and any(r.get("language") == "ru" for r in results):
+            suggestions.append({
+                "type": "language_suggestion",
+                "text": f"Search for Russian content on '{query_text}'",
+                "language": "ru",
+                "query": query_text
+            })
 
         return suggestions[:3]  # Limit to top 3 suggestions
 

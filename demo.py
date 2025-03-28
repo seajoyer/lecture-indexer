@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced demonstration script for Lecture Video Content Indexer.
-Tests the core functionality with improved visualization and support for the enhanced features.
+Tests the core functionality with improved language handling and visualization.
 """
 
 import os
@@ -63,6 +63,7 @@ def main():
                       help='Filter by domain')
     parser.add_argument('--filter-video', help='Filter to a specific video ID')
     parser.add_argument('--filter-playlist', help='Filter to a specific playlist ID')
+    parser.add_argument('--filter-language', choices=['en', 'ru'], help='Filter by language')
 
     # Learning path options
     parser.add_argument('--concepts', nargs='+', help='Concept IDs for learning path generation')
@@ -70,6 +71,11 @@ def main():
     # Performance options
     parser.add_argument('--cache-stats', action='store_true', help='Show cache statistics')
     parser.add_argument('--optimize-db', action='store_true', help='Optimize database before running')
+    parser.add_argument('--clear-cache', action='store_true', help='Clear all caches before running')
+
+    # Language options
+    parser.add_argument('--language', choices=['en', 'ru', 'auto'], default='auto',
+                      help='Preferred language for processing (auto=detect)')
 
     # Debug option
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
@@ -102,6 +108,11 @@ def main():
               f"or use --api-key option.{Style.RESET_ALL}")
         sys.exit(1)
 
+    # Clear cache if requested
+    if args.clear_cache:
+        print(f"{Fore.CYAN}Clearing all caches...{Style.RESET_ALL}")
+        cache_clear()
+
     # Load configuration
     config = {
         "youtube_api_key": api_key,
@@ -124,11 +135,15 @@ def main():
         print(f"{Fore.CYAN}Optimizing database...{Style.RESET_ALL}")
         search_engine.optimize_database()
 
+    # Determine language preference
+    language_preference = determine_language_preference(args.language)
+
     # If we're just listing concepts
     if args.list_concepts:
         list_indexed_concepts(data_access, domain_filter=args.filter_domain,
                              video_filter=args.filter_video,
-                             playlist_filter=args.filter_playlist)
+                             playlist_filter=args.filter_playlist,
+                             language=args.filter_language)
         sys.exit(0)
 
     # If we're just showing details for a specific video
@@ -148,7 +163,8 @@ def main():
     if args.search and not args.url:
         search_concepts(search_engine, args.search, args.theory_ratio,
                       domain_filter=args.filter_domain,
-                      video_filter=args.filter_video)
+                      video_filter=args.filter_video,
+                      language=args.filter_language)
         sys.exit(0)
 
     # Process video or playlist
@@ -162,7 +178,8 @@ def main():
     if is_playlist_url(url):
         # Process playlist
         process_playlist(url, youtube_extractor, data_pipeline, search_engine,
-                        None if args.no_limit else args.max_videos)
+                        None if args.no_limit else args.max_videos,
+                        language_preference)
 
         # If search is requested after playlist processing
         if args.search:
@@ -171,12 +188,14 @@ def main():
             search_concepts(search_engine, args.search, args.theory_ratio,
                           domain_filter=args.filter_domain,
                           video_filter=args.filter_video,
+                          language=args.filter_language,
                           playlist_filter=args.filter_playlist or playlist_id)
 
         sys.exit(0)
 
     # Process single video
     print(f"{Fore.CYAN}Processing video: {url}{Style.RESET_ALL}")
+    print(f"Language preference: {', '.join(language_preference)}")
     print("This may take a few minutes...")
     start_time = time.time()
 
@@ -187,7 +206,7 @@ def main():
             print(f"{Fore.RED}Invalid YouTube URL: {url}{Style.RESET_ALL}")
             sys.exit(1)
 
-        result = data_pipeline.process_video(url)
+        result = data_pipeline.process_video(url, language_preference)
         process_time = time.time() - start_time
 
         if result.get("status") == "completed":
@@ -208,7 +227,8 @@ def main():
                 if args.search:
                     search_concepts(search_engine, args.search, args.theory_ratio,
                                   domain_filter=args.filter_domain,
-                                  video_filter=args.filter_video or video_id)
+                                  video_filter=args.filter_video or video_id,
+                                  language=args.filter_language)
                 else:
                     # Show a default search example
                     domain = result['metadata']['domain']
@@ -237,6 +257,26 @@ def main():
         if args.debug:
             import traceback
             traceback.print_exc()
+
+def determine_language_preference(language_arg: str) -> List[str]:
+    """
+    Determine language preference list based on argument.
+
+    Args:
+        language_arg: Language argument ('en', 'ru', or 'auto')
+
+    Returns:
+        List of language codes in preference order
+    """
+    if language_arg == 'auto':
+        # Default - auto-detect with English and Russian support
+        return ['en', 'ru']
+    elif language_arg == 'en':
+        return ['en', 'ru']  # Prefer English, fall back to Russian
+    elif language_arg == 'ru':
+        return ['ru', 'en']  # Prefer Russian, fall back to English
+    else:
+        return ['en', 'ru']  # Default
 
 def disable_color():
     """Disable colored output."""
@@ -300,7 +340,7 @@ def extract_playlist_id(url):
         return match.group(1)
     return None
 
-def process_playlist(playlist_url, youtube_extractor, data_pipeline, search_engine, max_videos=None):
+def process_playlist(playlist_url, youtube_extractor, data_pipeline, search_engine, max_videos=None, language_preference=None):
     """
     Process all videos in a YouTube playlist.
 
@@ -310,13 +350,18 @@ def process_playlist(playlist_url, youtube_extractor, data_pipeline, search_engi
         data_pipeline: DataPipeline instance
         search_engine: SearchEngine instance
         max_videos: Maximum number of videos to process (None for unlimited)
+        language_preference: List of language codes in order of preference
     """
+    if language_preference is None:
+        language_preference = ['en', 'ru']
+
     playlist_id = extract_playlist_id(playlist_url)
     if not playlist_id:
         print(f"{Fore.RED}Invalid playlist URL: {playlist_url}{Style.RESET_ALL}")
         return
 
     print(f"{Fore.MAGENTA}Processing videos from playlist ID: {playlist_id}{Style.RESET_ALL}")
+    print(f"Language preference: {', '.join(language_preference)}")
 
     # Get video URLs from playlist
     video_urls = extract_playlist_videos(youtube_extractor, playlist_id, max_videos)
@@ -339,12 +384,13 @@ def process_playlist(playlist_url, youtube_extractor, data_pipeline, search_engi
 
         try:
             # Process video
-            result = data_pipeline.process_video(url)
+            result = data_pipeline.process_video(url, language_preference)
             process_time = time.time() - start_time
 
             if result.get("status") == "completed":
                 print(f"{Fore.GREEN}Successfully processed video in {process_time:.2f} seconds{Style.RESET_ALL}")
                 print(f"Title: {result['metadata']['title']}")
+                print(f"Language: {result['transcript']['language']}")
                 print(f"Domain: {result['metadata']['domain']}")
 
                 # Index the video
@@ -446,22 +492,6 @@ def save_playlist_mapping(data_access, playlist_id, video_ids):
     except Exception as e:
         logger.error(f"Error saving playlist mapping: {e}")
 
-def get_playlist_video_ids(data_access, playlist_id):
-    """Get video IDs for a playlist from database."""
-    try:
-        result = data_access.execute_query(
-            "SELECT video_ids FROM playlists WHERE playlist_id = ?",
-            (playlist_id,)
-        )
-
-        if result and result[0]["video_ids"]:
-            return result[0]["video_ids"].split(",")
-
-        return []
-    except Exception as e:
-        logger.error(f"Error getting playlist video IDs: {e}")
-        return []
-
 def create_data_directories():
     """Create necessary directories for the application data."""
     directories = [
@@ -497,7 +527,7 @@ def get_api_key(args):
 
     return ""
 
-def list_indexed_concepts(data_access, domain_filter=None, video_filter=None, playlist_filter=None):
+def list_indexed_concepts(data_access, domain_filter=None, video_filter=None, playlist_filter=None, language=None):
     """
     List all concepts in the index with optional filtering.
 
@@ -506,6 +536,7 @@ def list_indexed_concepts(data_access, domain_filter=None, video_filter=None, pl
         domain_filter: Optional domain filter
         video_filter: Optional video ID filter
         playlist_filter: Optional playlist ID filter
+        language: Optional language filter
     """
     print(f"{Fore.MAGENTA}===== Indexed Concepts ====={Style.RESET_ALL}")
 
@@ -517,66 +548,20 @@ def list_indexed_concepts(data_access, domain_filter=None, video_filter=None, pl
         filter_desc.append(f"video: {video_filter}")
     if playlist_filter:
         filter_desc.append(f"playlist: {playlist_filter}")
+    if language:
+        filter_desc.append(f"language: {language}")
 
     if filter_desc:
         print(f"Filters: {', '.join(filter_desc)}")
 
     try:
-        # Get video IDs from playlist if specified
-        video_ids = []
-        if playlist_filter:
-            video_ids = get_playlist_video_ids(data_access, playlist_filter)
-            if not video_ids:
-                print(f"{Fore.YELLOW}No videos found for playlist {playlist_filter}{Style.RESET_ALL}")
-                return
-
-        # Build enhanced query for concepts with relationship counts
-        query = """
-        SELECT c.*,
-               COUNT(DISTINCT o.video_id) as video_count,
-               COUNT(DISTINCT o.occurrence_id) as occurrence_count,
-               (
-                   SELECT COUNT(DISTINCT o2.concept_id)
-                   FROM occurrences o1
-                   JOIN occurrences o2 ON o1.video_id = o2.video_id AND o1.segment_id = o2.segment_id
-                   WHERE o1.concept_id = c.concept_id AND o2.concept_id != c.concept_id
-               ) as related_concepts_count
-        FROM concepts c
-        JOIN occurrences o ON c.concept_id = o.concept_id
-        JOIN videos v ON o.video_id = v.video_id
-        """
-
-        # Add WHERE clause if we have filters
-        where_clauses = []
-        params = []
-
-        if domain_filter:
-            where_clauses.append("c.domain = ?")
-            params.append(domain_filter)
-
-        if video_filter:
-            where_clauses.append("o.video_id = ?")
-            params.append(video_filter)
-
-        if video_ids:
-            placeholders = ",".join(['?'] * len(video_ids))
-            where_clauses.append(f"o.video_id IN ({placeholders})")
-            params.extend(video_ids)
-
-        if where_clauses:
-            query += " WHERE " + " AND ".join(where_clauses)
-
-        # Group and order with enhanced sorting
-        query += """
-        GROUP BY c.concept_id
-        ORDER BY
-            c.domain,
-            c.concept_class,
-            occurrence_count DESC,
-            related_concepts_count DESC
-        """
-
-        concepts = data_access.execute_query(query, tuple(params))
+        # Use optimized list_concepts method
+        concepts = data_access.list_concepts(
+            domain_filter=domain_filter,
+            video_filter=video_filter,
+            playlist_filter=playlist_filter,
+            language=language
+        )
 
         if not concepts:
             print(f"{Fore.YELLOW}No concepts found matching filters.{Style.RESET_ALL}")
@@ -873,7 +858,7 @@ def generate_learning_path(search_engine, concept_ids, theory_practice_ratio=0.5
     print(f"\n{Fore.CYAN}Learning path successfully generated. Follow the sections in order for optimal learning.{Style.RESET_ALL}")
 
 def search_concepts(search_engine, query: str, theory_practice_ratio: float = None, domain_filter: str = None,
-                   video_filter: str = None, playlist_filter: str = None):
+                   video_filter: str = None, playlist_filter: str = None, language: str = None):
     """
     Search for concepts in the indexed content with optional filtering.
 
@@ -884,6 +869,7 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
         domain_filter: Optional domain filter
         video_filter: Optional video ID filter
         playlist_filter: Optional playlist ID filter
+        language: Optional language filter
     """
     print(f"\n{Fore.MAGENTA}===== Searching for: '{query}' ====={Style.RESET_ALL}")
 
@@ -895,6 +881,8 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
         filter_desc.append(f"video: {video_filter}")
     if playlist_filter:
         filter_desc.append(f"playlist: {playlist_filter}")
+    if language:
+        filter_desc.append(f"language: {language}")
 
     if filter_desc:
         print(f"Filters: {', '.join(filter_desc)}")
@@ -919,6 +907,7 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
         "filters": {},
         "theory_practice_ratio": theory_practice_ratio,
         "domain": domain_filter,
+        "language": language,  # Add language to query
         "pagination": {
             "offset": 0,
             "limit": 15
@@ -995,6 +984,7 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
                 context_type = result.get('context_type', 'unknown')
                 result_type = result.get('result_type', 'unknown')
                 video_id = result.get('video_id')
+                result_language = result.get('language', '') # Get result language
 
                 # Choose emoji and color based on content type
                 emoji = "🧠" if context_type == 'theoretical' else "🛠️" if context_type == 'practical' else "📝"
@@ -1003,7 +993,9 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
                 # Different styling for concepts vs segments
                 if result_type == 'concept':
                     concept_id = result.get('concept_id')
-                    print(f"\n{i}. {emoji} {color}Concept: {result.get('text')}{Style.RESET_ALL} [ID: {concept_id}]")
+                    # Add language indicator if available
+                    lang_indicator = f" [{result_language}]" if result_language and result_language != 'en' else ""
+                    print(f"\n{i}. {emoji} {color}Concept: {result.get('text')}{lang_indicator}{Style.RESET_ALL} [ID: {concept_id}]")
 
                     # Show concept's relevance score if available
                     relevance = result.get('relevance_score')
@@ -1057,14 +1049,6 @@ def search_concepts(search_engine, query: str, theory_practice_ratio: float = No
             import traceback
             traceback.print_exc()
         return None
-
-def get_progress_bar(percent: float, width: int, color: str = "") -> str:
-    """Create a progress bar visualization."""
-    filled_width = int(width * percent / 100)
-    empty_width = width - filled_width
-
-    bar = color + "█" * filled_width + Style.RESET_ALL + "░" * empty_width
-    return bar
 
 def display_results(result: Dict[str, Any], process_time: float):
     """Display the results of video processing in a readable format."""
@@ -1247,32 +1231,36 @@ def print_header():
     width = 80
     print(f"{Fore.CYAN}" + "=" * width)
     print(" LECTURE VIDEO CONTENT INDEXER ".center(width, "="))
-    print(" Enhanced Theory vs. Practice Classification Demo ".center(width, "="))
+    print(" Enhanced Multilingual Theory vs. Practice Classification Demo ".center(width, "="))
     print("=" * width + f"{Style.RESET_ALL}")
     print()
     print("This script demonstrates the enhanced Lecture Video Content Indexer with the following capabilities:")
-    print(f" - {Fore.BLUE}Processes{Style.RESET_ALL} educational videos from YouTube")
-    print(f" - {Fore.BLUE}Processes{Style.RESET_ALL} entire YouTube playlists")
+    print(f" - {Fore.BLUE}Processes{Style.RESET_ALL} educational videos from YouTube with multilingual support")
+    print(f" - {Fore.BLUE}Detects{Style.RESET_ALL} language automatically or by preference (English/Russian support)")
     print(f" - {Fore.BLUE}Classifies{Style.RESET_ALL} content as theoretical or practical with improved accuracy")
-    print(f" - {Fore.BLUE}Extracts{Style.RESET_ALL} key concepts using NLP techniques")
-    print(f" - {Fore.BLUE}Indexes{Style.RESET_ALL} educational concepts for advanced search")
+    print(f" - {Fore.BLUE}Extracts{Style.RESET_ALL} domain-specific concepts using ML-based techniques")
+    print(f" - {Fore.BLUE}Indexes{Style.RESET_ALL} educational concepts for advanced multilingual search")
     print(f" - {Fore.BLUE}Generates{Style.RESET_ALL} learning paths for educational content")
     print()
     print(f"{Fore.YELLOW}Common commands:{Style.RESET_ALL}")
     print(f"  {Fore.GREEN}Process a video:{Style.RESET_ALL} {os.path.basename(__file__)} https://www.youtube.com/watch?v=VIDEO_ID")
-    print(f"  {Fore.GREEN}Process a playlist:{Style.RESET_ALL} {os.path.basename(__file__)} https://www.youtube.com/playlist?list=PLAYLIST_ID")
-    print(f"  {Fore.GREEN}Process playlist with limit:{Style.RESET_ALL} {os.path.basename(__file__)} https://www.youtube.com/playlist?list=PLAYLIST_ID --max-videos 10")
-    print(f"  {Fore.GREEN}Process all videos in playlist:{Style.RESET_ALL} {os.path.basename(__file__)} https://www.youtube.com/playlist?list=PLAYLIST_ID --no-limit")
-    print(f"  {Fore.GREEN}Search all concepts:{Style.RESET_ALL} {os.path.basename(__file__)} --search \"query\"")
-    print(f"  {Fore.GREEN}Search by domain:{Style.RESET_ALL} {os.path.basename(__file__)} --search \"query\" --filter-domain programming")
+    print(f"  {Fore.GREEN}Process with language preference:{Style.RESET_ALL} {os.path.basename(__file__)} --language ru https://www.youtube.com/watch?v=VIDEO_ID")
     print(f"  {Fore.GREEN}List all concepts:{Style.RESET_ALL} {os.path.basename(__file__)} --list-concepts")
-    print(f"  {Fore.GREEN}Show video details:{Style.RESET_ALL} {os.path.basename(__file__)} --video VIDEO_ID")
-    print(f"  {Fore.GREEN}Generate learning path:{Style.RESET_ALL} {os.path.basename(__file__)} --learning-path --concepts CONCEPT_ID1 CONCEPT_ID2")
+    print(f"  {Fore.GREEN}List concepts by language:{Style.RESET_ALL} {os.path.basename(__file__)} --list-concepts --filter-language ru")
+    print(f"  {Fore.GREEN}Search concepts:{Style.RESET_ALL} {os.path.basename(__file__)} --search \"query\"")
     print()
     print(f"{Fore.CYAN}API Key Setup:{Style.RESET_ALL}")
     print("  Set the YOUTUBE_API_KEY environment variable (recommended):")
     print(f"  {Fore.YELLOW}export YOUTUBE_API_KEY='your_api_key'{Style.RESET_ALL}")
     print()
+
+def get_progress_bar(percent: float, width: int, color: str = "") -> str:
+    """Create a progress bar visualization."""
+    filled_width = int(width * percent / 100)
+    empty_width = width - filled_width
+
+    bar = color + "█" * filled_width + Style.RESET_ALL + "░" * empty_width
+    return bar
 
 if __name__ == "__main__":
     main()
