@@ -12,13 +12,13 @@ import argparse
 import time
 import json
 import textwrap
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any
 import colorama
 from colorama import Fore, Style, Back
+from collections import deque, defaultdict, Counter
 
 # Import enhanced components
 from youtube_extractor import YouTubeExtractor
-from transcript_processor import TranscriptProcessor
 from data_pipeline import DataPipeline
 from search_engine import SearchEngine
 from data_access import get_data_access
@@ -30,6 +30,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("demo")
+
+try:
+    from concept_signature_generator import (
+        get_concept_signature_generator,
+        ConceptSignature,
+        RelationshipGraph
+    )
+    CONCEPT_SIGNATURES_AVAILABLE = True
+except ImportError:
+    CONCEPT_SIGNATURES_AVAILABLE = False
+    # Create dummy functions for graceful degradation
+    def get_concept_signature_generator(*args, **kwargs): return None
+    ConceptSignature = type('ConceptSignature', (), {})
+    RelationshipGraph = type('RelationshipGraph', (), {})
 
 # Initialize colorama
 colorama.init(autoreset=True)
@@ -84,7 +98,60 @@ def main():
     parser.add_argument('--output-json', help='Save results to JSON file')
     parser.add_argument('--no-color', action='store_true', help='Disable colored output')
 
+    # MLCS related
+    parser.add_argument('--concept-signatures', action='store_true',
+                     help='Show concept signatures for indexed concepts')
+    parser.add_argument('--relationship-graph', action='store_true',
+                     help='Display concept relationship graph')
+    parser.add_argument('--export-graph', help='Export concept relationship graph to specified file path')
+    parser.add_argument('--analyze-concepts', action='store_true',
+                     help='Analyze concept relationships across all videos')
+
     args = parser.parse_args()
+
+    # Handle concept signature commands
+    if args.concept_signatures or args.relationship_graph or args.export_graph or args.analyze_concepts:
+        if not CONCEPT_SIGNATURES_AVAILABLE:
+            print(f"{Fore.RED}Concept signature functionality is not available.{Style.RESET_ALL}")
+            print("Make sure concept_signature_generator.py is properly installed.")
+            sys.exit(1)
+
+        # Get YouTube API key
+        api_key = os.environ.get("YOUTUBE_API_KEY", "")
+        if args.api_key:
+            api_key = args.api_key
+            logger.warning("Using API key from command line argument (not secure)")
+
+        # Get configuration for concept generator
+        concept_config = {
+            "youtube_api_key": api_key,
+            "output_dir": "data/processed",
+            "index_dir": "data/index"
+        }
+
+        # Get the concept signature generator
+        concept_generator = get_concept_signature_generator(concept_config)
+
+        if args.concept_signatures:
+            display_concept_signatures(concept_generator,
+                                      domain_filter=args.filter_domain,
+                                      video_filter=args.filter_video,
+                                      language=args.filter_language)
+            sys.exit(0)
+
+        if args.relationship_graph:
+            display_relationship_graph(concept_generator,
+                                      domain_filter=args.filter_domain)
+            sys.exit(0)
+
+        if args.export_graph:
+            export_concept_graph(concept_generator, args.export_graph)
+            sys.exit(0)
+
+        if args.analyze_concepts:
+            analyze_concept_relationships(concept_generator,
+                                        domain_filter=args.filter_domain)
+            sys.exit(0)
 
     # Set color output
     if args.no_color:
@@ -257,6 +324,402 @@ def main():
         if args.debug:
             import traceback
             traceback.print_exc()
+
+# Add these new functions for concept signature capabilities
+def display_concept_signatures(
+    concept_generator,
+    domain_filter=None,
+    video_filter=None,
+    language=None
+):
+    """Display concept signatures for indexed concepts."""
+    print(f"{Fore.MAGENTA}===== Concept Signatures ====={Style.RESET_ALL}")
+
+    # Apply filters for display
+    filter_str = []
+    if domain_filter:
+        filter_str.append(f"domain={domain_filter}")
+    if video_filter:
+        filter_str.append(f"video={video_filter}")
+    if language:
+        filter_str.append(f"language={language}")
+
+    if filter_str:
+        print(f"Filters: {', '.join(filter_str)}")
+
+    # Get relationship graph
+    graph = concept_generator.relationship_graph
+
+    # Filter concepts based on criteria
+    filtered_concepts = {}
+    for concept_id, concept in graph.concepts.items():
+        # Apply domain filter
+        if domain_filter and concept.domain != domain_filter:
+            continue
+
+        # Apply language filter
+        if language and concept.language != language:
+            continue
+
+        # Apply video filter (requires parsing video_id from concept_id if stored that way)
+        if video_filter and video_filter not in concept_id:
+            continue
+
+        filtered_concepts[concept_id] = concept
+
+    if not filtered_concepts:
+        print(f"{Fore.YELLOW}No concept signatures found matching the filters.{Style.RESET_ALL}")
+        return
+
+    # Group concepts by domain
+    by_domain = defaultdict(list)
+    for concept in filtered_concepts.values():
+        by_domain[concept.domain].append(concept)
+
+    # Display counts
+    total = len(filtered_concepts)
+    print(f"Found {total} concept signatures")
+
+    # Display theoretical vs practical counts
+    theoretical = sum(1 for c in filtered_concepts.values() if c.concept_class == "theoretical")
+    practical = sum(1 for c in filtered_concepts.values() if c.concept_class == "practical")
+
+    theory_percent = theoretical / total * 100 if total > 0 else 0
+    practice_percent = practical / total * 100 if total > 0 else 0
+
+    # Create visual bars
+    theory_bar = get_progress_bar(theory_percent, 40, Fore.BLUE)
+    practice_bar = get_progress_bar(practice_percent, 40, Fore.GREEN)
+
+    print(f"{Fore.BLUE}Theoretical: {theory_bar}{Style.RESET_ALL} ({theoretical}, {theory_percent:.1f}%)")
+    print(f"{Fore.GREEN}Practical:   {practice_bar}{Style.RESET_ALL} ({practical}, {practice_percent:.1f}%)")
+
+    # Display by domain
+    for domain, domain_concepts in by_domain.items():
+        domain_color = (Fore.BLUE if domain == 'mathematics' else
+                       Fore.GREEN if domain == 'programming' else
+                       Fore.YELLOW if domain == 'physics' else
+                       Fore.WHITE)
+
+        print(f"\n{domain_color}Domain: {domain.upper()}{Style.RESET_ALL}")
+        print(f"Found {len(domain_concepts)} concepts")
+
+        # Sort by hierarchy score (most fundamental first)
+        sorted_concepts = sorted(domain_concepts,
+                                key=lambda c: c.hierarchy_score,
+                                reverse=True)
+
+        # Display top concepts
+        for i, concept in enumerate(sorted_concepts[:20], 1):
+            # Format confidence as stars
+            confidence_stars = "★" * int(concept.confidence * 5)
+            confidence_stars = f"{confidence_stars:<5}"
+
+            # Format relationships
+            rel_count = len(concept.related_concepts)
+
+            # Format class with color
+            if concept.concept_class == "theoretical":
+                class_str = f"{Fore.BLUE}theoretical{Style.RESET_ALL}"
+            else:
+                class_str = f"{Fore.GREEN}practical{Style.RESET_ALL}"
+
+            # Print concept info
+            print(f"{i:2}. {concept.text} [{class_str}]")
+            print(f"    Confidence: {confidence_stars} ({concept.confidence:.2f})  " +
+                  f"Hierarchy: {concept.hierarchy_score:.2f}  " +
+                  f"Related: {rel_count}")
+
+            # Show signature pattern if available
+            if concept.signature_pattern:
+                pattern_str = " ".join(concept.signature_pattern)
+                print(f"    Signature: {Fore.CYAN}{pattern_str[:80]}{Style.RESET_ALL}")
+
+            # Show some related concepts if available
+            if concept.related_concepts and i <= 10:  # Only for top 10
+                related = list(concept.related_concepts.items())[:3]
+                rel_strs = []
+
+                for rel_id, rel_data in related:
+                    if rel_id in graph.concepts:
+                        rel_text = graph.concepts[rel_id].text
+                        rel_str = f"{rel_text} ({rel_data['type']}, {rel_data['strength']:.2f})"
+                        rel_strs.append(rel_str)
+
+                if rel_strs:
+                    print(f"    Related: {', '.join(rel_strs)}")
+
+            print()
+
+        if len(domain_concepts) > 20:
+            print(f"... and {len(domain_concepts) - 20} more concepts")
+
+def display_relationship_graph(concept_generator, domain_filter=None):
+    """Display concept relationship graph visualization."""
+    print(f"{Fore.MAGENTA}===== Concept Relationship Graph ====={Style.RESET_ALL}")
+
+    # Get relationship graph
+    graph = concept_generator.relationship_graph
+
+    if not graph.concepts:
+        print(f"{Fore.YELLOW}No concepts found in relationship graph.{Style.RESET_ALL}")
+        return
+
+    # Apply domain filter
+    if domain_filter:
+        domain_concepts = graph.domain_clusters.get(domain_filter, set())
+        print(f"Filtering to domain: {domain_filter} ({len(domain_concepts)} concepts)")
+    else:
+        # Use all concepts
+        domain_concepts = set(graph.concepts.keys())
+        print(f"Showing all domains ({len(domain_concepts)} concepts)")
+
+    # Print statistics
+    edge_count = sum(1 for source_id in graph.adjacency_list if source_id in domain_concepts
+                    for target_id in graph.adjacency_list[source_id] if target_id in domain_concepts)
+
+    print(f"Graph contains {len(domain_concepts)} concepts and {edge_count} relationships")
+
+    # Count relationship types
+    relationship_types = Counter()
+    for (source_id, target_id), attrs in graph.edge_attributes.items():
+        if source_id in domain_concepts and target_id in domain_concepts:
+            rel_type = attrs.get("type", "unknown")
+            relationship_types[rel_type] += 1
+
+    print("\nRelationship types:")
+    for rel_type, count in relationship_types.most_common():
+        print(f"  - {rel_type}: {count}")
+
+    # Calculate connectivity metrics
+    if domain_concepts:
+        avg_connections = edge_count / len(domain_concepts) if domain_concepts else 0
+        print(f"\nAverage connections per concept: {avg_connections:.2f}")
+
+    # Display most central concepts (highest hierarchy score and most connections)
+    central_concepts = []
+    for concept_id in domain_concepts:
+        concept = graph.concepts.get(concept_id)
+        if concept:
+            # Count outgoing and incoming connections
+            outgoing = len(graph.adjacency_list.get(concept_id, set()))
+            incoming = sum(1 for src, targets in graph.adjacency_list.items()
+                          if concept_id in targets and src in domain_concepts)
+
+            central_concepts.append((
+                concept,
+                concept.hierarchy_score,
+                outgoing + incoming
+            ))
+
+    # Sort by combined score
+    central_concepts.sort(key=lambda x: (x[1] + x[2]/10), reverse=True)
+
+    print(f"\n{Fore.CYAN}Most central concepts:{Style.RESET_ALL}")
+    for i, (concept, hierarchy, connections) in enumerate(central_concepts[:10], 1):
+        print(f"{i}. {concept.text} (hierarchy: {hierarchy:.2f}, connections: {connections})")
+
+    # Show some example paths between concepts
+    if len(central_concepts) >= 2:
+        print(f"\n{Fore.CYAN}Example learning paths between concepts:{Style.RESET_ALL}")
+
+        # Get a few important concepts
+        important_concepts = [c[0].concept_id for c in central_concepts[:min(5, len(central_concepts))]]
+
+        # Generate some paths between them
+        for i, start_id in enumerate(important_concepts):
+            for end_id in important_concepts[i+1:i+2]:  # Just get the next one
+                if start_id != end_id:
+                    path = find_path_between_concepts(graph, start_id, end_id)
+
+                    if path:
+                        start_concept = graph.concepts[start_id].text
+                        end_concept = graph.concepts[end_id].text
+
+                        print(f"\nPath from '{start_concept}' to '{end_concept}':")
+
+                        for j, concept_id in enumerate(path, 1):
+                            concept = graph.concepts[concept_id]
+                            print(f"  {j}. {concept.text}")
+
+def find_path_between_concepts(graph, start_id, end_id, max_depth=5):
+    """Find a path between two concepts in the graph using BFS."""
+    if start_id not in graph.concepts or end_id not in graph.concepts:
+        return None
+
+    # BFS to find path
+    queue = deque([(start_id, [start_id])])
+    visited = set([start_id])
+
+    while queue:
+        (node, path) = queue.popleft()
+
+        # Check path length
+        if len(path) > max_depth:
+            continue
+
+        # Check if we found the target
+        if node == end_id:
+            return path
+
+        # Add neighbors to queue
+        for neighbor in graph.adjacency_list.get(node, set()):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append((neighbor, path + [neighbor]))
+
+    return None
+
+def export_concept_graph(concept_generator, file_path):
+    """Export concept relationship graph to a file."""
+    print(f"{Fore.MAGENTA}===== Exporting Concept Graph ====={Style.RESET_ALL}")
+
+    try:
+        # Get relationship graph
+        graph = concept_generator.relationship_graph
+
+        # Save to specified path
+        graph.save_to_json(file_path)
+
+        print(f"{Fore.GREEN}Successfully exported graph with {len(graph.concepts)} concepts to {file_path}{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}Error exporting graph: {e}{Style.RESET_ALL}")
+
+def analyze_concept_relationships(concept_generator, domain_filter=None):
+    """Analyze concept relationships across all videos."""
+    print(f"{Fore.MAGENTA}===== Analyzing Concept Relationships ====={Style.RESET_ALL}")
+
+    # Get relationship graph
+    graph = concept_generator.relationship_graph
+
+    # Filter by domain if specified
+    if domain_filter:
+        domain_concepts = graph.domain_clusters.get(domain_filter, set())
+        concepts = {cid: graph.concepts[cid] for cid in domain_concepts if cid in graph.concepts}
+        print(f"Analyzing domain: {domain_filter} ({len(concepts)} concepts)")
+    else:
+        concepts = graph.concepts
+        print(f"Analyzing all domains ({len(concepts)} concepts)")
+
+    if not concepts:
+        print(f"{Fore.YELLOW}No concepts found for analysis.{Style.RESET_ALL}")
+        return
+
+    # Calculate hierarchy scores
+    print(f"{Fore.CYAN}Calculating concept hierarchy scores...{Style.RESET_ALL}")
+    graph.calculate_all_hierarchy_scores()
+
+    # Find clusters of related concepts
+    print(f"{Fore.CYAN}Finding concept clusters...{Style.RESET_ALL}")
+
+    # Simple clustering based on connections
+    clusters = find_concept_clusters(graph, concepts)
+
+    # Print cluster information
+    print(f"\nFound {len(clusters)} concept clusters:")
+
+    for i, cluster in enumerate(clusters[:10], 1):  # Show top 10 clusters
+        # Get central concept (highest hierarchy score)
+        central_id = max(cluster, key=lambda cid: concepts[cid].hierarchy_score if cid in concepts else 0)
+        central = concepts[central_id]
+
+        # Count theoretical vs practical
+        theoretical = sum(1 for cid in cluster if cid in concepts and concepts[cid].concept_class == "theoretical")
+        practical = sum(1 for cid in cluster if cid in concepts and concepts[cid].concept_class == "practical")
+
+        print(f"\n{Fore.YELLOW}Cluster {i}: {central.text} (size: {len(cluster)}){Style.RESET_ALL}")
+        print(f"  Theoretical: {theoretical}, Practical: {practical}")
+
+        # List top concepts in the cluster
+        top_concepts = sorted(
+            [concepts[cid] for cid in cluster if cid in concepts],
+            key=lambda c: c.hierarchy_score,
+            reverse=True
+        )[:5]  # Top 5
+
+        print("  Top concepts:")
+        for j, concept in enumerate(top_concepts, 1):
+            print(f"    {j}. {concept.text} (hierarchy: {concept.hierarchy_score:.2f})")
+
+    if len(clusters) > 10:
+        print(f"\n... and {len(clusters) - 10} more clusters")
+
+    # Suggest learning paths through the clusters
+    print(f"\n{Fore.CYAN}Suggested learning paths:{Style.RESET_ALL}")
+
+    # Get top clusters
+    top_clusters = clusters[:min(3, len(clusters))]
+
+    for i, cluster in enumerate(top_clusters, 1):
+        # Get top concept in cluster
+        central_id = max(cluster, key=lambda cid: concepts[cid].hierarchy_score if cid in concepts else 0)
+        central = concepts[central_id]
+
+        print(f"\nPath {i}: Learning about {central.text}")
+
+        # Generate learning path for this cluster
+        path_concepts = graph.generate_learning_path(list(cluster), max_concepts=8)
+
+        for j, concept_id in enumerate(path_concepts, 1):
+            if concept_id in concepts:
+                concept = concepts[concept_id]
+                class_color = Fore.BLUE if concept.concept_class == "theoretical" else Fore.GREEN
+                print(f"  {j}. {class_color}{concept.text}{Style.RESET_ALL}")
+
+def find_concept_clusters(graph, concepts, min_connection_strength=0.3):
+    """Find clusters of related concepts in the graph."""
+    # Create a simplified graph with only strong connections
+    simplified_graph = defaultdict(set)
+
+    for src_id, tgt_ids in graph.adjacency_list.items():
+        if src_id not in concepts:
+            continue
+
+        for tgt_id in tgt_ids:
+            if tgt_id not in concepts:
+                continue
+
+            # Check connection strength
+            edge_attrs = graph.edge_attributes.get((src_id, tgt_id), {})
+            strength = edge_attrs.get("strength", 0)
+
+            if strength >= min_connection_strength:
+                simplified_graph[src_id].add(tgt_id)
+                simplified_graph[tgt_id].add(src_id)  # Make it undirected
+
+    # Find connected components (clusters)
+    clusters = []
+    visited = set()
+
+    for concept_id in concepts:
+        if concept_id in visited:
+            continue
+
+        # BFS to find connected component
+        cluster = set()
+        queue = deque([concept_id])
+
+        while queue:
+            node = queue.popleft()
+
+            if node in visited:
+                continue
+
+            visited.add(node)
+            cluster.add(node)
+
+            # Add neighbors
+            for neighbor in simplified_graph.get(node, set()):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+
+        if cluster:
+            clusters.append(cluster)
+
+    # Sort clusters by size
+    clusters.sort(key=len, reverse=True)
+
+    return clusters
 
 def determine_language_preference(language_arg: str) -> List[str]:
     """
@@ -771,21 +1234,116 @@ def show_video_concepts(search_engine, video_id):
     print(f"\n{Fore.CYAN}Run the demo script with '{os.path.basename(__file__)} --search \"query\" --filter-video {video_id}' to search within this video.{Style.RESET_ALL}")
     print(f"{Fore.CYAN}You can also create a learning path using '--learning-path --concepts <concept_ids>'.{Style.RESET_ALL}")
 
-def generate_learning_path(search_engine, concept_ids, theory_practice_ratio=0.5, domain=None):
+def find_concept_ids(search_engine, concept_terms, domain=None, language=None):
+    """
+    Find concept IDs by name/text rather than requiring exact IDs.
+
+    Args:
+        search_engine: SearchEngine instance
+        concept_terms: List of concept names/search terms
+        domain: Optional domain filter
+        language: Optional language filter
+
+    Returns:
+        Dictionary mapping provided terms to found concept IDs
+    """
+    found_concepts = {}
+    not_found = []
+
+    print(f"{Fore.CYAN}Looking up concepts...{Style.RESET_ALL}")
+
+    for term in concept_terms:
+        # Perform a search for this term
+        query = {
+            "original_text": term,
+            "filters": {},
+            "domain": domain,
+            "language": language,
+            "pagination": {"offset": 0, "limit": 5}
+        }
+
+        results = search_engine.search(query)
+
+        # Filter for concept results only
+        concept_results = [r for r in results.get("results", [])
+                          if r.get("result_type") == "concept"]
+
+        if concept_results:
+            # Find the best match - favor exact matches
+            best_match = None
+            for result in concept_results:
+                if result.get("text", "").lower() == term.lower():
+                    # Exact match
+                    best_match = result
+                    break
+
+            # If no exact match, use the first result
+            if not best_match and concept_results:
+                best_match = concept_results[0]
+
+            if best_match:
+                concept_id = best_match.get("concept_id")
+                found_concepts[term] = concept_id
+                concept_text = best_match.get("text")
+                print(f"  • Found concept: {concept_text} (ID: {concept_id})")
+                continue
+
+        # If we get here, the concept wasn't found
+        not_found.append(term)
+        print(f"  • {Fore.YELLOW}Concept not found: '{term}'{Style.RESET_ALL}")
+
+    # Show warning if some weren't found
+    if not_found:
+        print(f"\n{Fore.YELLOW}Warning: {len(not_found)} concept(s) were not found in the database.{Style.RESET_ALL}")
+        print(f"Run '{os.path.basename(__file__)} --list-concepts' to see available concepts.")
+
+    # Show error if none were found
+    if not found_concepts:
+        print(f"\n{Fore.RED}Error: No matching concepts were found.{Style.RESET_ALL}")
+        print(f"Try using different terms or run with --list-concepts to see available concepts.")
+
+    return found_concepts
+
+def generate_learning_path(search_engine, concept_terms, theory_practice_ratio=0.5, domain=None):
     """
     Generate and display a learning path from a set of concepts.
 
     Args:
         search_engine: SearchEngine instance
-        concept_ids: List of concept IDs
+        concept_terms: List of concept terms or IDs
         theory_practice_ratio: Theory/practice ratio preference
         domain: Optional domain filter
     """
     print(f"{Fore.MAGENTA}===== Generating Learning Path ====={Style.RESET_ALL}")
-    print(f"Using {len(concept_ids)} concepts with theory ratio: {theory_practice_ratio}")
+    print(f"Using {len(concept_terms)} concepts with theory ratio: {theory_practice_ratio}")
 
     if domain:
         print(f"Filtering to domain: {domain}")
+
+    # Try to find concepts by name first
+    concept_map = find_concept_ids(search_engine, concept_terms, domain)
+
+    # If no concepts were found, exit
+    if not concept_map:
+        return
+
+    concept_ids = list(concept_map.values())
+
+    # Get relationship graph directly for debugging
+    try:
+        generator = get_concept_signature_generator(search_engine.config)
+        graph = generator.relationship_graph
+
+        print(f"\n{Fore.CYAN}Debug info:{Style.RESET_ALL}")
+        print(f"Total concepts in relationship graph: {len(graph.concepts)}")
+
+        for concept_id in concept_ids:
+            if concept_id in graph.concepts:
+                print(f"Concept '{concept_id}' found in relationship graph")
+            else:
+                print(f"{Fore.YELLOW}Concept '{concept_id}' not found in relationship graph{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.YELLOW}Could not access relationship graph: {e}{Style.RESET_ALL}")
 
     # Generate learning path
     learning_path = search_engine.generate_learning_path(concept_ids, theory_practice_ratio, domain)
@@ -802,8 +1360,15 @@ def generate_learning_path(search_engine, concept_ids, theory_practice_ratio=0.5
 
     # Display theory/practice ratio
     theory_ratio = learning_path.get("theory_practice_ratio", {})
-    requested_ratio = theory_ratio.get("requested", theory_practice_ratio)
-    actual_ratio = theory_ratio.get("actual", 0.5)
+
+    # Handle both dictionary and float values for theory_ratio
+    if isinstance(theory_ratio, dict):
+        requested_ratio = theory_ratio.get("requested", theory_practice_ratio)
+        actual_ratio = theory_ratio.get("actual", 0.5)
+    else:
+        # If theory_ratio is a float or other type, use it directly
+        requested_ratio = theory_practice_ratio
+        actual_ratio = theory_ratio if isinstance(theory_ratio, (int, float)) else 0.5
 
     theoretical_count = learning_path.get("theoretical_concepts", 0)
     practical_count = learning_path.get("practical_concepts", 0)

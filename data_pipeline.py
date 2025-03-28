@@ -28,14 +28,21 @@ from nltk.util import ngrams
 from nltk.collocations import BigramAssocMeasures, BigramCollocationFinder
 from nltk.collocations import TrigramAssocMeasures, TrigramCollocationFinder
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Import project modules
 from youtube_extractor import YouTubeExtractor
 from transcript_processor import TranscriptProcessor
 from performance_utils import time_function, Timer
 from cache_manager import cache_get, cache_set
+try:
+    from concept_signature_generator import enhance_data_pipeline
+except ImportError:
+    # Handle import error gracefully
+    logger.warning("ConceptSignatureGenerator not available - concept signatures will not be used")
+    enhance_data_pipeline = lambda x: x  # No-op function
 
-# Configure logging
-logger = logging.getLogger(__name__)
 
 class DataPipeline:
     """
@@ -61,6 +68,8 @@ class DataPipeline:
 
         # Initialize NLP resources
         self._init_nlp_resources()
+
+        enhance_data_pipeline(self)
 
         logger.info("DataPipeline initialized with enhanced concept extraction")
 

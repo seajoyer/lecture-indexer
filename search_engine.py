@@ -21,6 +21,13 @@ from performance_utils import time_function
 # Configure logging
 logger = logging.getLogger(__name__)
 
+try:
+    from concept_signature_generator import enhance_search_engine
+except ImportError:
+    # Handle import error gracefully
+    logger.warning("ConceptSignatureGenerator not available - enhanced learning paths will not be used")
+    enhance_search_engine = lambda x: x
+
 class SearchEngine:
     """
     Enhanced search engine for educational video content.
@@ -46,6 +53,8 @@ class SearchEngine:
 
         # Initialize ranking weights for search results
         self._init_ranking_weights()
+
+        enhance_search_engine(self)
 
         logger.info("SearchEngine initialized with enhanced search capabilities")
 

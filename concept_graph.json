@@ -1,0 +1,132 @@
+{
+  "concepts": {
+    "linear_regression": {
+      "concept_id": "linear_regression",
+      "text": "linear regression",
+      "signature_pattern": [
+        "linear",
+        "regression"
+      ],
+      "domain": "mathematics",
+      "concept_class": "theoretical",
+      "language": "en",
+      "confidence": 0.2,
+      "hierarchy_score": 0.17,
+      "generality_score": 0.0,
+      "specificity_score": 0.0,
+      "related_concepts": {
+        "machine_learning": {
+          "strength": 0.8,
+          "type": "prerequisite",
+          "added_at": "2025-03-29T01:22:48.224870"
+        }
+      },
+      "occurrences_count": 4,
+      "created_at": "2025-03-29T01:22:48.224309",
+      "updated_at": "2025-03-29T01:22:48.224872"
+    },
+    "machine_learning": {
+      "concept_id": "machine_learning",
+      "text": "machine learning",
+      "signature_pattern": [
+        "machine",
+        "learning"
+      ],
+      "domain": "programming",
+      "concept_class": "theoretical",
+      "language": "en",
+      "confidence": 0.0,
+      "hierarchy_score": 0.2,
+      "generality_score": 0.0,
+      "specificity_score": 0.0,
+      "related_concepts": {
+        "python_implementation": {
+          "strength": 0.7,
+          "type": "prerequisite",
+          "added_at": "2025-03-29T01:22:48.224877"
+        }
+      },
+      "occurrences_count": 1,
+      "created_at": "2025-03-29T01:22:48.224720",
+      "updated_at": "2025-03-29T01:22:48.224879"
+    },
+    "python_implementation": {
+      "concept_id": "python_implementation",
+      "text": "Python implementation",
+      "signature_pattern": [
+        "python",
+        "implementation"
+      ],
+      "domain": "programming",
+      "concept_class": "practical",
+      "language": "en",
+      "confidence": 0.0,
+      "hierarchy_score": 0.19,
+      "generality_score": 0.0,
+      "specificity_score": 0.0,
+      "related_concepts": {
+        "dataset_creation": {
+          "strength": 0.9,
+          "type": "related",
+          "added_at": "2025-03-29T01:22:48.224883"
+        }
+      },
+      "occurrences_count": 0,
+      "created_at": "2025-03-29T01:22:48.224806",
+      "updated_at": "2025-03-29T01:22:48.224884"
+    },
+    "dataset_creation": {
+      "concept_id": "dataset_creation",
+      "text": "dataset creation",
+      "signature_pattern": [
+        "dataset",
+        "creation"
+      ],
+      "domain": "programming",
+      "concept_class": "practical",
+      "language": "en",
+      "confidence": 0.0,
+      "hierarchy_score": 0.16,
+      "generality_score": 0.0,
+      "specificity_score": 0.0,
+      "related_concepts": {},
+      "occurrences_count": 0,
+      "created_at": "2025-03-29T01:22:48.224817",
+      "updated_at": "2025-03-29T01:22:48.224817"
+    }
+  },
+  "edges": [
+    {
+      "source": "linear_regression",
+      "target": "machine_learning",
+      "attributes": {
+        "type": "prerequisite",
+        "strength": 0.8,
+        "created_at": "2025-03-29T01:22:48.224866"
+      }
+    },
+    {
+      "source": "machine_learning",
+      "target": "python_implementation",
+      "attributes": {
+        "type": "prerequisite",
+        "strength": 0.7,
+        "created_at": "2025-03-29T01:22:48.224875"
+      }
+    },
+    {
+      "source": "python_implementation",
+      "target": "dataset_creation",
+      "attributes": {
+        "type": "related",
+        "strength": 0.9,
+        "created_at": "2025-03-29T01:22:48.224881"
+      }
+    }
+  ],
+  "metadata": {
+    "concept_count": 4,
+    "relationship_count": 3,
+    "created_at": "2025-03-29T01:22:48.224917"
+  }
+}

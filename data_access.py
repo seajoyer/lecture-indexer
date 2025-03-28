@@ -1354,8 +1354,8 @@ class DataAccess:
 
     def build_enhanced_search_query(self, query_text: str, domain: Optional[str] = None, language: Optional[str] = None) -> str:
         """
-        Build an enhanced search query with improved handling of different languages
-        and special characters.
+        Build an enhanced search query with improved handling of different languages,
+        special characters, and partial matches/typos.
 
         Args:
             query_text: Original query text
@@ -1370,35 +1370,52 @@ class DataAccess:
         if not query_text:
             return ""
 
-        # For non-Latin queries, use a simpler approach to avoid syntax errors
+        # For non-Latin queries, use a more flexible approach
         is_non_latin = any(ord(c) > 127 for c in query_text) or language == 'ru'
 
         if is_non_latin:
-            # For non-Latin text (e.g., Russian), use a safe approach
+            # For non-Latin text (e.g., Russian), use a more flexible approach
             # Split by whitespace and quote each term
             terms = query_text.split()
             if not terms:
                 return ""
 
-            # For each term, create both an exact match and a prefix match
+            # For each term, create multiple matching patterns:
+            # 1. Exact match
+            # 2. Prefix match (for partial completion)
+            # 3. Partial match within words (using NEAR operator)
             query_parts = []
             for term in terms:
                 # Clean the term of any special characters
                 term = ''.join(c for c in term if c.isalnum() or ord(c) > 127)
                 if term:
-                    # Add both exact and prefix match options
-                    query_parts.append(f'"{term}" OR {term}*')
+                    if len(term) <= 2:
+                        # For very short terms, just use exact matching
+                        query_parts.append(f'"{term}"')
+                    else:
+                        # For longer terms, use both exact and prefix matching with different prefix lengths
+                        # This will catch partial matches and some typos
+                        prefixes = []
+                        if len(term) > 3:
+                            # Add shorter prefixes for better partial matching
+                            prefixes.append(term[:len(term)-1] + '*')  # Missing last letter
 
-            # Join with OR for better recall
+                        # Add standard prefix
+                        prefixes.append(f'{term}*')
+
+                        # Combine exact match with prefixes
+                        query_parts.append(f'("{term}" OR {" OR ".join(prefixes)})')
+
+            # Combine terms with different strategies for better recall
             if len(query_parts) == 1:
                 return query_parts[0]
             else:
-                # Combine with both AND and OR for balanced precision/recall
-                and_query = " AND ".join(f"({part})" for part in query_parts)
-                or_query = " OR ".join(f"({part})" for part in query_parts)
+                # Use both AND and OR combinations for balanced precision/recall
+                and_query = " AND ".join(query_parts)
+                or_query = " OR ".join(query_parts)
                 return f"({and_query}) OR ({or_query})"
 
-        # For Latin-based queries, use the more sophisticated approach
+        # For Latin-based queries, use a more sophisticated approach
         # Extract quoted phrases for exact matching
         quoted_phrases = re.findall(r'"([^"]+)"', query_text)
 
@@ -1414,37 +1431,55 @@ class DataAccess:
 
         query_parts = []
 
-        # Add exact phrases
+        # Add exact phrases with high weight
         for phrase in quoted_phrases:
             # Escape any special chars in the phrase
             safe_phrase = re.sub(r'[^\w\s]', ' ', phrase).strip()
             if safe_phrase:
                 query_parts.append(f'"{safe_phrase}"^2')  # Give higher weight to exact matches
 
-        # Add token-based matching with prefix
+        # Process individual tokens with enhanced fuzzy matching
         if tokens:
             token_parts = []
             for token in tokens:
-                # For very short tokens (2 chars or less), don't use prefix matching
                 if len(token) <= 2:
+                    # For very short tokens, use exact matching
                     token_parts.append(token)
                 else:
-                    token_parts.append(f"{token}*")  # Prefix matching for longer tokens
+                    # For longer tokens, create multiple matching patterns
+                    variations = [token]  # Start with exact token
 
-            # For single tokens, just use the token with prefix
-            if len(token_parts) == 1:
-                query_parts.append(token_parts[0])
-            else:
-                # For multiple tokens, try both exact phrase and individual token matching
+                    # Add prefix matching (catches partial words and some typos)
+                    variations.append(f"{token}*")
+
+                    # For tokens longer than 4 chars, add more fuzzy variations
+                    if len(token) > 4:
+                        # Add prefix with one less character (handles missing letter)
+                        variations.append(f"{token[:-1]}*")
+
+                        # Add prefix with first 3 chars (very permissive matching)
+                        if len(token) > 5:
+                            variations.append(f"{token[:3]}*")
+
+                    # Combine all variations for this token
+                    token_parts.append(f"({' OR '.join(variations)})")
+
+            # For multiple tokens, combine them effectively
+            if len(token_parts) > 1:
+                # Try as phrase first, then as individual tokens
                 exact_tokens = " ".join(tokens)
-                token_match = " ".join(token_parts)  # Implicit AND in SQLite FTS5
+                token_match = " AND ".join(token_parts)  # Require all tokens
+                token_match_any = " OR ".join(token_parts)  # Any token matches
 
-                # Add both with exact phrase having higher weight
-                query_parts.append(f'"{exact_tokens}"^1.5 OR {token_match}')
+                # Combine with different weights
+                query_parts.append(f'"{exact_tokens}"^2 OR ({token_match}) OR ({token_match_any})')
+            else:
+                # Just add the single token with its variations
+                query_parts.append(token_parts[0])
 
-        # Combine all parts with OR if multiple parts, otherwise return as is
+        # Combine all parts with OR if multiple parts
         if len(query_parts) > 1:
-            return " OR ".join(query_parts)
+            return " OR ".join(f"({part})" for part in query_parts)
         elif query_parts:
             return query_parts[0]
         else:
