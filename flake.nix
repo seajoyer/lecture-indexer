@@ -56,6 +56,7 @@
           isort
 
           langdetect
+          git filter-repo
         ]);
 
         # Download spaCy models
