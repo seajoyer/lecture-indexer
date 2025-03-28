@@ -1,5 +1,5 @@
-# data
-# config
-# .direnv
-# __pycache__
-# concept_graph.json
+data
+config
+.direnv
+__pycache__
+concept_graph.json
