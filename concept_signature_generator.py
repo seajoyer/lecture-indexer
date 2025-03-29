@@ -17,8 +17,10 @@ import json
 import time
 from typing import Dict, List, Set, Tuple, Any, Optional, Union, Counter as CounterType
 from collections import defaultdict, Counter, deque
+import math
 import numpy as np
 from datetime import datetime
+import string
 
 # Import project modules with error handling
 try:
@@ -76,6 +78,7 @@ class ConceptSignature:
         self.specificity_score = 0.0  # Higher values indicate more specific concepts
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
+        self.definition = ""  # Store concept definition if found
 
     def _extract_pattern(self, text: str) -> List[str]:
         """
@@ -87,8 +90,9 @@ class ConceptSignature:
         Returns:
             List of terms in the pattern
         """
-        # Simple tokenization
-        words = re.findall(r'\b\w+\b', text.lower())
+        # Simple tokenization with improved handling of terms
+        words = re.findall(r'\b[\w\-]+\b', text.lower())
+        # Filter out very short words
         return [w for w in words if len(w) > 2]
 
     def add_occurrence(self, video_id: str, segment_id: str, start_time: float,
@@ -164,12 +168,16 @@ class ConceptSignature:
                             if self.concept_id in c.related_concepts)
         reference_score = min(reference_count / 5.0, 1.0)
 
+        # Concepts with definitions are likely more fundamental
+        definition_score = 0.3 if self.definition else 0.0
+
         # Combine scores with weights
         self.hierarchy_score = (
             pattern_score * 0.2 +
-            relationship_score * 0.3 +
-            occurrence_score * 0.2 +
-            reference_score * 0.3
+            relationship_score * 0.25 +
+            occurrence_score * 0.15 +
+            reference_score * 0.25 +
+            definition_score * 0.15
         )
 
         return self.hierarchy_score
@@ -218,6 +226,7 @@ class ConceptSignature:
             "specificity_score": self.specificity_score,
             "related_concepts": self.related_concepts,
             "occurrences_count": len(self.occurrences),
+            "definition": self.definition,
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }
@@ -247,6 +256,7 @@ class ConceptSignature:
         signature.generality_score = data.get("generality_score", 0.0)
         signature.specificity_score = data.get("specificity_score", 0.0)
         signature.related_concepts = data.get("related_concepts", {})
+        signature.definition = data.get("definition", "")
         signature.created_at = data.get("created_at", signature.created_at)
         signature.updated_at = data.get("updated_at", signature.updated_at)
 
@@ -268,6 +278,7 @@ class RelationshipGraph:
         self.adjacency_list = defaultdict(set)  # concept_id -> set of related concept_ids
         self.edge_attributes = {}  # (source_id, target_id) -> edge attributes
         self.domain_clusters = defaultdict(set)  # domain -> set of concept_ids
+        self.language_clusters = defaultdict(set)  # language -> set of concept_ids
 
     def add_concept(self, concept: ConceptSignature) -> None:
         """
@@ -278,6 +289,7 @@ class RelationshipGraph:
         """
         self.concepts[concept.concept_id] = concept
         self.domain_clusters[concept.domain].add(concept.concept_id)
+        self.language_clusters[concept.language].add(concept.concept_id)
 
     def add_relationship(
         self,
@@ -613,9 +625,52 @@ class RelationshipGraph:
                 "concept_count": len(self.concepts),
                 "relationship_count": len(self.edge_attributes),
                 "domains": list(self.domain_clusters.keys()),
+                "languages": list(self.language_clusters.keys()),
                 "timestamp": datetime.now().isoformat()
             }
         }
+
+    def find_similar_concepts(self, text: str, language: str = None, domain: str = None,
+                            max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Find concepts similar to the given text.
+
+        Args:
+            text: Text to match against
+            language: Optional language filter
+            domain: Optional domain filter
+            max_results: Maximum number of results to return
+
+        Returns:
+            List of similar concepts with match scores
+        """
+        # Filter concepts by language and domain if specified
+        candidate_concepts = {}
+        for concept_id, concept in self.concepts.items():
+            if language and concept.language != language:
+                continue
+            if domain and concept.domain != domain:
+                continue
+            candidate_concepts[concept_id] = concept
+
+        # Calculate match scores
+        matches = []
+        for concept_id, concept in candidate_concepts.items():
+            score = concept.match_text(text)
+            if score > 0.0:
+                matches.append({
+                    "concept_id": concept_id,
+                    "text": concept.text,
+                    "match_score": score,
+                    "domain": concept.domain,
+                    "language": concept.language,
+                    "concept_class": concept.concept_class
+                })
+
+        # Sort by match score
+        matches.sort(key=lambda x: x["match_score"], reverse=True)
+
+        return matches[:max_results]
 
 
 class MLCSProcessor:
@@ -673,6 +728,18 @@ class MLCSProcessor:
                 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing'
             }
 
+        # Additional Russian stopwords for physics context
+        if language == 'ru':
+            return {
+                "это", "вот", "так", "как", "ну", "да", "нет", "просто",
+                "значит", "сейчас", "здесь", "тут", "уже", "если", "все", "всё",
+                "хорошо", "там", "кстати", "давайте", "итак", "будет", "ещё", "еще",
+                "нас", "меня", "можно", "они", "только", "для", "поэтому", "равно",
+                "нужно", "получается", "означает", "должна", "вами", "можем", "какой-то",
+                "что-то", "стоит", "хочу", "буду", "видим", "понятно", "сделать", "например",
+                "должны", "какие-то", "сюда", "плюс", "минус", "будем", "результат", "такое"
+            }
+
     def _map_language_to_nltk(self, language: str) -> str:
         """
         Map language code to NLTK language name.
@@ -689,6 +756,36 @@ class MLCSProcessor:
             # Add more mappings as needed
         }
         return language_map.get(language, "english")
+
+    def tokenize_and_normalize(self, text: str, language: str = None) -> List[str]:
+        """
+        Tokenize and normalize text with improved language support.
+
+        Args:
+            text: Text to tokenize
+            language: Language code
+
+        Returns:
+            List of normalized tokens
+        """
+        # Use specified language or instance language
+        lang = language or self.language
+
+        # Get stopwords for the language
+        stopwords = self._load_stopwords(lang)
+
+        # Basic tokenization
+        tokens = re.findall(r'\b[\w\-]+\b', text.lower())
+
+        # Filter out stopwords and short words
+        filtered_tokens = [
+            token for token in tokens
+            if token not in stopwords
+            and not token.isdigit()
+            and len(token) > 2
+        ]
+
+        return filtered_tokens
 
     def _tokenize_text(self, text: str) -> List[str]:
         """
@@ -758,6 +855,86 @@ class MLCSProcessor:
         significant_ngrams.sort(key=lambda x: x[1], reverse=True)
 
         return significant_ngrams
+
+    def extract_significant_bigrams(self, text: str, min_count: int = 2) -> Dict[str, float]:
+        """
+        Extract significant bigrams from a text.
+
+        Args:
+            text: Input text
+            min_count: Minimum frequency for bigrams
+
+        Returns:
+            Dictionary of bigrams with their scores
+        """
+        # Tokenize and normalize
+        tokens = self.tokenize_and_normalize(text, self.language)
+
+        # Skip if too few tokens
+        if len(tokens) < 4:
+            return {}
+
+        # Extract bigrams
+        bigrams = []
+        for i in range(len(tokens) - 1):
+            bigrams.append((tokens[i], tokens[i+1]))
+
+        # Count frequencies
+        bigram_counts = Counter(bigrams)
+
+        # Extract significant bigrams
+        significant_bigrams = {}
+
+        for bigram, count in bigram_counts.items():
+            if count >= min_count:
+                # Calculate PMI-like score (modified for better ranking)
+                score = count * math.log(count + 1)
+
+                # Format as string
+                bigram_text = f"{bigram[0]} {bigram[1]}"
+                significant_bigrams[bigram_text] = score
+
+        return significant_bigrams
+
+    def extract_significant_trigrams(self, text: str, min_count: int = 2) -> Dict[str, float]:
+        """
+        Extract significant trigrams from a text.
+
+        Args:
+            text: Input text
+            min_count: Minimum frequency for trigrams
+
+        Returns:
+            Dictionary of trigrams with their scores
+        """
+        # Tokenize and normalize
+        tokens = self.tokenize_and_normalize(text, self.language)
+
+        # Skip if too few tokens
+        if len(tokens) < 6:
+            return {}
+
+        # Extract trigrams
+        trigrams = []
+        for i in range(len(tokens) - 2):
+            trigrams.append((tokens[i], tokens[i+1], tokens[i+2]))
+
+        # Count frequencies
+        trigram_counts = Counter(trigrams)
+
+        # Extract significant trigrams
+        significant_trigrams = {}
+
+        for trigram, count in trigram_counts.items():
+            if count >= min_count:
+                # Calculate PMI-like score (modified for better ranking)
+                score = count * math.log(count + 1) * 1.5  # Higher weight for trigrams
+
+                # Format as string
+                trigram_text = f"{trigram[0]} {trigram[1]} {trigram[2]}"
+                significant_trigrams[trigram_text] = score
+
+        return significant_trigrams
 
     def find_mlcs(self, sequences: List[List[str]]) -> List[str]:
         """
@@ -886,9 +1063,538 @@ class MLCSProcessor:
                     signature.signature_pattern, score = significant_sequences[0]
                     signature.confidence = min(score / 10.0, 1.0)  # Normalize confidence
 
+                # Check for definition patterns in contexts
+                signature.definition = self._extract_definition(concept_text, contexts)
+
             signatures.append(signature)
 
         return signatures
+
+    def _extract_definition(self, concept_text: str, contexts: List[str]) -> str:
+        """
+        Extract a definition for the concept from its contexts.
+
+        Args:
+            concept_text: Concept text
+            contexts: List of context texts
+
+        Returns:
+            Definition text or empty string
+        """
+        # Definition patterns based on language
+        definition_patterns = {
+            'en': [
+                r'(?:' + re.escape(concept_text) + r')\s+(?:is|are|refers to|means)\s+([^\.]+)',
+                r'(?:' + re.escape(concept_text) + r')\s+(?:is defined as|is called)\s+([^\.]+)',
+                r'(?:the|a)\s+(?:definition|meaning) of\s+(?:' + re.escape(concept_text) + r')\s+is\s+([^\.]+)'
+            ],
+            'ru': [
+                r'(?:' + re.escape(concept_text) + r')\s+(?:это|является|называется)\s+([^\.]+)',
+                r'(?:' + re.escape(concept_text) + r')\s+(?:определяется как)\s+([^\.]+)',
+                r'(?:определение|смысл)\s+(?:' + re.escape(concept_text) + r')\s+(?:это|состоит в том, что)\s+([^\.]+)'
+            ]
+        }
+
+        # Use patterns for the current language
+        patterns = definition_patterns.get(self.language, definition_patterns['en'])
+
+        # Check each context for a definition
+        for context in contexts:
+            for pattern in patterns:
+                matches = re.search(pattern, context.lower())
+                if matches:
+                    return matches.group(1).strip()
+
+        return ""
+
+
+class DomainKnowledgeBase:
+    """
+    Knowledge base for domain-specific concept recognition.
+    Provides context for identifying specialized terminology in different domains.
+    """
+
+    def __init__(self):
+        """Initialize the domain knowledge base."""
+        self.domains = {
+            "physics": self._init_physics_knowledge(),
+            "mathematics": self._init_mathematics_knowledge(),
+            "programming": self._init_programming_knowledge()
+        }
+
+    def _init_physics_knowledge(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Initialize physics domain knowledge.
+
+        Returns:
+            Dictionary of physics knowledge
+        """
+        return {
+            "concepts": {
+                "en": {
+                    # Core quantum mechanics concepts
+                    "quantum mechanics": {"weight": 0.9, "aliases": ["quantum theory", "quantum physics"]},
+                    "wave function": {"weight": 0.9, "aliases": ["wavefunction", "probability amplitude"]},
+                    "quantum state": {"weight": 0.9, "aliases": ["state", "quantum system state"]},
+                    "eigenstate": {"weight": 0.9, "aliases": ["eigenfunction", "energy eigenstate"]},
+                    "eigenvalue": {"weight": 0.9, "aliases": ["characteristic value", "proper value"]},
+                    "hamiltonian": {"weight": 0.9, "aliases": ["hamiltonian operator", "energy operator"]},
+                    "schrodinger equation": {"weight": 0.9, "aliases": ["wave equation", "time-dependent schrodinger equation"]},
+                    "hermitian operator": {"weight": 0.9, "aliases": ["self-adjoint operator"]},
+                    "hilbert space": {"weight": 0.9, "aliases": ["state space", "vector space"]},
+                    "commutator": {"weight": 0.9, "aliases": ["commutation relation"]},
+
+                    # Other important physics concepts
+                    "momentum": {"weight": 0.8, "aliases": ["linear momentum", "p"]},
+                    "angular momentum": {"weight": 0.8, "aliases": ["orbital angular momentum", "spin"]},
+                    "energy level": {"weight": 0.8, "aliases": ["energy state", "quantum level"]},
+                    "uncertainty principle": {"weight": 0.8, "aliases": ["heisenberg uncertainty", "uncertainty relation"]},
+                    "stationary state": {"weight": 0.8, "aliases": ["energy eigenstate"]},
+                    "observable": {"weight": 0.8, "aliases": ["physical observable", "quantum observable"]},
+                    "quantum superposition": {"weight": 0.8, "aliases": ["superposition", "linear combination"]},
+                    "quantum entanglement": {"weight": 0.8, "aliases": ["entanglement", "quantum correlation"]},
+                    "expectation value": {"weight": 0.8, "aliases": ["expected value", "mean value"]},
+                    "basis": {"weight": 0.8, "aliases": ["basis set", "basis vectors"]}
+                },
+                "ru": {
+                    # Core quantum mechanics concepts in Russian
+                    "квантовая механика": {"weight": 0.9, "aliases": ["квантовая теория", "квантовая физика"]},
+                    "волновая функция": {"weight": 0.9, "aliases": ["волновая функция", "амплитуда вероятности"]},
+                    "квантовое состояние": {"weight": 0.9, "aliases": ["состояние", "состояние квантовой системы"]},
+                    "собственное состояние": {"weight": 0.9, "aliases": ["собственная функция", "энергетическое собственное состояние"]},
+                    "собственное значение": {"weight": 0.9, "aliases": ["характеристическое значение", "собственное число"]},
+                    "гамильтониан": {"weight": 0.9, "aliases": ["оператор гамильтона", "оператор энергии"]},
+                    "уравнение шредингера": {"weight": 0.9, "aliases": ["волновое уравнение", "зависящее от времени уравнение шредингера"]},
+                    "эрмитовый оператор": {"weight": 0.9, "aliases": ["самосопряженный оператор"]},
+                    "гильбертово пространство": {"weight": 0.9, "aliases": ["пространство состояний", "векторное пространство"]},
+                    "коммутатор": {"weight": 0.9, "aliases": ["соотношение коммутации"]},
+
+                    # Other important physics concepts in Russian
+                    "импульс": {"weight": 0.8, "aliases": ["линейный импульс", "p"]},
+                    "угловой момент": {"weight": 0.8, "aliases": ["орбитальный угловой момент", "спин"]},
+                    "энергетический уровень": {"weight": 0.8, "aliases": ["энергетическое состояние", "квантовый уровень"]},
+                    "принцип неопределенности": {"weight": 0.8, "aliases": ["неопределенность гейзенберга", "соотношение неопределенностей"]},
+                    "стационарное состояние": {"weight": 0.8, "aliases": ["энергетическое собственное состояние"]},
+                    "наблюдаемая": {"weight": 0.8, "aliases": ["физическая наблюдаемая", "квантовая наблюдаемая"]},
+                    "квантовая суперпозиция": {"weight": 0.8, "aliases": ["суперпозиция", "линейная комбинация"]},
+                    "квантовая запутанность": {"weight": 0.8, "aliases": ["запутанность", "квантовая корреляция"]},
+                    "среднее значение": {"weight": 0.8, "aliases": ["ожидаемое значение", "математическое ожидание"]},
+                    "базис": {"weight": 0.8, "aliases": ["базисный набор", "базисные векторы"]}
+                }
+            },
+            "relationships": {
+                "prerequisites": {
+                    "quantum state": ["wave function"],
+                    "eigenstate": ["quantum state", "eigenvalue"],
+                    "schrodinger equation": ["wave function", "hamiltonian"],
+                    "commutator": ["hermitian operator"],
+                    "uncertainty principle": ["commutator"],
+                    "expectation value": ["observable", "quantum state"]
+                }
+            }
+        }
+
+    def _init_mathematics_knowledge(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Initialize mathematics domain knowledge.
+
+        Returns:
+            Dictionary of mathematics knowledge
+        """
+        return {
+            "concepts": {
+                "en": {
+                    # Core mathematics concepts
+                    "function": {"weight": 0.9, "aliases": ["mapping", "transformation"]},
+                    "derivative": {"weight": 0.9, "aliases": ["differentiation", "rate of change"]},
+                    "integral": {"weight": 0.9, "aliases": ["integration", "antiderivative"]},
+                    "limit": {"weight": 0.9, "aliases": ["convergence", "asymptotic value"]},
+                    "theorem": {"weight": 0.9, "aliases": ["proposition", "law"]},
+                    "proof": {"weight": 0.9, "aliases": ["demonstration", "verification"]},
+                    "equation": {"weight": 0.9, "aliases": ["formula", "relation"]},
+                    "matrix": {"weight": 0.9, "aliases": ["array", "grid"]},
+                    "vector": {"weight": 0.9, "aliases": ["directed quantity", "tuples"]},
+                    "set": {"weight": 0.9, "aliases": ["collection", "family"]}
+                },
+                "ru": {
+                    # Core mathematics concepts in Russian
+                    "функция": {"weight": 0.9, "aliases": ["отображение", "преобразование"]},
+                    "производная": {"weight": 0.9, "aliases": ["дифференцирование", "скорость изменения"]},
+                    "интеграл": {"weight": 0.9, "aliases": ["интегрирование", "первообразная"]},
+                    "предел": {"weight": 0.9, "aliases": ["сходимость", "асимптотическое значение"]},
+                    "теорема": {"weight": 0.9, "aliases": ["предложение", "закон"]},
+                    "доказательство": {"weight": 0.9, "aliases": ["демонстрация", "верификация"]},
+                    "уравнение": {"weight": 0.9, "aliases": ["формула", "соотношение"]},
+                    "матрица": {"weight": 0.9, "aliases": ["массив", "таблица"]},
+                    "вектор": {"weight": 0.9, "aliases": ["направленная величина", "кортеж"]},
+                    "множество": {"weight": 0.9, "aliases": ["набор", "семейство"]}
+                }
+            }
+        }
+
+    def _init_programming_knowledge(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Initialize programming domain knowledge.
+
+        Returns:
+            Dictionary of programming knowledge
+        """
+        return {
+            "concepts": {
+                "en": {
+                    # Core programming concepts
+                    "algorithm": {"weight": 0.9, "aliases": ["procedure", "method"]},
+                    "data structure": {"weight": 0.9, "aliases": ["data organization", "data collection"]},
+                    "function": {"weight": 0.9, "aliases": ["method", "procedure", "subroutine"]},
+                    "class": {"weight": 0.9, "aliases": ["object template", "type"]},
+                    "object": {"weight": 0.9, "aliases": ["instance", "class instance"]},
+                    "variable": {"weight": 0.9, "aliases": ["value holder", "identifier"]},
+                    "loop": {"weight": 0.9, "aliases": ["iteration", "repetition"]},
+                    "recursion": {"weight": 0.9, "aliases": ["self-reference", "recursive call"]},
+                    "inheritance": {"weight": 0.9, "aliases": ["subclassing", "extension"]},
+                    "interface": {"weight": 0.9, "aliases": ["contract", "protocol"]}
+                },
+                "ru": {
+                    # Core programming concepts in Russian
+                    "алгоритм": {"weight": 0.9, "aliases": ["процедура", "метод"]},
+                    "структура данных": {"weight": 0.9, "aliases": ["организация данных", "коллекция данных"]},
+                    "функция": {"weight": 0.9, "aliases": ["метод", "процедура", "подпрограмма"]},
+                    "класс": {"weight": 0.9, "aliases": ["шаблон объекта", "тип"]},
+                    "объект": {"weight": 0.9, "aliases": ["экземпляр", "экземпляр класса"]},
+                    "переменная": {"weight": 0.9, "aliases": ["держатель значения", "идентификатор"]},
+                    "цикл": {"weight": 0.9, "aliases": ["итерация", "повторение"]},
+                    "рекурсия": {"weight": 0.9, "aliases": ["самовызов", "рекурсивный вызов"]},
+                    "наследование": {"weight": 0.9, "aliases": ["подклассирование", "расширение"]},
+                    "интерфейс": {"weight": 0.9, "aliases": ["контракт", "протокол"]}
+                }
+            }
+        }
+
+    def get_domain_concepts(self, domain: str, language: str = "en") -> Dict[str, Dict[str, Any]]:
+        """
+        Get domain-specific concepts.
+
+        Args:
+            domain: Domain name
+            language: Language code
+
+        Returns:
+            Dictionary of concepts for the domain and language
+        """
+        # Get domain
+        domain_data = self.domains.get(domain, {})
+
+        # Get concepts for the domain
+        concepts_data = domain_data.get("concepts", {})
+
+        # Get concepts for the language, fallback to English
+        return concepts_data.get(language, concepts_data.get("en", {}))
+
+    def match_domain_concept(self, term: str, domain: str, language: str = "en") -> Tuple[str, float]:
+        """
+        Match a term against domain concepts to find the best match.
+
+        Args:
+            term: Term to match
+            domain: Domain to search in
+            language: Language code
+
+        Returns:
+            Tuple of (matched concept, score)
+        """
+        term = term.lower()
+
+        # Get domain concepts
+        domain_concepts = self.get_domain_concepts(domain, language)
+
+        # Check for exact matches
+        if term in domain_concepts:
+            return term, domain_concepts[term]["weight"]
+
+        # Check aliases
+        for concept, data in domain_concepts.items():
+            if term in data.get("aliases", []):
+                return concept, data["weight"] * 0.9  # Slightly lower weight for aliases
+
+        # Check for partial matches
+        best_match = None
+        best_score = 0.0
+
+        for concept in domain_concepts:
+            # Check if concept contains term or term contains concept
+            if term in concept or concept in term:
+                # Calculate similarity score based on relative lengths
+                longer = max(len(term), len(concept))
+                shorter = min(len(term), len(concept))
+                if longer > 0:
+                    similarity = shorter / longer
+                    score = similarity * domain_concepts[concept]["weight"]
+
+                    if score > best_score:
+                        best_score = score
+                        best_match = concept
+
+        # Return best match if good enough
+        if best_match and best_score > 0.5:
+            return best_match, best_score
+
+        return "", 0.0
+
+
+class ConceptExtractor:
+    """
+    Enhanced concept extractor with advanced NLP techniques and domain knowledge.
+    Used to identify and extract domain-specific concepts from educational content.
+    """
+
+    def __init__(self, language: str = "en"):
+        """
+        Initialize the concept extractor.
+
+        Args:
+            language: Default language
+        """
+        self.language = language
+        self.mlcs_processor = MLCSProcessor(language)
+        self.knowledge_base = DomainKnowledgeBase()
+
+    def extract_concepts_from_text(
+        self,
+        text: str,
+        domain: str,
+        language: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract concepts from a text using NLP and domain knowledge.
+
+        Args:
+            text: Input text
+            domain: Domain (e.g., "physics")
+            language: Language code
+
+        Returns:
+            List of extracted concepts
+        """
+        # Use specified language or default
+        lang = language or self.language
+
+        # Extract candidate concepts using different methods
+        candidates = {}
+
+        # 1. Extract n-grams
+        bigrams = self.mlcs_processor.extract_significant_bigrams(text, min_count=2)
+        trigrams = self.mlcs_processor.extract_significant_trigrams(text, min_count=2)
+
+        # Add bigrams to candidates
+        for bigram, score in bigrams.items():
+            candidates[bigram] = {
+                "text": bigram,
+                "score": score,
+                "source": "bigram"
+            }
+
+        # Add trigrams (with higher weight)
+        for trigram, score in trigrams.items():
+            candidates[trigram] = {
+                "text": trigram,
+                "score": score * 1.2,  # Higher weight for trigrams
+                "source": "trigram"
+            }
+
+        # 2. Match against domain knowledge
+        domain_concepts = self.knowledge_base.get_domain_concepts(domain, lang)
+
+        for concept, data in domain_concepts.items():
+            if concept.lower() in text.lower():
+                weight = data["weight"]
+                score = 5.0 * weight  # High base score for known domain concepts
+
+                if concept in candidates:
+                    candidates[concept]["score"] += score
+                    candidates[concept]["domain_match"] = True
+                else:
+                    candidates[concept] = {
+                        "text": concept,
+                        "score": score,
+                        "source": "domain_knowledge",
+                        "domain_match": True
+                    }
+
+            # Check aliases too
+            for alias in data.get("aliases", []):
+                if alias.lower() in text.lower():
+                    weight = data["weight"] * 0.9  # Slightly lower for aliases
+                    score = 4.0 * weight
+
+                    if concept in candidates:
+                        candidates[concept]["score"] += score / 2  # Avoid double counting
+                    else:
+                        candidates[concept] = {
+                            "text": concept,
+                            "score": score,
+                            "source": "domain_knowledge_alias",
+                            "domain_match": True
+                        }
+
+        # 3. Look for definitional patterns
+        definitions = self._extract_definitions(text, lang)
+
+        for term, definition in definitions.items():
+            score = 6.0  # Highest score for definitional contexts
+
+            if term in candidates:
+                candidates[term]["score"] += score
+                candidates[term]["definition"] = definition
+            else:
+                candidates[term] = {
+                    "text": term,
+                    "score": score,
+                    "source": "definition",
+                    "definition": definition
+                }
+
+        # Convert to list and filter by score
+        concept_list = []
+
+        for term, data in candidates.items():
+            # Skip very low scores
+            if data["score"] < 2.0:
+                continue
+
+            concept_list.append({
+                "text": term,
+                "score": data["score"],
+                "source": data["source"],
+                "definition": data.get("definition", ""),
+                "domain_match": data.get("domain_match", False)
+            })
+
+        # Sort by score
+        concept_list.sort(key=lambda x: x["score"], reverse=True)
+
+        # Take top concepts
+        return concept_list[:30]  # Limit to top 30
+
+    def _extract_definitions(self, text: str, language: str) -> Dict[str, str]:
+        """
+        Extract term definitions from text.
+
+        Args:
+            text: Input text
+            language: Language code
+
+        Returns:
+            Dictionary mapping terms to their definitions
+        """
+        definitions = {}
+
+        # Definition patterns based on language
+        patterns = {
+            'en': [
+                r'([\w\s]+) (?:is|are) defined as ([\w\s,]+)',
+                r'([\w\s]+) (?:refers to|means|is called) ([\w\s,]+)',
+                r'(?:the|a) (?:concept|definition) of ([\w\s]+) is ([\w\s,]+)'
+            ],
+            'ru': [
+                r'([\w\s]+) (?:определяется как|это|является) ([\w\s,]+)',
+                r'([\w\s]+) (?:называется|обозначает) ([\w\s,]+)',
+                r'(?:понятие|определение) ([\w\s]+) (?:это|есть) ([\w\s,]+)'
+            ]
+        }
+
+        # Use patterns for the language, fallback to English
+        lang_patterns = patterns.get(language, patterns['en'])
+
+        # Find definitions
+        for pattern in lang_patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if len(match.groups()) >= 2:
+                    term = match.group(1).strip().lower()
+                    definition = match.group(2).strip()
+
+                    # Skip very short terms
+                    if len(term) < 3:
+                        continue
+
+                    definitions[term] = definition
+
+        return definitions
+
+    def classify_concept_type(
+        self,
+        concept: str,
+        domain: str,
+        context: str,
+        language: str = None
+    ) -> str:
+        """
+        Classify a concept as theoretical or practical.
+
+        Args:
+            concept: Concept text
+            domain: Domain
+            context: Context text
+            language: Language code
+
+        Returns:
+            Classification ("theoretical" or "practical")
+        """
+        # Use specified language or default
+        lang = language or self.language
+
+        # Theoretical indicators
+        theoretical_indicators = {
+            'en': [
+                "definition", "concept", "theory", "theorem", "principle", "law",
+                "model", "framework", "hypothesis", "defined as", "refers to",
+                "is a", "is an", "represents", "signifies"
+            ],
+            'ru': [
+                "определение", "понятие", "теория", "теорема", "принцип", "закон",
+                "модель", "концепция", "гипотеза", "определяется как", "относится к",
+                "является", "представляет", "обозначает"
+            ]
+        }
+
+        # Practical indicators
+        practical_indicators = {
+            'en': [
+                "example", "application", "implementation", "how to", "use case",
+                "practical", "practice", "technique", "method", "approach", "tool",
+                "step by step", "procedure", "algorithm", "calculation"
+            ],
+            'ru': [
+                "пример", "применение", "реализация", "как", "использование",
+                "практический", "практика", "техника", "метод", "подход", "инструмент",
+                "шаг за шагом", "процедура", "алгоритм", "вычисление"
+            ]
+        }
+
+        # Get appropriate indicators
+        theo_indicators = theoretical_indicators.get(lang, theoretical_indicators['en'])
+        prac_indicators = practical_indicators.get(lang, practical_indicators['en'])
+
+        # Count indicators in context
+        theo_count = sum(1 for ind in theo_indicators if ind.lower() in context.lower())
+        prac_count = sum(1 for ind in prac_indicators if ind.lower() in context.lower())
+
+        # Apply domain-specific knowledge
+        if domain == "mathematics":
+            # Mathematics concepts are more likely theoretical by default
+            theo_count += 1
+        elif domain == "programming":
+            # Programming concepts are more likely practical by default
+            prac_count += 1
+
+        # Return classification
+        if theo_count > prac_count:
+            return "theoretical"
+        elif prac_count > theo_count:
+            return "practical"
+        else:
+            # If tied, default to theoretical for multi-word concepts, practical for single words
+            return "theoretical" if " " in concept else "practical"
 
 
 class ConceptSignatureGenerator:
@@ -912,8 +1618,9 @@ class ConceptSignatureGenerator:
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
 
-        # Initialize processor
+        # Initialize processor and extractor
         self.mlcs_processor = MLCSProcessor()
+        self.concept_extractor = ConceptExtractor()
 
         # Initialize graph
         self.relationship_graph = RelationshipGraph()
@@ -970,6 +1677,8 @@ class ConceptSignatureGenerator:
         # Extract domain features and transcript segments
         domain_features = processing_result.get("domain_features", {})
         segments = processing_result.get("transcript", {}).get("segments", [])
+        language = processing_result.get("transcript", {}).get("language", "en")
+        domain = processing_result.get("metadata", {}).get("domain", "unknown")
 
         # Process concepts
         key_concepts = domain_features.get("key_concepts", [])
@@ -978,9 +1687,9 @@ class ConceptSignatureGenerator:
             logger.warning(f"No concepts or segments found for video {video_id}")
             return processing_result
 
-        # Set language based on transcript
-        language = processing_result.get("transcript", {}).get("language", "en")
+        # Set language for processors
         self.mlcs_processor.language = language
+        self.concept_extractor = ConceptExtractor(language)
 
         # Generate concept signatures
         signatures = self.mlcs_processor.generate_concept_signatures(key_concepts, segments)
@@ -1009,6 +1718,7 @@ class ConceptSignatureGenerator:
                 enhanced_concept["signature_pattern"] = signatures[i].signature_pattern
                 enhanced_concept["hierarchy_score"] = signatures[i].hierarchy_score
                 enhanced_concept["confidence"] = signatures[i].confidence
+                enhanced_concept["definition"] = signatures[i].definition
                 enhanced_concept["related_concepts"] = [
                     {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
                     for rel_id, rel_data in signatures[i].related_concepts.items()
@@ -1021,6 +1731,9 @@ class ConceptSignatureGenerator:
         # Update domain features
         domain_features["key_concepts"] = enhanced_key_concepts
         domain_features["concept_signatures"] = [signature.to_dict() for signature in signatures]
+
+        # Try to extract additional domain-specific concepts
+        self._enhance_with_domain_concepts(domain_features, segments, domain, language)
 
         # Save relationship graph
         self._save_relationship_graph()
@@ -1071,35 +1784,138 @@ class ConceptSignatureGenerator:
 
                     co_occurrences[(concept1.concept_id, concept2.concept_id)] = len(shared_segments)
 
-        # Analyze proximity and ordering
+        # Analyze proximity, ordering, and semantic relationships
         for i, concept1 in enumerate(signatures):
             for j, concept2 in enumerate(signatures):
-                if i != j:
-                    # Skip if no co-occurrences
-                    if co_occurrences[(concept1.concept_id, concept2.concept_id)] == 0:
-                        continue
+                if i == j:
+                    continue
 
-                    # Determine concept hierarchy
-                    strength = min(co_occurrences[(concept1.concept_id, concept2.concept_id)] / 5.0, 1.0)
+                # Skip if no co-occurrences
+                if co_occurrences[(concept1.concept_id, concept2.concept_id)] == 0:
+                    continue
 
-                    # Check segment order to determine prerequisites
-                    concept1_segments = list(concept_segment_map[concept1.concept_id])
-                    concept2_segments = list(concept_segment_map[concept2.concept_id])
+                # Calculate relationship strength based on co-occurrences
+                co_occurrence_count = co_occurrences[(concept1.concept_id, concept2.concept_id)]
+                strength = min(co_occurrence_count / 5.0, 1.0)
 
-                    # Get earliest segment for each concept
-                    concept1_earliest = min(segment_order[sid] for sid in concept1_segments if sid in segment_order)
-                    concept2_earliest = min(segment_order[sid] for sid in concept2_segments if sid in segment_order)
+                # Skip weak relationships
+                if strength < 0.2:
+                    continue
 
-                    # If concept1 appears significantly before concept2, it might be a prerequisite
-                    if concept1_earliest < concept2_earliest - 3:  # At least 3 segments earlier
-                        self.relationship_graph.add_relationship(
-                            concept1.concept_id, concept2.concept_id, "prerequisite", strength
-                        )
-                    else:
-                        # Otherwise just a related concept
-                        self.relationship_graph.add_relationship(
-                            concept1.concept_id, concept2.concept_id, "related", strength
-                        )
+                # Check if one concept might be a prerequisite of the other
+                concept1_segments = list(concept_segment_map[concept1.concept_id])
+                concept2_segments = list(concept_segment_map[concept2.concept_id])
+
+                # Get earliest segment for each concept
+                concept1_earliest = min(segment_order[sid] for sid in concept1_segments if sid in segment_order)
+                concept2_earliest = min(segment_order[sid] for sid in concept2_segments if sid in segment_order)
+
+                # Determine relationship type
+                relationship_type = "related"
+
+                # If concept1 consistently appears before concept2, it might be a prerequisite
+                if concept1_earliest < concept2_earliest - 3:  # At least 3 segments earlier
+                    # Check if concept1 is mentioned in definition of concept2
+                    text_relationship = False
+                    for occurrence in concept2.occurrences:
+                        if concept1.text.lower() in occurrence.get("context_text", "").lower():
+                            text_relationship = True
+                            break
+
+                    if text_relationship:
+                        relationship_type = "prerequisite"
+
+                # Check for "is a" relationships
+                if concept2.text.lower() in concept1.text.lower() and len(concept1.text) > len(concept2.text):
+                    # concept2 might be a more general version of concept1
+                    relationship_type = "is_a"
+                    strength = max(strength, 0.7)  # Boost strength for "is a" relationships
+
+                # Add relationship to graph
+                self.relationship_graph.add_relationship(
+                    concept1.concept_id, concept2.concept_id, relationship_type, strength
+                )
+
+    def _enhance_with_domain_concepts(
+        self,
+        domain_features: Dict[str, Any],
+        segments: List[Dict[str, Any]],
+        domain: str,
+        language: str
+    ) -> None:
+        """
+        Enhance domain features with additional domain-specific concepts.
+
+        Args:
+            domain_features: Domain features dictionary
+            segments: Transcript segments
+            domain: Content domain
+            language: Language code
+        """
+        if not segments:
+            return
+
+        # Combine all text
+        all_text = " ".join([segment.get("text", "") for segment in segments])
+
+        # Extract domain-specific concepts
+        domain_concepts = self.concept_extractor.extract_concepts_from_text(
+            all_text, domain, language
+        )
+
+        # Only keep high-scoring concepts that aren't already in key_concepts
+        existing_concepts = {c.get("text", "").lower() for c in domain_features.get("key_concepts", [])}
+
+        new_concepts = []
+        for concept in domain_concepts:
+            if concept["text"].lower() not in existing_concepts and concept["score"] >= 3.0:
+                # Classify concept
+                context_segments = []
+                for segment in segments:
+                    if concept["text"].lower() in segment.get("text", "").lower():
+                        context_segments.append(segment.get("text", ""))
+
+                context = " ".join(context_segments)
+                concept_class = self.concept_extractor.classify_concept_type(
+                    concept["text"], domain, context, language
+                )
+
+                # Format concept
+                new_concept = {
+                    "text": concept["text"],
+                    "frequency": 1,  # Placeholder
+                    "domain": domain,
+                    "theoretical": concept_class == "theoretical",
+                    "concept_class": concept_class,
+                    "score": concept["score"],
+                    "source": concept["source"],
+                    "domain_match": concept.get("domain_match", False),
+                    "definition": concept.get("definition", ""),
+                    "language": language
+                }
+
+                new_concepts.append(new_concept)
+
+        # Add new concepts to domain features
+        if new_concepts:
+            # Find theoretical and practical concepts
+            theoretical_concepts = [c for c in new_concepts if c["concept_class"] == "theoretical"]
+            practical_concepts = [c for c in new_concepts if c["concept_class"] == "practical"]
+
+            # Update domain features
+            if "key_concepts" not in domain_features:
+                domain_features["key_concepts"] = []
+            domain_features["key_concepts"].extend(new_concepts)
+
+            if "theoretical_concepts" not in domain_features:
+                domain_features["theoretical_concepts"] = []
+            domain_features["theoretical_concepts"].extend(theoretical_concepts)
+
+            if "practical_concepts" not in domain_features:
+                domain_features["practical_concepts"] = []
+            domain_features["practical_concepts"].extend(practical_concepts)
+
+            logger.info(f"Added {len(new_concepts)} domain-specific concepts from knowledge base")
 
     def generate_enhanced_learning_path(
         self,
@@ -1112,7 +1928,7 @@ class ConceptSignatureGenerator:
 
         Args:
             concept_ids: List of concept IDs
-            theory_practice_ratio: Theory/practice ratio preference
+            theory_practice_ratio: Desired ratio of theoretical to practical content
             domain: Optional domain filter
 
         Returns:
@@ -1156,7 +1972,8 @@ class ConceptSignatureGenerator:
                     "related_concepts": [
                         rel_id for rel_id, _ in
                         self.relationship_graph.get_related_concepts(concept_id, min_strength=0.3)
-                    ]
+                    ],
+                    "definition": concept.definition
                 })
 
         # Create learning path structure
@@ -1200,7 +2017,8 @@ class ConceptSignatureGenerator:
                         "signature_pattern": signature.signature_pattern,
                         "hierarchy_score": signature.hierarchy_score,
                         "confidence": signature.confidence,
-                        "related_concepts": signature.related_concepts
+                        "related_concepts": signature.related_concepts,
+                        "definition": signature.definition
                     }
                 }
 
@@ -1273,7 +2091,8 @@ class ConceptSignatureGenerator:
                             "hierarchy_score": concept.get("hierarchy_score", 0.0),
                             "signature_pattern": concept.get("signature_pattern", []),
                             "prerequisites": concept.get("prerequisites", []),
-                            "related_concepts": concept.get("related_concepts", [])
+                            "related_concepts": concept.get("related_concepts", []),
+                            "definition": concept.get("definition", "")
                         })
                     else:
                         # Add enhanced concept to base

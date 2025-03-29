@@ -10,9 +10,11 @@ import uuid
 import re
 import nltk
 from typing import Dict, List, Set, Any, Optional, Tuple, Counter as CounterType
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 import json
+import math
+import string
 
 # Make sure NLTK resources are available
 required_resources = ['punkt', 'stopwords']
@@ -89,7 +91,7 @@ class DataPipeline:
 
     def _init_nlp_resources(self):
         """Initialize NLP resources for concept extraction."""
-        # Initialize stopwords for different languages
+        # Initialize stopwords for different languages with comprehensive lists
         self.stopwords = {
             'en': set(stopwords.words('english')),
             'ru': set()
@@ -102,19 +104,83 @@ class DataPipeline:
             logger.warning("Russian stopwords not available, using empty set")
 
         # Add common filler words not in NLTK's stopwords
-        additional_stopwords_en = {"uh", "um", "like", "so", "well", "actually", "basically",
-                            "literally", "sort", "kind", "really", "very", "quite",
-                            "okay", "ok", "yeah", "yes", "no", "right", "let", "just",
-                            "gonna", "going", "let's", "now", "here", "there", "this",
-                            "that", "these", "those", "will", "shall", "should", "would",
-                            "could", "can", "may", "might", "must"}
+        additional_stopwords_en = {
+            # Common English filler words and discourse markers
+            "uh", "um", "like", "so", "well", "actually", "basically",
+            "literally", "sort", "kind", "really", "very", "quite",
+            "okay", "ok", "yeah", "yes", "no", "right", "let", "just",
+            "gonna", "going", "let's", "now", "here", "there", "this",
+            "that", "these", "those", "will", "shall", "should", "would",
+            "could", "can", "may", "might", "must",
+
+            # Common pronouns and determiners
+            "i", "me", "my", "mine", "myself",
+            "you", "your", "yours", "yourself",
+            "he", "him", "his", "himself",
+            "she", "her", "hers", "herself",
+            "it", "its", "itself",
+            "we", "us", "our", "ours", "ourselves",
+            "they", "them", "their", "theirs", "themselves",
+            "what", "which", "who", "whom", "whose",
+
+            # Common verbs
+            "am", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "having", "do", "does", "did", "doing",
+            "get", "gets", "got", "getting", "go", "goes", "went", "gone", "going",
+            "make", "makes", "made", "making", "take", "takes", "took", "taken", "taking",
+            "come", "comes", "came", "coming", "see", "sees", "saw", "seen", "seeing",
+            "use", "uses", "used", "using",
+
+            # Common adverbs and prepositions
+            "up", "down", "in", "out", "on", "off", "over", "under", "at", "by",
+            "for", "from", "to", "with", "about", "against", "between", "into",
+            "through", "during", "before", "after", "as", "since", "until",
+            "above", "below", "near", "far", "then", "also", "even", "only",
+
+            # Conjunctions and other function words
+            "and", "but", "or", "nor", "yet", "so", "because", "if", "unless",
+            "while", "where", "when", "how", "why", "whether", "though",
+            "although", "since"
+        }
         self.stopwords['en'].update(additional_stopwords_en)
 
         # Add Russian filler words
-        additional_stopwords_ru = {"это", "вот", "так", "как", "ну", "да", "нет", "просто",
-                                  "значит", "сейчас", "здесь", "тут", "уже", "если", "все", "всё",
-                                  "хорошо", "там", "кстати", "давайте", "итак", "будет", "ещё", "еще",
-                                  "нас", "меня", "можно", "они", "только", "для"}
+        additional_stopwords_ru = {
+            # Common Russian filler words and discourse markers
+            "это", "вот", "так", "как", "ну", "да", "нет", "просто",
+            "значит", "сейчас", "здесь", "тут", "уже", "если", "все", "всё",
+            "хорошо", "там", "кстати", "давайте", "итак", "будет", "ещё", "еще",
+            "нас", "меня", "можно", "они", "только", "для",
+
+            # Common Russian pronouns and determiners
+            "я", "мне", "меня", "мой", "моя", "моё", "мои", "мною",
+            "ты", "тебя", "тебе", "твой", "твоя", "твоё", "твои", "тобой",
+            "он", "его", "ему", "им", "него", "нему", "ним",
+            "она", "её", "ей", "ею", "неё", "ней",
+            "оно", "нас", "нам", "нами", "них", "ими",
+            "вы", "вас", "вам", "вами",
+            "они", "их", "им", "ими",
+            "кто", "что", "какой", "какая", "какое", "какие", "чей", "который",
+
+            # Common Russian verbs
+            "быть", "есть", "буду", "будешь", "будет", "будем", "будете", "будут",
+            "был", "была", "было", "были",
+            "иметь", "имею", "имеешь", "имеет", "имеем", "имеете", "имеют",
+            "делать", "делаю", "делаешь", "делает", "делаем", "делаете", "делают",
+            "идти", "иду", "идёшь", "идёт", "идём", "идёте", "идут",
+            "сказать", "скажу", "скажешь", "скажет", "скажем", "скажете", "скажут",
+
+            # Common Russian adverbs and prepositions
+            "в", "на", "с", "к", "у", "от", "из", "по", "за", "о", "об", "без", "до",
+            "над", "под", "при", "через", "между", "около", "перед", "после",
+            "сейчас", "потом", "всегда", "никогда", "иногда", "обычно", "вверх", "вниз",
+
+            # Problem words from the example output
+            "поэтому", "равно", "нужно", "получается", "означает", "должна", "вами",
+            "можем", "какой-то", "что-то", "стоит", "хочу", "буду", "видим",
+            "понятно", "сделать", "например", "должны", "какие-то", "сюда",
+            "плюс", "минус", "будем", "результат", "такое"
+        }
         self.stopwords['ru'].update(additional_stopwords_ru)
 
         # Domain-specific keywords that are important for each domain
@@ -152,7 +218,9 @@ class DataPipeline:
                 "ru": {"сила", "энергия", "импульс", "масса", "скорость", "ускорение",
                       "гравитация", "электромагнетизм", "квантовый", "относительность", "частица",
                       "волна", "поле", "потенциал", "ядерный", "атомный", "термодинамика",
-                      "жидкость", "механика", "динамика", "кинематика", "статика"}
+                      "жидкость", "механика", "динамика", "кинематика", "статика",
+                      "оператор", "гамильтониан", "состояние", "собственное", "коммутатор",
+                      "представление", "базис", "шредингер", "симметрия"}
             }
         }
 
@@ -217,7 +285,10 @@ class DataPipeline:
                     r'\b(закон|принцип) (ньютона|кулона|фарадея|ома|ампера|кеплера)\b',
                     r'\b(специальная|общая) (теория относительности)\b',
                     r'\b(квантовая) (механика|теория поля|хромодинамика|электродинамика)\b',
-                    r'\b(волновая|корпускулярная) (функция|дуализм|теория)\b'
+                    r'\b(волновая|корпускулярная) (функция|дуализм|теория)\b',
+                    r'\b(оператор) (гамильтониана|шредингера|рождения|уничтожения|импульса|энергии)\b',
+                    r'\b(собственное) (значение|состояние|функция)\b',
+                    r'\b(координатное|импульсное) (представление)\b'
                 ]
             }
         }
@@ -228,6 +299,272 @@ class DataPipeline:
             self.compiled_domain_patterns[domain] = {}
             for lang, patterns in lang_patterns.items():
                 self.compiled_domain_patterns[domain][lang] = [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+
+        # Define patterns for definitional contexts
+        self.definition_patterns = {
+            'en': [
+                r'(\w+[\s\w]*) is defined as ([\s\w]+)',
+                r'(\w+[\s\w]*) refers to ([\s\w]+)',
+                r'(\w+[\s\w]*) is a ([\s\w]+)',
+                r'(\w+[\s\w]*) is an ([\s\w]+)',
+                r'(\w+[\s\w]*) means ([\s\w]+)',
+                r'the concept of (\w+[\s\w]*)',
+                r'the principle of (\w+[\s\w]*)',
+                r'the theory of (\w+[\s\w]*)',
+                r'(\w+[\s\w]*) is characterized by ([\s\w]+)',
+                r'(\w+[\s\w]*) is called ([\s\w]+)'
+            ],
+            'ru': [
+                r'(\w+[\s\w]*) определяется как ([\s\w]+)',
+                r'(\w+[\s\w]*) означает ([\s\w]+)',
+                r'(\w+[\s\w]*) это ([\s\w]+)',
+                r'(\w+[\s\w]*) является ([\s\w]+)',
+                r'понятие (\w+[\s\w]*)',
+                r'концепция (\w+[\s\w]*)',
+                r'принцип (\w+[\s\w]*)',
+                r'теория (\w+[\s\w]*)',
+                r'(\w+[\s\w]*) характеризуется ([\s\w]+)',
+                r'(\w+[\s\w]*) называется ([\s\w]+)'
+            ]
+        }
+
+        # Compile definition patterns
+        self.compiled_definition_patterns = {
+            lang: [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+            for lang, patterns in self.definition_patterns.items()
+        }
+
+        self.theoretical_patterns = {
+            'en': [
+                r'is defined as',
+                r'is called',
+                r'refers to',
+                r'is known as',
+                r'can be described as',
+                r'is a concept',
+                r'is characterized by',
+                r'is understood as',
+                r'is formulated as',
+                r'is represented by',
+                r'is expressed as',
+                r'is given by',
+                r'is derived from',
+                r'is related to',
+                r'the definition of',
+                r'the concept of',
+                r'the theory of',
+                r'the principle of',
+                r'the law of',
+                r'the equation for',
+                r'according to the theory',
+                r'in theoretical terms',
+                r'from a theoretical perspective',
+                r'a fundamental principle',
+                r'the basis of'
+            ],
+            'ru': [
+                r'определяется как',
+                r'называется',
+                r'обозначает',
+                r'известен как',
+                r'может быть описан как',
+                r'является концепцией',
+                r'характеризуется',
+                r'понимается как',
+                r'формулируется как',
+                r'представлен как',
+                r'выражается как',
+                r'дается как',
+                r'выводится из',
+                r'связан с',
+                r'определение',
+                r'концепция',
+                r'теория',
+                r'принцип',
+                r'закон',
+                r'уравнение для',
+                r'согласно теории',
+                r'с теоретической точки зрения',
+                r'фундаментальный принцип',
+                r'основа',
+                r'теоретически'
+            ]
+        }
+
+        self.practical_patterns = {
+            'en': [
+                r"let['']s",
+                r'we (can|will|should|could)',
+                r'you (can|will|should|could)',
+                r'for example',
+                r'as an example',
+                r'step by step',
+                r'how to',
+                r'in practice',
+                r'in this example',
+                r'to solve this',
+                r'to implement this',
+                r'to calculate',
+                r'to compute',
+                r'let me show you',
+                r'I\'ll demonstrate',
+                r'try to',
+                r'let\'s try',
+                r'in our case',
+                r'the procedure is',
+                r'application of',
+                r'when working with',
+                r'in real world',
+                r'practically speaking',
+                r'to illustrate',
+                r'case study'
+            ],
+            'ru': [
+                r'давайте',
+                r'мы (можем|будем|должны|могли)',
+                r'вы (можете|будете|должны|могли)',
+                r'например',
+                r'в качестве примера',
+                r'шаг за шагом',
+                r'как сделать',
+                r'на практике',
+                r'в этом примере',
+                r'чтобы решить',
+                r'для реализации',
+                r'для вычисления',
+                r'позвольте показать',
+                r'я продемонстрирую',
+                r'попробуйте',
+                r'давайте попробуем',
+                r'в нашем случае',
+                r'процедура',
+                r'применение',
+                r'при работе с',
+                r'в реальном мире',
+                r'практически говоря',
+                r'для иллюстрации',
+                r'пример из практики'
+            ]
+        }
+
+        # Compile the regex patterns
+        self.theoretical_regex = {
+            lang: re.compile('|'.join(patterns), re.IGNORECASE)
+            for lang, patterns in self.theoretical_patterns.items()
+        }
+
+        self.practical_regex = {
+            lang: re.compile('|'.join(patterns), re.IGNORECASE)
+            for lang, patterns in self.practical_patterns.items()
+        }
+
+        # Domain-specific linguistic features by language
+        self.domain_features = {
+            "mathematics": {
+                "en": {
+                    # Theoretical indicators
+                    "theorem": 0.9, "proof": 0.9, "lemma": 0.9, "define": 0.8,
+                    "equation": 0.8, "formula": 0.8, "function": 0.7, "property": 0.7,
+                    "axiom": 0.9, "postulate": 0.9, "corollary": 0.9, "proposition": 0.9,
+                    "identity": 0.8, "inequality": 0.8, "relation": 0.7, "topology": 0.9,
+                    "algebra": 0.8, "calculus": 0.8, "geometry": 0.8, "analysis": 0.8,
+                    "theory": 0.9, "definition": 0.9,
+
+                    # Practical indicators
+                    "calculate": 0.8, "compute": 0.8, "solve": 0.8, "example": 0.7,
+                    "problem": 0.7, "find": 0.7, "evaluate": 0.7, "simplify": 0.7,
+                    "demonstrate": 0.7, "show": 0.6, "practice": 0.8, "exercise": 0.8,
+                    "application": 0.7, "plug in": 0.8, "substitute": 0.7, "result": 0.6,
+                    "numeric": 0.7, "estimate": 0.7, "approximate": 0.7, "implement": 0.8
+                },
+                "ru": {
+                    # Theoretical indicators
+                    "теорема": 0.9, "доказательство": 0.9, "лемма": 0.9, "определение": 0.8,
+                    "уравнение": 0.8, "формула": 0.8, "функция": 0.7, "свойство": 0.7,
+                    "аксиома": 0.9, "постулат": 0.9, "следствие": 0.9, "предложение": 0.9,
+                    "тождество": 0.8, "неравенство": 0.8, "отношение": 0.7, "топология": 0.9,
+                    "алгебра": 0.8, "анализ": 0.8, "геометрия": 0.8, "теория": 0.9,
+
+                    # Practical indicators
+                    "вычислить": 0.8, "рассчитать": 0.8, "решить": 0.8, "пример": 0.7,
+                    "задача": 0.7, "найти": 0.7, "определить": 0.7, "упростить": 0.7,
+                    "показать": 0.6, "демонстрировать": 0.7, "практика": 0.8, "упражнение": 0.8,
+                    "применение": 0.7, "подставить": 0.7, "результат": 0.6,
+                    "числовой": 0.7, "оценить": 0.7, "приблизить": 0.7, "реализовать": 0.8
+                }
+            },
+            "programming": {
+                "en": {
+                    # Theoretical indicators
+                    "algorithm": 0.8, "complexity": 0.85, "paradigm": 0.9,
+                    "architecture": 0.8, "pattern": 0.7, "principle": 0.8,
+                    "framework": 0.7, "abstraction": 0.9, "encapsulation": 0.9,
+                    "inheritance": 0.8, "polymorphism": 0.9, "recursion": 0.8,
+                    "structure": 0.7, "interface": 0.7, "protocol": 0.8,
+                    "syntax": 0.8, "semantics": 0.9, "compiler": 0.7,
+
+                    # Practical indicators
+                    "code": 0.9, "implement": 0.85, "function": 0.7, "class": 0.7,
+                    "debug": 0.9, "run": 0.8, "execute": 0.8, "compile": 0.7,
+                    "install": 0.9, "library": 0.7, "framework": 0.7, "API": 0.8,
+                    "build": 0.8, "deploy": 0.9, "test": 0.8, "version": 0.7,
+                    "package": 0.7, "dependency": 0.7, "configuration": 0.7
+                },
+                "ru": {
+                    # Theoretical indicators
+                    "алгоритм": 0.8, "сложность": 0.85, "парадигма": 0.9,
+                    "архитектура": 0.8, "шаблон": 0.7, "принцип": 0.8,
+                    "фреймворк": 0.7, "абстракция": 0.9, "инкапсуляция": 0.9,
+                    "наследование": 0.8, "полиморфизм": 0.9, "рекурсия": 0.8,
+                    "структура": 0.7, "интерфейс": 0.7, "протокол": 0.8,
+                    "синтаксис": 0.8, "семантика": 0.9, "компилятор": 0.7,
+
+                    # Practical indicators
+                    "код": 0.9, "реализовать": 0.85, "функция": 0.7, "класс": 0.7,
+                    "отладка": 0.9, "запустить": 0.8, "выполнить": 0.8, "компилировать": 0.7,
+                    "установить": 0.9, "библиотека": 0.7, "фреймворк": 0.7, "API": 0.8,
+                    "сборка": 0.8, "развертывание": 0.9, "тест": 0.8, "версия": 0.7,
+                    "пакет": 0.7, "зависимость": 0.7, "конфигурация": 0.7
+                }
+            },
+            "physics": {
+                "en": {
+                    # Theoretical indicators
+                    "theory": 0.9, "law": 0.9, "principle": 0.9, "constant": 0.8,
+                    "equation": 0.8, "field": 0.7, "force": 0.7, "energy": 0.7,
+                    "quantum": 0.9, "relativity": 0.9, "mechanics": 0.8, "dynamics": 0.8,
+                    "thermodynamics": 0.9, "electromagnetism": 0.9, "oscillation": 0.8,
+                    "particle": 0.8, "wave": 0.7, "momentum": 0.8, "conservation": 0.9,
+                    "operator": 0.9, "eigenvalue": 0.9, "eigenstate": 0.9, "hamiltonian": 0.9,
+                    "schrodinger": 0.9, "dirac": 0.9, "commutator": 0.9, "symmetry": 0.8,
+
+                    # Practical indicators
+                    "experiment": 0.9, "measure": 0.8, "observation": 0.8,
+                    "calculate": 0.8, "predict": 0.7, "demonstrate": 0.8,
+                    "laboratory": 0.9, "setup": 0.8, "device": 0.8, "apparatus": 0.9,
+                    "probe": 0.8, "detector": 0.9, "sensor": 0.8, "signal": 0.7,
+                    "data": 0.7, "instrument": 0.8, "calibration": 0.8, "procedure": 0.7
+                },
+                "ru": {
+                    # Theoretical indicators
+                    "теория": 0.9, "закон": 0.9, "принцип": 0.9, "константа": 0.8,
+                    "уравнение": 0.8, "поле": 0.7, "сила": 0.7, "энергия": 0.7,
+                    "квантовый": 0.9, "относительность": 0.9, "механика": 0.8, "динамика": 0.8,
+                    "термодинамика": 0.9, "электромагнетизм": 0.9, "колебание": 0.8,
+                    "частица": 0.8, "волна": 0.7, "импульс": 0.8, "сохранение": 0.9,
+                    "оператор": 0.9, "собственное значение": 0.9, "собственное состояние": 0.9,
+                    "гамильтониан": 0.9, "шредингер": 0.9, "дирак": 0.9, "коммутатор": 0.9,
+                    "симметрия": 0.8, "состояние": 0.8, "представление": 0.8, "базис": 0.7,
+
+                    # Practical indicators
+                    "эксперимент": 0.9, "измерение": 0.8, "наблюдение": 0.8,
+                    "рассчитать": 0.8, "предсказать": 0.7, "демонстрировать": 0.8,
+                    "лаборатория": 0.9, "установка": 0.8, "устройство": 0.8, "аппарат": 0.9,
+                    "зонд": 0.8, "детектор": 0.9, "датчик": 0.8, "сигнал": 0.7,
+                    "данные": 0.7, "инструмент": 0.8, "калибровка": 0.8, "процедура": 0.7
+                }
+            }
+        }
 
         logger.info("NLP resources initialized for concept extraction")
 
@@ -481,8 +818,8 @@ class DataPipeline:
         # Extract combined text for analysis
         combined_text = " ".join([segment.get("text", "") for segment in segments])
 
-        # Perform concept extraction
-        key_concepts = self._extract_key_concepts(combined_text, segments, domain, language)
+        # Perform concept extraction with significantly improved algorithm
+        key_concepts = self._extract_key_concepts_enhanced(combined_text, segments, domain, language)
 
         # Organize concepts by segment context types
         theoretical_concepts = []
@@ -506,7 +843,7 @@ class DataPipeline:
             "concept_relationships": concept_relationships
         }
 
-    def _extract_key_concepts(
+    def _extract_key_concepts_enhanced(
         self,
         combined_text: str,
         segments: List[Dict],
@@ -514,7 +851,8 @@ class DataPipeline:
         language: str = "en"
     ) -> List[Dict]:
         """
-        Enhanced concept extraction using statistical NLP techniques with multilingual support.
+        Enhanced concept extraction using advanced NLP techniques with multilingual support.
+        Implements significant improvements for concept recognition.
 
         Args:
             combined_text: Combined text from all segments
@@ -529,7 +867,7 @@ class DataPipeline:
         if not combined_text.strip():
             return []
 
-        # Use appropriate stopwords for the language
+        # Get stopwords for the language
         lang_code = language if language in self.stopwords else 'en'
         stopwords_set = self.stopwords.get(lang_code, set())
 
@@ -537,97 +875,156 @@ class DataPipeline:
         domain_keywords = self._get_domain_keywords(domain, language)
         filtered_stopwords = stopwords_set - domain_keywords
 
-        # Preprocess text
+        # Split text into sentences for better context analysis
         try:
             sentences = sent_tokenize(combined_text)
         except:
             # Fallback for non-English content
             sentences = re.split(r'(?<=[.!?])\s+', combined_text)
 
-        # Use TF-IDF to extract important terms
-        tfidf_concepts = self._extract_statistically_significant_terms(segments, filtered_stopwords, language)
+        # 1. Extract candidate concepts using multiple methods
+        candidates = {}
 
-        # Extract domain-specific pattern matches
-        pattern_matches = self._extract_domain_patterns(sentences, domain, language)
-
-        # Combine and score all candidate concepts
-        all_concepts = {}
-
-        # Add TF-IDF terms
-        for term, score_data in tfidf_concepts.items():
-            all_concepts[term] = {
+        # 1.1 Extract n-grams with TF-IDF weighting
+        ngram_concepts = self._extract_ngram_concepts(segments, filtered_stopwords, language)
+        for term, score_data in ngram_concepts.items():
+            candidates[term] = {
                 "text": term,
                 "frequency": score_data.get("frequency", 1),
-                "ngram_type": "tfidf",
-                "score": score_data.get("score", 0) * 1.0  # Base weight for TF-IDF terms
+                "ngram_type": score_data.get("type", "ngram"),
+                "score": score_data.get("score", 0) * 1.2,  # Weight n-grams slightly higher
+                "source": "ngram_extraction"
             }
 
-        # Add pattern matches with higher weight
+        # 1.2 Extract domain-specific pattern matches
+        pattern_matches = self._extract_domain_patterns(sentences, domain, language)
         for pattern, count in pattern_matches.items():
-            if pattern in all_concepts:
-                all_concepts[pattern]["score"] += count * 2.0  # Boost score for pattern matches
-                all_concepts[pattern]["pattern_match"] = True
+            if pattern in candidates:
+                candidates[pattern]["score"] += count * 2.0  # Boost score for pattern matches
+                candidates[pattern]["pattern_match"] = True
+                candidates[pattern]["source"] = "domain_pattern"
             else:
-                all_concepts[pattern] = {
+                candidates[pattern] = {
                     "text": pattern,
                     "frequency": count,
                     "ngram_type": "pattern",
                     "pattern_match": True,
-                    "score": count * 2.0  # Higher weight for domain patterns
+                    "score": count * 2.0,  # Higher weight for domain patterns
+                    "source": "domain_pattern"
                 }
 
-        # Filter and rank concepts
-        ranked_concepts = []
+        # 1.3 Extract concepts from definitional contexts
+        definitional_concepts = self._extract_definitional_concepts(sentences, language)
+        for concept, info in definitional_concepts.items():
+            if concept in candidates:
+                candidates[concept]["score"] += info["count"] * 2.5  # Highest weight for definitional contexts
+                candidates[concept]["definitional"] = True
+                candidates[concept]["source"] = "definitional_context"
+            else:
+                candidates[concept] = {
+                    "text": concept,
+                    "frequency": info["count"],
+                    "ngram_type": "definitional",
+                    "definitional": True,
+                    "score": info["count"] * 2.5,  # Highest weight for definitional concepts
+                    "definition": info.get("definition", ""),
+                    "source": "definitional_context"
+                }
 
-        # Language-specific minimum score threshold
-        min_score_threshold = 3.0 if language == 'ru' else 1.0
+        # 1.4 Collocations extraction (words that frequently appear together)
+        collocations = self._extract_collocations(combined_text, language)
+        for collocation, score in collocations.items():
+            if collocation in candidates:
+                candidates[collocation]["score"] += score
+                candidates[collocation]["collocation"] = True
+            else:
+                candidates[collocation] = {
+                    "text": collocation,
+                    "frequency": 1,  # We don't have exact frequency here
+                    "ngram_type": "collocation",
+                    "collocation": True,
+                    "score": score,
+                    "source": "collocation"
+                }
 
-        for concept_text, concept_data in all_concepts.items():
+        # 2. Apply filters to remove unlikely concepts
+        filtered_candidates = {}
+
+        # Get language-specific minimum score threshold and word length
+        min_score_threshold = 2.0 if language == 'ru' else 1.0
+        min_word_length = 4 if language == 'ru' else 3
+
+        for concept_text, concept_data in candidates.items():
             # Skip concepts with very low scores
             if concept_data.get("score", 0) < min_score_threshold:
                 continue
 
             # Skip very short concepts (likely not meaningful)
             words = concept_text.split()
-            if len(words) == 1 and len(concept_text) < 4:
+            if len(words) == 1 and len(concept_text) < min_word_length:
                 continue
 
-            # Skip concepts that appear in too many segments (likely common words)
+            # Skip concepts that are just numbers or mathematical symbols
+            if re.match(r'^[\d\s\+\-\*\/\=]+$', concept_text):
+                continue
+
+            # Skip concepts with too many stopwords
+            if len(words) > 1:
+                stopword_count = sum(1 for word in words if word.lower() in filtered_stopwords)
+                if stopword_count / len(words) > 0.5:  # More than half are stopwords
+                    continue
+
+            # Skip concepts that appear too frequently (likely common words)
             if concept_data.get("frequency", 0) / len(segments) > 0.7:
                 continue
 
-            # Determine if concept is theoretical or practical based on context
-            is_theoretical = self._is_theoretical_concept(concept_text, segments, language)
+            # Keep the concept
+            filtered_candidates[concept_text] = concept_data
 
-            # Create final concept entry
-            concept = {
+        # 3. Determine if each concept is theoretical or practical based on context
+        for concept_text, concept_data in filtered_candidates.items():
+            # Determine if concept is theoretical or practical based on context
+            is_theoretical = self._is_theoretical_concept_enhanced(concept_text, segments, language, domain)
+
+            # Update concept data
+            concept_data["theoretical"] = is_theoretical
+            concept_data["concept_class"] = "theoretical" if is_theoretical else "practical"
+
+        # 4. Final ranking and selection
+        # Convert to list and sort by score
+        ranked_concepts = []
+        for concept_text, concept_data in filtered_candidates.items():
+            ranked_concepts.append({
                 "text": concept_text,
                 "frequency": concept_data.get("frequency", 0),
                 "domain": domain,
-                "theoretical": is_theoretical,
-                "concept_class": "theoretical" if is_theoretical else "practical",
-                "ngram_type": concept_data.get("ngram_type", "pattern"),
+                "theoretical": concept_data.get("theoretical", True),
+                "concept_class": concept_data.get("concept_class", "theoretical"),
+                "ngram_type": concept_data.get("ngram_type", ""),
                 "pattern_match": concept_data.get("pattern_match", False),
+                "definitional": concept_data.get("definitional", False),
+                "collocation": concept_data.get("collocation", False),
                 "score": concept_data.get("score", 0),
+                "source": concept_data.get("source", ""),
                 "language": language
-            }
-
-            ranked_concepts.append(concept)
+            })
 
         # Sort by score
         ranked_concepts.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-        # Take top concepts
-        return ranked_concepts[:min(50, len(ranked_concepts))]
+        # Take top concepts with a adaptive limit based on content length
+        max_concepts = min(50, max(10, len(sentences) // 10))  # Scale with content length
+        return ranked_concepts[:max_concepts]
 
-    def _extract_statistically_significant_terms(
+    def _extract_ngram_concepts(
         self,
         segments: List[Dict],
         stopwords: set,
         language: str
     ) -> Dict[str, Dict]:
         """
-        Extract important terms using statistical analysis.
+        Extract concepts using n-gram analysis with TF-IDF weighting.
+        Significantly improved to handle multi-word concepts and different languages.
 
         Args:
             segments: List of transcript segments
@@ -635,54 +1032,262 @@ class DataPipeline:
             language: Language code
 
         Returns:
-            Dictionary of terms with their scores and metadata
+            Dictionary of concepts with their scores and metadata
         """
-        # Basic word frequency analysis as fallback for statistical extraction
-        # In a full implementation, this would use TF-IDF
+        # Extract all text and create a corpus of segments
+        segment_texts = [segment.get("text", "") for segment in segments]
+        all_text = " ".join(segment_texts)
 
-        # Extract all text
-        all_text = " ".join([segment.get("text", "") for segment in segments])
+        # Initialize results
+        results = {}
 
-        # Tokenize text
+        # Process unigrams (single words)
+        unigrams = self._extract_significant_unigrams(all_text, segment_texts, stopwords, language)
+        for term, data in unigrams.items():
+            results[term] = {
+                "frequency": data["frequency"],
+                "score": data["score"] * 0.8,  # Lower weight for single words
+                "type": "unigram"
+            }
+
+        # Process bigrams (two-word phrases)
+        bigrams = self._extract_significant_bigrams(all_text, segment_texts, stopwords, language)
+        for term, data in bigrams.items():
+            results[term] = {
+                "frequency": data["frequency"],
+                "score": data["score"] * 1.2,  # Higher weight for bigrams
+                "type": "bigram"
+            }
+
+        # Process trigrams (three-word phrases)
+        trigrams = self._extract_significant_trigrams(all_text, segment_texts, stopwords, language)
+        for term, data in trigrams.items():
+            results[term] = {
+                "frequency": data["frequency"],
+                "score": data["score"] * 1.5,  # Even higher weight for trigrams
+                "type": "trigram"
+            }
+
+        # Apply domain-specific boosting
+        results = self._boost_domain_terms(results, language)
+
+        return results
+
+    def _extract_significant_unigrams(
+        self,
+        all_text: str,
+        segment_texts: List[str],
+        stopwords: set,
+        language: str
+    ) -> Dict[str, Dict]:
+        """
+        Extract significant single words using TF-IDF like weighting.
+
+        Args:
+            all_text: Combined text
+            segment_texts: List of segment texts
+            stopwords: Stopwords to filter
+            language: Language code
+
+        Returns:
+            Dictionary of unigrams with scores
+        """
+        # Tokenize combined text
         try:
             tokens = word_tokenize(all_text.lower())
         except:
-            # Fallback tokenization (simple whitespace split)
             tokens = all_text.lower().split()
 
-        # Remove stopwords and short words
-        filtered_tokens = []
-        for token in tokens:
-            if token not in stopwords and len(token) > 2:
-                filtered_tokens.append(token)
+        # Filter tokens
+        filtered_tokens = [token for token in tokens
+                          if token not in stopwords
+                          and token not in string.punctuation
+                          and len(token) > 2
+                          and not token.isdigit()]
 
-        # Count word frequencies
-        word_freqs = Counter(filtered_tokens)
+        # Count frequencies
+        token_counter = Counter(filtered_tokens)
 
-        # Extract bigrams (simple approach)
-        bigrams = []
-        for i in range(len(filtered_tokens) - 1):
-            bigrams.append(f"{filtered_tokens[i]} {filtered_tokens[i+1]}")
-        bigram_freqs = Counter(bigrams)
+        # Calculate document frequency (in how many segments a token appears)
+        doc_freq = {}
+        for token in set(filtered_tokens):
+            doc_freq[token] = sum(1 for text in segment_texts if token in text.lower())
 
-        # Combine unigrams and bigrams
+        # Calculate TF-IDF like score
         results = {}
+        num_segments = len(segment_texts)
 
-        # Add unigrams with reasonable frequency
-        for word, freq in word_freqs.items():
-            if freq >= 3:  # Only include words that appear at least 3 times
-                results[word] = {
-                    "frequency": freq,
-                    "score": freq * 0.5  # Lower weight for single words
-                }
+        for token, freq in token_counter.items():
+            if freq < 2:  # Skip tokens that appear only once
+                continue
 
-        # Add bigrams with reasonable frequency
-        for bigram, freq in bigram_freqs.items():
-            if freq >= 2:  # Only include bigrams that appear at least twice
-                results[bigram] = {
-                    "frequency": freq,
-                    "score": freq * 1.0  # Higher weight for bigrams
-                }
+            # Calculate TF-IDF
+            tf = freq / len(filtered_tokens)
+            idf = math.log(num_segments / (1 + doc_freq.get(token, 1)))
+            score = tf * idf
+
+            # Language-specific boosting
+            if language == 'ru':
+                # For Russian, boost longer words as they tend to be more significant
+                score *= (1 + min(len(token) / 10, 0.5))
+
+            results[token] = {
+                "frequency": freq,
+                "score": score
+            }
+
+        return results
+
+    def _extract_significant_bigrams(
+        self,
+        all_text: str,
+        segment_texts: List[str],
+        stopwords: set,
+        language: str
+    ) -> Dict[str, Dict]:
+        """
+        Extract significant bigrams (two-word phrases).
+
+        Args:
+            all_text: Combined text
+            segment_texts: List of segment texts
+            stopwords: Stopwords to filter
+            language: Language code
+
+        Returns:
+            Dictionary of bigrams with scores
+        """
+        # Use the TranscriptProcessor's get_bigrams method
+        all_bigrams = self.transcript_processor.get_bigrams(all_text, language)
+        bigram_counter = Counter(all_bigrams)
+
+        # Calculate document frequency for bigrams
+        doc_freq = {}
+        for bigram in set(all_bigrams):
+            doc_freq[bigram] = sum(1 for text in segment_texts if bigram in text.lower())
+
+        # Calculate scores
+        results = {}
+        num_segments = len(segment_texts)
+
+        for bigram, freq in bigram_counter.items():
+            if freq < 2:  # Skip bigrams that appear only once
+                continue
+
+            # Skip if all words are stopwords
+            words = bigram.split()
+            if all(word in stopwords for word in words):
+                continue
+
+            # Calculate TF-IDF
+            tf = freq / len(all_bigrams) if all_bigrams else 0
+            idf = math.log(num_segments / (1 + doc_freq.get(bigram, 1)))
+            score = tf * idf
+
+            # Boost bigrams with domain-specific words
+            words = bigram.split()
+            if any(len(word) > 5 for word in words):  # Longer words tend to be more technical
+                score *= 1.2
+
+            results[bigram] = {
+                "frequency": freq,
+                "score": score
+            }
+
+        return results
+
+    def _extract_significant_trigrams(
+        self,
+        all_text: str,
+        segment_texts: List[str],
+        stopwords: set,
+        language: str
+    ) -> Dict[str, Dict]:
+        """
+        Extract significant trigrams (three-word phrases).
+
+        Args:
+            all_text: Combined text
+            segment_texts: List of segment texts
+            stopwords: Stopwords to filter
+            language: Language code
+
+        Returns:
+            Dictionary of trigrams with scores
+        """
+        # Use the TranscriptProcessor's get_trigrams method
+        all_trigrams = self.transcript_processor.get_trigrams(all_text, language)
+        trigram_counter = Counter(all_trigrams)
+
+        # Calculate document frequency for trigrams
+        doc_freq = {}
+        for trigram in set(all_trigrams):
+            doc_freq[trigram] = sum(1 for text in segment_texts if trigram in text.lower())
+
+        # Calculate scores
+        results = {}
+        num_segments = len(segment_texts)
+
+        for trigram, freq in trigram_counter.items():
+            if freq < 2:  # Skip trigrams that appear only once
+                continue
+
+            # Skip if most words are stopwords
+            words = trigram.split()
+            stopword_count = sum(1 for word in words if word in stopwords)
+            if stopword_count >= 2:  # Skip if 2 or more words are stopwords
+                continue
+
+            # Calculate TF-IDF
+            tf = freq / len(all_trigrams) if all_trigrams else 0
+            idf = math.log(num_segments / (1 + doc_freq.get(trigram, 1)))
+            score = tf * idf
+
+            # Boost trigrams that form noun phrases
+            # This is a simplified approach without POS tagging
+            score *= 1.5  # Generally boost trigrams as they're more specific
+
+            results[trigram] = {
+                "frequency": freq,
+                "score": score
+            }
+
+        return results
+
+    def _boost_domain_terms(self, results: Dict[str, Dict], language: str) -> Dict[str, Dict]:
+        """
+        Boost scores for domain-specific terminology.
+
+        Args:
+            results: Dictionary of terms with their data
+            language: Language code
+
+        Returns:
+            Updated dictionary with boosted scores
+        """
+        # Check if language has relevant domain keywords
+        if language not in ['en', 'ru']:
+            return results
+
+        # Boost scores for domain-specific terms
+        for term, data in results.items():
+            # Check if any word in the term is a domain keyword
+            words = term.split()
+
+            # Check across all domains for domain-specific terminology
+            for domain, domain_keywords in self.domain_keywords.items():
+                lang_keywords = domain_keywords.get(language, set())
+
+                # Check if any word in the term is a domain keyword
+                if any(word in lang_keywords for word in words):
+                    data["score"] *= 1.5
+                    data["domain_specific"] = True
+
+                # Extra boost for multi-word domain terms
+                if len(words) > 1:
+                    domain_word_count = sum(1 for word in words if word in lang_keywords)
+                    if domain_word_count >= 2:
+                        data["score"] *= 1.3
 
         return results
 
@@ -724,11 +1329,126 @@ class DataPipeline:
                         else:
                             concept = match
 
-                        # Count occurrences
+                        # Clean up concept
+                        concept = concept.lower().strip()
                         if concept:
-                            patterns[concept.lower()] = patterns.get(concept.lower(), 0) + 1
+                            patterns[concept] = patterns.get(concept, 0) + 1
 
         return patterns
+
+    def _extract_definitional_concepts(self, sentences: List[str], language: str) -> Dict[str, Dict]:
+        """
+        Extract concepts from definitional contexts in the text.
+
+        Args:
+            sentences: List of sentences
+            language: Language code
+
+        Returns:
+            Dictionary mapping concepts to their definitional information
+        """
+        definitional_concepts = {}
+
+        # Get patterns for the language
+        lang_key = language if language in self.compiled_definition_patterns else 'en'
+        patterns = self.compiled_definition_patterns.get(lang_key, [])
+
+        # Extract concepts from definitional contexts
+        for sentence in sentences:
+            for pattern in patterns:
+                matches = pattern.findall(sentence)
+                for match in matches:
+                    if isinstance(match, tuple) and len(match) >= 1:
+                        # Extract concept from match
+                        concept = match[0].lower().strip()
+
+                        # Skip very short concepts
+                        if len(concept) < 3:
+                            continue
+
+                        # Get definition if available (in position 1)
+                        definition = match[1].lower().strip() if len(match) > 1 else ""
+
+                        # Update concept information
+                        if concept in definitional_concepts:
+                            definitional_concepts[concept]["count"] += 1
+                            if definition and not definitional_concepts[concept].get("definition"):
+                                definitional_concepts[concept]["definition"] = definition
+                        else:
+                            definitional_concepts[concept] = {
+                                "count": 1,
+                                "definition": definition
+                            }
+
+        return definitional_concepts
+
+    def _extract_collocations(self, text: str, language: str) -> Dict[str, float]:
+        """
+        Extract statistically significant word collocations from text.
+
+        Args:
+            text: Input text
+            language: Language code
+
+        Returns:
+            Dictionary mapping collocations to their scores
+        """
+        # Get stopwords for the language
+        lang_code = language if language in self.stopwords else 'en'
+        stopwords_set = self.stopwords.get(lang_code, set())
+
+        # Tokenize text
+        try:
+            tokens = word_tokenize(text.lower())
+        except:
+            tokens = text.lower().split()
+
+        # Filter tokens
+        filtered_tokens = [token for token in tokens
+                         if token not in stopwords_set
+                         and token not in string.punctuation
+                         and len(token) > 2]
+
+        # Skip if too few tokens
+        if len(filtered_tokens) < 10:
+            return {}
+
+        # Extract bigram collocations
+        bigram_measures = BigramAssocMeasures()
+        finder = BigramCollocationFinder.from_words(filtered_tokens)
+
+        # Apply frequency filter
+        finder.apply_freq_filter(2)
+
+        # Find collocations using different measures
+        try:
+            # Get top collocations
+            bigram_scores = {}
+
+            # PMI (Pointwise Mutual Information)
+            pmi_bigrams = finder.score_ngrams(bigram_measures.pmi)
+            for bigram, score in pmi_bigrams:
+                bigram_text = ' '.join(bigram)
+                bigram_scores[bigram_text] = score
+
+            # Likelihood ratio
+            lr_bigrams = finder.score_ngrams(bigram_measures.likelihood_ratio)
+            for bigram, score in lr_bigrams:
+                bigram_text = ' '.join(bigram)
+                if bigram_text in bigram_scores:
+                    bigram_scores[bigram_text] += score
+                else:
+                    bigram_scores[bigram_text] = score
+
+            # Normalize scores
+            max_score = max(bigram_scores.values()) if bigram_scores else 1
+            normalized_scores = {bigram: score/max_score for bigram, score in bigram_scores.items()}
+
+            return normalized_scores
+
+        except Exception as e:
+            logger.warning(f"Error extracting collocations: {e}")
+            return {}
 
     def _get_domain_keywords(self, domain: str, language: str) -> set:
         """
@@ -750,14 +1470,22 @@ class DataPipeline:
 
         return set()
 
-    def _is_theoretical_concept(self, term: str, segments: List[Dict], language: str) -> bool:
+    def _is_theoretical_concept_enhanced(
+        self,
+        term: str,
+        segments: List[Dict],
+        language: str,
+        domain: str
+    ) -> bool:
         """
-        Determine if a concept is theoretical based on its context with enhanced ML-based approach.
+        Determine if a concept is theoretical using a comprehensive approach.
+        Enhanced with multiple detection methods and domain awareness.
 
         Args:
             term: Concept term
             segments: Processed transcript segments
             language: Language code
+            domain: Content domain
 
         Returns:
             True if theoretical, False if practical
@@ -773,78 +1501,164 @@ class DataPipeline:
         practical_confidence_sum = 0
 
         # Count segments containing this term by their classification
+        segments_with_term = []
         for segment in segments:
             segment_text = segment.get("text", "").lower()
-            content_type = segment.get("content_type", "mixed")
+            context_type = segment.get("content_type", "mixed")
             confidence = segment.get("classification_confidence", 0.6)
 
             # Check if term appears in this segment
+            term_in_segment = False
+
             if len(term_parts) == 1:
                 # For single words, use word boundary matching
                 if re.search(r'\b' + re.escape(term_lower) + r'\b', segment_text):
-                    if content_type == "theoretical":
-                        theoretical_count += 1
-                        theoretical_confidence_sum += confidence
-                    elif content_type == "practical":
-                        practical_count += 1
-                        practical_confidence_sum += confidence
+                    term_in_segment = True
             else:
                 # For phrases, check if all parts appear in order
                 if term_lower in segment_text:
-                    if content_type == "theoretical":
-                        theoretical_count += 1
-                        theoretical_confidence_sum += confidence
-                    elif content_type == "practical":
-                        practical_count += 1
-                        practical_confidence_sum += confidence
+                    term_in_segment = True
 
-        # If no segments contain the term, use domain-specific indicators
+            if term_in_segment:
+                segments_with_term.append(segment)
+                if context_type == "theoretical":
+                    theoretical_count += 1
+                    theoretical_confidence_sum += confidence
+                elif context_type == "practical":
+                    practical_count += 1
+                    practical_confidence_sum += confidence
+
+        # Get surrounding context for the term
+        term_contexts = self._get_term_contexts(term_lower, segments_with_term)
+
+        # Apply heuristics based on context patterns
+        context_theoretical_score = 0
+        context_practical_score = 0
+
+        # Get language-appropriate patterns
+        lang = language if language in self.theoretical_regex else 'en'
+
+        for context in term_contexts:
+            # Check for theoretical patterns in context
+            if self.theoretical_regex[lang].search(context):
+                context_theoretical_score += 1
+
+            # Check for practical patterns in context
+            if self.practical_regex[lang].search(context):
+                context_practical_score += 1
+
+        # Apply domain-specific terminology heuristics
+        if domain in self.domain_features:
+            domain_features = self.domain_features[domain].get(language, {})
+            if not domain_features:
+                domain_features = self.domain_features[domain].get('en', {})
+
+            # Check if any word in the term is a domain feature
+            for word in term_parts:
+                if word in domain_features:
+                    feature_weight = domain_features[word]
+                    if feature_weight >= 0.75:  # Threshold for theoretical
+                        context_theoretical_score += 1
+                    else:
+                        context_practical_score += 1
+
+        # Count definitional contexts (strong indicator of theoretical content)
+        definitional_score = self._count_definitional_contexts(term_lower, term_contexts, language)
+        context_theoretical_score += definitional_score * 2  # Double weight for definitional contexts
+
+        # Consider term structure (multi-word terms more likely to be theoretical)
+        if len(term_parts) >= 3:
+            context_theoretical_score += 0.5
+
+        # If no segments contain the term, use context scores only
         if theoretical_count == 0 and practical_count == 0:
-            # Default to theoretical for long compound terms (often concepts or theories)
-            if len(term_parts) >= 3:
-                return True
+            return context_theoretical_score >= context_practical_score
 
-            # Check for indicator terms within the concept itself
-            # Multilingual indicators
-            theoretical_indicators = {
-                "en": {"theory", "theorem", "law", "principle", "definition", "concept"},
-                "ru": {"теория", "теорема", "закон", "принцип", "определение", "концепция"}
-            }
+        # Weighted classification based on all factors
+        theoretical_score = (
+            theoretical_confidence_sum * 1.0 +  # Segment classifications
+            context_theoretical_score * 1.5     # Context patterns
+        )
 
-            practical_indicators = {
-                "en": {"example", "application", "practice", "implementation", "method", "technique"},
-                "ru": {"пример", "применение", "практика", "реализация", "метод", "техника"}
-            }
+        practical_score = (
+            practical_confidence_sum * 1.0 +    # Segment classifications
+            context_practical_score * 1.5       # Context patterns
+        )
 
-            # Get language-specific indicators
-            lang_key = language if language in theoretical_indicators else "en"
-            theo_indicators = theoretical_indicators[lang_key]
-            prac_indicators = practical_indicators[lang_key]
+        # Determine final classification
+        return theoretical_score >= practical_score
 
-            # Count indicators in the term
-            theoretical_matches = sum(1 for ind in theo_indicators if ind in term_parts)
-            practical_matches = sum(1 for ind in prac_indicators if ind in term_parts)
+    def _get_term_contexts(self, term: str, segments: List[Dict]) -> List[str]:
+        """
+        Get surrounding contexts for a term from segments.
 
-            if theoretical_matches > practical_matches:
-                return True
-            elif practical_matches > theoretical_matches:
-                return False
-            else:
-                # Use simple heuristic approach
-                return len(term_parts) >= 2  # Longer terms tend to be theoretical
+        Args:
+            term: The term to find contexts for
+            segments: List of segments containing the term
 
-        # Determine by confidence-weighted classification
-        if theoretical_confidence_sum > practical_confidence_sum:
-            return True
-        elif practical_confidence_sum > theoretical_confidence_sum:
-            return False
-        else:
-            # Use count as tiebreaker
-            return theoretical_count >= practical_count
+        Returns:
+            List of context texts
+        """
+        contexts = []
+
+        for segment in segments:
+            segment_text = segment.get("text", "").lower()
+
+            # Find all occurrences of the term
+            term_positions = []
+            start = 0
+            while True:
+                pos = segment_text.find(term, start)
+                if pos == -1:
+                    break
+                term_positions.append(pos)
+                start = pos + len(term)
+
+            # Extract contexts around the term
+            for pos in term_positions:
+                # Get context before and after the term
+                context_start = max(0, pos - 50)
+                context_end = min(len(segment_text), pos + len(term) + 50)
+                context = segment_text[context_start:context_end]
+                contexts.append(context)
+
+        return contexts
+
+    def _count_definitional_contexts(self, term: str, contexts: List[str], language: str) -> int:
+        """
+        Count how many contexts are definitional for the term.
+
+        Args:
+            term: The term to check
+            contexts: List of context texts
+            language: Language code
+
+        Returns:
+            Count of definitional contexts
+        """
+        definitional_count = 0
+
+        # Get patterns for the language
+        lang_key = language if language in self.compiled_definition_patterns else 'en'
+        patterns = self.compiled_definition_patterns.get(lang_key, [])
+
+        for context in contexts:
+            # Check each pattern
+            for pattern in patterns:
+                matches = pattern.findall(context)
+                for match in matches:
+                    if isinstance(match, tuple) and len(match) >= 1:
+                        match_term = match[0].lower().strip()
+                        # Check if the extracted term matches our term
+                        if match_term == term or term in match_term or match_term in term:
+                            definitional_count += 1
+                            break
+
+        return definitional_count
 
     def _find_concept_relationships(self, concepts: List[Dict], segments: List[Dict]) -> List[Dict]:
         """
-        Find relationships between concepts based on co-occurrence.
+        Find relationships between concepts based on co-occurrence and context.
 
         Args:
             concepts: List of extracted concepts
@@ -860,36 +1674,54 @@ class DataPipeline:
         # Create a map of concepts to their texts for easier lookup
         concept_texts = {concept["text"].lower(): concept for concept in concepts}
 
-        # Track co-occurrences
+        # Track co-occurrences with context types
         co_occurrences = {}
 
         # Analyze each segment for co-occurring concepts
         for segment in segments:
             segment_text = segment.get("text", "").lower()
+            context_type = segment.get("content_type", "mixed")
 
             # Find all concepts in this segment
             concepts_in_segment = []
             for concept_text in concept_texts:
-                concept_parts = concept_text.split()
-                if all(part in segment_text for part in concept_parts):
+                if concept_text in segment_text:
                     concepts_in_segment.append(concept_text)
 
-            # Record co-occurrences for each pair
+            # Record co-occurrences for each pair with context type
             for i, concept1 in enumerate(concepts_in_segment):
                 for concept2 in concepts_in_segment[i+1:]:
                     pair = tuple(sorted([concept1, concept2]))
-                    co_occurrences[pair] = co_occurrences.get(pair, 0) + 1
+
+                    if pair not in co_occurrences:
+                        co_occurrences[pair] = {
+                            "count": 0,
+                            "theoretical": 0,
+                            "practical": 0,
+                            "mixed": 0
+                        }
+
+                    co_occurrences[pair]["count"] += 1
+                    co_occurrences[pair][context_type] += 1
 
         # Create relationship records
         relationships = []
-        for (concept1, concept2), count in co_occurrences.items():
+        for (concept1, concept2), data in co_occurrences.items():
+            count = data["count"]
+
             # Only include significant co-occurrences
             if count >= 2:
                 c1 = concept_texts[concept1]
                 c2 = concept_texts[concept2]
 
-                # Determine relationship type
-                if c1["concept_class"] == c2["concept_class"]:
+                # Determine relationship type based on context types
+                rel_type = "related"
+
+                if data["theoretical"] > data["practical"]:
+                    rel_type = "related_theoretical"
+                elif data["practical"] > data["theoretical"]:
+                    rel_type = "related_practical"
+                elif c1["concept_class"] == c2["concept_class"]:
                     rel_type = "related_" + c1["concept_class"]
                 else:
                     rel_type = "theory_practice_pair"
@@ -898,6 +1730,8 @@ class DataPipeline:
                     "source_concept": concept1,
                     "target_concept": concept2,
                     "co_occurrence_count": count,
+                    "theoretical_contexts": data["theoretical"],
+                    "practical_contexts": data["practical"],
                     "relationship_type": rel_type,
                     "source_class": c1["concept_class"],
                     "target_class": c2["concept_class"]
