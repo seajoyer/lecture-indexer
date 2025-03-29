@@ -954,6 +954,8 @@ class DataPipeline:
         min_score_threshold = 2.0 if language == 'ru' else 1.0
         min_word_length = 4 if language == 'ru' else 3
 
+        max_concept_length = 100
+
         for concept_text, concept_data in candidates.items():
             # Skip concepts with very low scores
             if concept_data.get("score", 0) < min_score_threshold:
@@ -977,6 +979,21 @@ class DataPipeline:
             # Skip concepts that appear too frequently (likely common words)
             if concept_data.get("frequency", 0) / len(segments) > 0.7:
                 continue
+
+            if len(concept_text) > max_concept_length:
+                # If too long, keep only the first few words
+                words = concept_text.split()
+                if len(words) > 5:
+                    # Keep first 5 words for multi-word concepts
+                    truncated_text = ' '.join(words[:5])
+                    concept_text = truncated_text
+                    concept_data["text"] = truncated_text
+                    concept_data["truncated"] = True
+                else:
+                    # If it's a single long word (or just a few), truncate by characters
+                    concept_text = concept_text[:max_concept_length-3] + "..."
+                    concept_data["text"] = concept_text
+                    concept_data["truncated"] = True
 
             # Keep the concept
             filtered_candidates[concept_text] = concept_data

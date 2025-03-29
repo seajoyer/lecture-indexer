@@ -1,3 +1,59 @@
+#!/usr/bin/env python3
+"""
+Demo application for the Lecture Video Content Indexer.
+Provides command-line access to key functionality including video processing,
+concept exploration, and search.
+"""
+
+import os
+import sys
+import argparse
+import logging
+from typing import Dict, List, Any, Optional
+import time
+import json
+
+# Import project modules
+from data_pipeline import DataPipeline
+from search_engine import SearchEngine
+from data_access import get_data_access
+from cache_manager import get_cache_stats, cache_clear
+try:
+    from concept_signature_generator import get_concept_signature_generator, RelationshipGraph
+    HAS_CONCEPT_GENERATOR = True
+except ImportError:
+    HAS_CONCEPT_GENERATOR = False
+    print("Warning: concept_signature_generator module not available, related features will be disabled")
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def truncate_text(text, max_length=100):
+    """
+    Truncate text to maximum length while preserving whole words.
+
+    Args:
+        text: Text to truncate
+        max_length: Maximum length
+
+    Returns:
+        Truncated text
+    """
+    if not text or len(text) <= max_length:
+        return text
+
+    # Find the last space before max_length
+    last_space = text[:max_length].rfind(' ')
+    if last_space > 0:
+        return text[:last_space] + "..."
+    else:
+        # If no space found, just cut at max_length
+        return text[:max_length] + "..."
+
 def extract_playlist_id(playlist_url_or_id):
     """
     Extract playlist ID from a URL or return the ID directly.
@@ -72,39 +128,6 @@ def process_playlist(data_pipeline, search_engine, playlist_url_or_id, args):
         print("\nProcessed Videos:")
         for i, video_id in enumerate(processed_videos):
             print(f"  {i+1}. {video_id}")
-#!/usr/bin/env python3
-"""
-Demo application for the Lecture Video Content Indexer.
-Provides command-line access to key functionality including video processing,
-concept exploration, and search.
-"""
-
-import os
-import sys
-import argparse
-import logging
-from typing import Dict, List, Any, Optional
-import time
-import json
-
-# Import project modules
-from data_pipeline import DataPipeline
-from search_engine import SearchEngine
-from data_access import get_data_access
-from cache_manager import get_cache_stats, cache_clear
-try:
-    from concept_signature_generator import get_concept_signature_generator, RelationshipGraph
-    HAS_CONCEPT_GENERATOR = True
-except ImportError:
-    HAS_CONCEPT_GENERATOR = False
-    print("Warning: concept_signature_generator module not available, related features will be disabled")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -592,6 +615,8 @@ def search_content(search_engine, args):
         result_type = result.get("result_type", "unknown")
         context_type = result.get("context_type", "unknown")
         text = result.get("text", "N/A")
+        if len(text) > 100:
+            text = truncate_text(text)
         video_id = result.get("video_id", "")
         video_title = result.get("video_title", "")
 
