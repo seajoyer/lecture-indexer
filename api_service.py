@@ -27,6 +27,7 @@ from youtube_extractor import YouTubeExtractor
 from data_pipeline import DataPipeline
 from search_engine import SearchEngine
 from cache_manager import cache_clear, get_cache_stats
+from concept_dedup import ConceptDedupExtension, apply_concept_deduplication
 
 # Configure logging
 logging.basicConfig(

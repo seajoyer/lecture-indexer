@@ -15,8 +15,9 @@ from collections import defaultdict
 
 # Import project modules
 from data_access import get_data_access
-from cache_manager import cache_get, cache_set, cached
+from cache_manager import cache_get, cache_set, cached, cache_clear
 from performance_utils import time_function
+from collections import Counter
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -88,10 +89,10 @@ class SearchEngine:
         Enhanced search for content matching the query with improved ranking and language support.
 
         Args:
-            query: Structured query dictionary
+            query: Query parameters dictionary
 
         Returns:
-            Search results dictionary with ranked results
+            Search results dictionary
         """
         start_time = time.time()
 
@@ -104,7 +105,6 @@ class SearchEngine:
             language = query.get("language")  # Extract language parameter
             pagination = query.get("pagination", {})
 
-            # Apply pagination parameters
             offset = pagination.get("offset", 0)
             limit = pagination.get("limit", 10)
 
@@ -261,7 +261,8 @@ class SearchEngine:
                     "вектор": ["направление", "массив"],
                     "матрица": ["массив", "таблица"],
                     "множество": ["набор", "группа"],
-                    "предел": ["сходимость", "граница"]
+                    "предел": ["сходимость", "граница"],
+                    "шаровая функция": ["сферическая функция"]
                 }
             },
             "programming": {
@@ -304,7 +305,8 @@ class SearchEngine:
                     "wave": ["oscillation", "vibration"],
                     "particle": ["body", "corpuscle"],
                     "charge": ["electric charge", "electrostatic charge"],
-                    "mass": ["inertia", "matter"]
+                    "mass": ["inertia", "matter"],
+                    "spherical harmonics": ["spherical function"]
                 },
                 "ru": {
                     # Russian physics synonyms
@@ -317,7 +319,9 @@ class SearchEngine:
                     "волна": ["колебание", "вибрация"],
                     "частица": ["тело", "корпускула"],
                     "заряд": ["электрический заряд", "электростатический заряд"],
-                    "масса": ["инерция", "вещество", "материя"]
+                    "масса": ["инерция", "вещество", "материя"],
+                    "шаровая функция": ["сферическая гармоника", "сферическая функция"],
+                    "волновая функция": ["функция состояния", "пси-функция"]
                 }
             }
         }
@@ -340,7 +344,8 @@ class SearchEngine:
                 "применение": ["использование", "реализация", "использование"],
                 "проблема": ["задача", "вопрос", "вызов"],
                 "решение": ["ответ", "подход", "метод"],
-                "метод": ["техника", "подход", "процедура", "способ"]
+                "метод": ["техника", "подход", "процедура", "способ"],
+                "функция": ["отображение", "зависимость"]
             }
         }
 
@@ -709,6 +714,15 @@ class SearchEngine:
             if not concept:
                 return None
 
+            # If this is a variant concept (has a canonical_concept_id), get the canonical concept instead
+            if concept.get("canonical_concept_id"):
+                canonical_id = concept.get("canonical_concept_id")
+                logger.info(f"Redirecting to canonical concept {canonical_id} from variant {concept_id}")
+                concept = self.data_access.get_concept(canonical_id)
+                if not concept:
+                    return None
+                concept_id = canonical_id
+
             # Get occurrences
             occurrences_query = """
             SELECT o.*, v.title as video_title, v.domain as video_domain,
@@ -753,6 +767,17 @@ class SearchEngine:
             # Find related concepts
             related_concepts = self._find_related_concepts(concept_id, concept["domain"])
 
+            # Get all variant concept IDs for this canonical concept
+            variant_ids = []
+            if concept.get("canonical_concept_id") is None or concept.get("canonical_concept_id") == "":
+                variant_query = """
+                SELECT concept_id, text
+                FROM concepts
+                WHERE canonical_concept_id = ?
+                """
+                variants = self.data_access.execute_query(variant_query, (concept_id,))
+                variant_ids = [v["concept_id"] for v in variants]
+
             # Combine into result
             result = {
                 "concept_id": concept_id,
@@ -765,7 +790,8 @@ class SearchEngine:
                     {"domain": domain, "count": count}
                     for domain, count in domain_distribution.items()
                 ],
-                "related_concepts": related_concepts
+                "related_concepts": related_concepts,
+                "variant_concept_ids": variant_ids
             }
 
             return result
@@ -793,7 +819,10 @@ class SearchEngine:
             FROM concepts c
             JOIN occurrences o1 ON c.concept_id = o1.concept_id
             JOIN occurrences o2 ON o1.video_id = o2.video_id
-            WHERE o2.concept_id = ? AND c.concept_id != ?
+            WHERE o2.concept_id = ?
+            AND c.concept_id != ?
+            -- Only include canonical concepts
+            AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
             GROUP BY c.concept_id
             ORDER BY shared_videos DESC, c.total_occurrences DESC
             LIMIT 10
@@ -805,7 +834,10 @@ class SearchEngine:
             domain_query = """
             SELECT c.concept_id, c.text, c.concept_class, c.domain, c.total_occurrences
             FROM concepts c
-            WHERE c.domain = ? AND c.concept_id != ?
+            WHERE c.domain = ?
+            AND c.concept_id != ?
+            -- Only include canonical concepts
+            AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
             ORDER BY c.total_occurrences DESC
             LIMIT 10
             """
@@ -948,6 +980,25 @@ class SearchEngine:
         try:
             if not concept_ids:
                 return None
+
+            # Handle potential variant concepts by mapping to their canonical concepts
+            canonical_concept_ids = []
+            for concept_id in concept_ids:
+                concept = self.data_access.get_concept(concept_id)
+                if not concept:
+                    continue
+
+                if concept.get("canonical_concept_id"):
+                    # This is a variant, use its canonical concept instead
+                    canonical_id = concept.get("canonical_concept_id")
+                    if canonical_id not in canonical_concept_ids:
+                        canonical_concept_ids.append(canonical_id)
+                else:
+                    # This is already a canonical concept
+                    canonical_concept_ids.append(concept_id)
+
+            # Replace original concept IDs with canonical versions
+            concept_ids = canonical_concept_ids
 
             # Get concept details for all concepts
             concepts = []
@@ -1440,5 +1491,3 @@ class SearchEngine:
         except Exception as e:
             logger.error(f"Error clearing search cache: {e}")
             return False
-
-from collections import Counter  # Add this import at the top of the file

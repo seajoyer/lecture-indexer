@@ -489,10 +489,14 @@ def list_concepts(data_access, args):
     if len(practical) > 20:
         print(f"  ... and {len(practical) - 20} more")
 
+"""
+Fix for the learning path display in demo.py
+"""
+
 def generate_learning_path(search_engine, args):
     """
     Generate a learning path from concepts.
-
+    
     Args:
         search_engine: SearchEngine instance
         args: Command-line arguments
@@ -500,44 +504,61 @@ def generate_learning_path(search_engine, args):
     if not args.concepts:
         print("Error: No concept IDs provided. Use --concepts to specify concept IDs.")
         return
-
+    
+    # Parse concepts from comma-separated list if needed
+    concept_ids = []
+    for concept_arg in args.concepts:
+        # Check if it's a comma-separated list
+        if ',' in concept_arg:
+            concept_ids.extend([c.strip() for c in concept_arg.split(',')])
+        else:
+            concept_ids.append(concept_arg)
+    
     # Set theory ratio
     theory_ratio = args.theory_ratio if args.theory_ratio is not None else 0.5
-
+    
     # Generate learning path
     learning_path = search_engine.generate_learning_path(
-        args.concepts,
+        concept_ids,
         theory_practice_ratio=theory_ratio,
         domain=args.filter_domain
     )
-
+    
     if not learning_path:
         print("Error: Could not generate learning path. Check that concept IDs are valid.")
         return
-
+    
     # Print learning path
     print(f"\n=== Learning Path ===")
     print(f"Total Concepts: {learning_path.get('total_concepts', 0)}")
     print(f"Theoretical Concepts: {learning_path.get('theoretical_concepts', 0)}")
     print(f"Practical Concepts: {learning_path.get('practical_concepts', 0)}")
-    print(f"Theory/Practice Ratio: {learning_path.get('theory_practice_ratio', {}).get('actual', 0.5):.2f}")
-
+    
+    # Fix the theory practice ratio display to handle both dictionary and float formats
+    theory_practice_ratio = learning_path.get('theory_practice_ratio', 0.5)
+    if isinstance(theory_practice_ratio, dict):
+        actual_ratio = theory_practice_ratio.get('actual', 0.5)
+    else:
+        actual_ratio = theory_practice_ratio
+    
+    print(f"Theory/Practice Ratio: {actual_ratio:.2f}")
+    
     if args.filter_domain:
         print(f"Domain Filter: {args.filter_domain}")
-
+    
     # Print concepts in order
     concepts = learning_path.get("concepts", [])
     print(f"\nLearning Sequence:")
     for i, concept in enumerate(concepts):
         concept_class = concept.get("concept_class", "unknown")
         print(f"  {i+1}. {concept.get('text', 'N/A')} ({concept_class})")
-
+        
         # Print recommended videos if available
         recommended_videos = concept.get("recommended_videos", [])
         if recommended_videos:
             print(f"     Recommended Video: {recommended_videos[0].get('title', 'N/A')}")
             print(f"     Video URL: https://www.youtube.com/watch?v={recommended_videos[0].get('video_id', '')}")
-
+    
     # Print sections if available
     sections = learning_path.get("sections", [])
     if sections:
@@ -549,7 +570,7 @@ def generate_learning_path(search_engine, args):
 
 def search_content(search_engine, args):
     """
-    Search for content matching a query.
+    Search for content matching a query with interactive concept exploration.
 
     Args:
         search_engine: SearchEngine instance
@@ -611,7 +632,12 @@ def search_content(search_engine, args):
     # Print result items
     result_items = results.get("results", [])
     print(f"\nTop Results:")
+    
+    # Track concept results for interactive selection
+    concept_results = {}
+    
     for i, result in enumerate(result_items[:15]):  # Show top 15
+        result_num = i + 1
         result_type = result.get("result_type", "unknown")
         context_type = result.get("context_type", "unknown")
         text = result.get("text", "N/A")
@@ -620,8 +646,13 @@ def search_content(search_engine, args):
         video_id = result.get("video_id", "")
         video_title = result.get("video_title", "")
 
-        print(f"  {i+1}. {text}")
+        print(f"  {result_num}. {text}")
         print(f"     Type: {result_type} ({context_type})")
+        
+        # Store concept results with their index for later reference
+        if result_type == "concept" and result.get("concept_id"):
+            concept_results[result_num] = result.get("concept_id")
+            
         print(f"     Video: {video_title}")
         if video_id:
             print(f"     URL: https://www.youtube.com/watch?v={video_id}")
@@ -633,6 +664,117 @@ def search_content(search_engine, args):
 
     if len(result_items) > 15:
         print(f"  ... and {len(result_items) - 15} more results")
+    
+    # Interactive mode - offer to explore concepts
+    if concept_results:
+        print("\nConcepts found in search results. You can explore details for any concept.")
+        print("Enter the number of a concept to see details, or press Enter to continue:")
+        
+        try:
+            choice = input("> ")
+            if choice.strip() and choice.isdigit():
+                choice_num = int(choice)
+                if choice_num in concept_results:
+                    concept_id = concept_results[choice_num]
+                    display_concept_details(search_engine, concept_id)
+                else:
+                    print(f"Invalid choice: {choice}. No concept at that position.")
+        except KeyboardInterrupt:
+            print("\nExploration cancelled.")
+        except Exception as e:
+            print(f"Error during concept exploration: {e}")
+
+
+def display_concept_details(search_engine, concept_id):
+    """
+    Display detailed information about a concept.
+    
+    Args:
+        search_engine: SearchEngine instance
+        concept_id: Concept ID to display
+    """
+    concept = search_engine.get_concept_details(concept_id)
+    if not concept:
+        print(f"Error: Concept not found: {concept_id}")
+        return
+    
+    print(f"\n=== Concept Details: {concept.get('text', 'Unknown')} ===")
+    print(f"Concept ID: {concept_id}")
+    print(f"Domain: {concept.get('domain', 'Unknown')}")
+    print(f"Classification: {concept.get('concept_class', 'Unknown')}")
+    
+    # Display definition if available
+    if concept.get('definition'):
+        print(f"\nDefinition: {concept.get('definition')}")
+    
+    # Display videos where this concept appears
+    videos = concept.get('videos', [])
+    if videos:
+        print(f"\nAppears in {len(videos)} videos:")
+        for i, video in enumerate(videos[:5]):  # Show up to 5 videos
+            print(f"  {i+1}. {video.get('title', 'Unknown')}")
+            print(f"     Video ID: {video.get('video_id', 'Unknown')}")
+            print(f"     URL: https://www.youtube.com/watch?v={video.get('video_id', '')}")
+            
+            # Show occurrences within this video
+            occurrences = video.get('occurrences', [])
+            if occurrences:
+                print(f"     Occurrences: {len(occurrences)}")
+                for j, occurrence in enumerate(occurrences[:3]):  # Show up to 3 occurrences
+                    start_time = occurrence.get('start_time', 0)
+                    time_str = f"{int(start_time // 60)}:{int(start_time % 60):02d}"
+                    context_type = occurrence.get('context_type', 'unknown')
+                    print(f"       - at {time_str} ({context_type})")
+                    
+                    # Show short context snippet
+                    context = occurrence.get('context_text', '')
+                    if context:
+                        print(f"         \"{truncate_text(context, 80)}\"")
+                
+                if len(occurrences) > 3:
+                    print(f"       ... and {len(occurrences) - 3} more occurrences")
+        
+        if len(videos) > 5:
+            print(f"  ... and {len(videos) - 5} more videos")
+    else:
+        print("\nNo videos found for this concept.")
+    
+    # Display related concepts
+    related_concepts = concept.get('related_concepts', [])
+    if related_concepts:
+        print(f"\nRelated Concepts:")
+        for i, related in enumerate(related_concepts[:10]):  # Show up to 10 related concepts
+            text = related.get('text', 'Unknown')
+            relationship = related.get('relationship', 'related')
+            relationship_type = f" ({relationship})" if relationship != "related" else ""
+            print(f"  {i+1}. {text}{relationship_type}")
+            
+            # If it's a prerequisite, mark it as important
+            if relationship == "prerequisite":
+                print(f"     (Important: This is a prerequisite for understanding {concept.get('text', 'the concept')})")
+        
+        if len(related_concepts) > 10:
+            print(f"  ... and {len(related_concepts) - 10} more related concepts")
+    else:
+        print("\nNo related concepts found.")
+    
+    # Offer to explore a related concept
+    if related_concepts:
+        print("\nWould you like to explore a related concept? Enter number or press Enter to continue:")
+        try:
+            choice = input("> ")
+            if choice.strip() and choice.isdigit():
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(related_concepts):
+                    related_concept_id = related_concepts[choice_num-1].get('concept_id')
+                    if related_concept_id:
+                        display_concept_details(search_engine, related_concept_id)
+                else:
+                    print(f"Invalid choice: {choice}")
+        except KeyboardInterrupt:
+            print("\nExploration cancelled.")
+        except Exception as e:
+            print(f"Error during concept exploration: {e}")
 
 def get_playlist_videos(playlist_id):
     """

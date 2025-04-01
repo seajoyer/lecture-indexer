@@ -14,13 +14,11 @@ import re
 import uuid
 import logging
 import json
-import time
+import difflib  # For string similarity comparison
 from typing import Dict, List, Set, Tuple, Any, Optional, Union, Counter as CounterType
 from collections import defaultdict, Counter, deque
 import math
-import numpy as np
 from datetime import datetime
-import string
 
 # Import project modules with error handling
 try:
@@ -79,6 +77,52 @@ class ConceptSignature:
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.definition = ""  # Store concept definition if found
+
+        # New fields for improved concept matching
+        self.normalized_text = self._normalize_text(text, language)
+        self.canonical_concept_id = None  # Reference to canonical concept if this is a variant
+
+    def _normalize_text(self, text: str, language: str) -> str:
+        """
+        Normalize concept text for better matching and deduplication.
+
+        Args:
+            text: Original concept text
+            language: Language code
+
+        Returns:
+            Normalized text
+        """
+        if not text:
+            return ""
+
+        # Convert to lowercase
+        normalized = text.lower()
+
+        # Remove extra whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        # Remove common filler phrases based on language
+        if language == "ru":
+            # Russian filler phrases to remove
+            normalized = re.sub(r'\bэто\s+', '', normalized)   # "это " (this is)
+            normalized = re.sub(r'\bвот\s+', '', normalized)   # "вот " (here)
+            normalized = re.sub(r'\bда\s+', '', normalized)    # "да " (yes)
+            normalized = re.sub(r'\bну\s+', '', normalized)    # "ну " (well)
+            normalized = re.sub(r'^то\s+', '', normalized)     # "то " at beginning (then/that)
+            normalized = re.sub(r'^у\s+нас\s+', '', normalized)  # "у нас " (we have)
+            normalized = re.sub(r'^просто\s+', '', normalized) # "просто " (just)
+        else:
+            # English filler phrases to remove
+            normalized = re.sub(r'^the\s+', '', normalized)    # "the " at beginning
+            normalized = re.sub(r'^a\s+', '', normalized)      # "a " at beginning
+            normalized = re.sub(r'^an\s+', '', normalized)     # "an " at beginning
+            normalized = re.sub(r'^this\s+', '', normalized)   # "this " at beginning
+            normalized = re.sub(r'^that\s+', '', normalized)   # "that " at beginning
+            normalized = re.sub(r'^just\s+', '', normalized)   # "just " at beginning
+            normalized = re.sub(r'^so\s+', '', normalized)     # "so " at beginning
+
+        return normalized
 
     def _extract_pattern(self, text: str) -> List[str]:
         """
@@ -216,6 +260,7 @@ class ConceptSignature:
         return {
             "concept_id": self.concept_id,
             "text": self.text,
+            "normalized_text": self.normalized_text,
             "signature_pattern": self.signature_pattern,
             "domain": self.domain,
             "concept_class": self.concept_class,
@@ -227,6 +272,7 @@ class ConceptSignature:
             "related_concepts": self.related_concepts,
             "occurrences_count": len(self.occurrences),
             "definition": self.definition,
+            "canonical_concept_id": self.canonical_concept_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }
@@ -259,6 +305,13 @@ class ConceptSignature:
         signature.definition = data.get("definition", "")
         signature.created_at = data.get("created_at", signature.created_at)
         signature.updated_at = data.get("updated_at", signature.updated_at)
+        signature.canonical_concept_id = data.get("canonical_concept_id")
+
+        # Set normalized text if available or recalculate it
+        if "normalized_text" in data:
+            signature.normalized_text = data["normalized_text"]
+        else:
+            signature.normalized_text = signature._normalize_text(data["text"], data.get("language", "en"))
 
         return signature
 
@@ -651,17 +704,38 @@ class RelationshipGraph:
                 continue
             if domain and concept.domain != domain:
                 continue
+
+            # Skip concepts that are variants (have a canonical_concept_id)
+            if concept.canonical_concept_id:
+                continue
+
             candidate_concepts[concept_id] = concept
 
         # Calculate match scores
         matches = []
+
+        # Normalize input text for better matching
+        normalized_text = self._normalize_text(text, language) if language else text.lower()
+
         for concept_id, concept in candidate_concepts.items():
-            score = concept.match_text(text)
-            if score > 0.0:
+            # Use string similarity for more accurate matching
+            similarity = difflib.SequenceMatcher(None,
+                                              normalized_text,
+                                              concept.normalized_text).ratio()
+
+            # Also check signature pattern matching
+            pattern_score = concept.match_text(text)
+
+            # Combine scores, giving more weight to string similarity
+            score = (similarity * 0.7) + (pattern_score * 0.3)
+
+            if score > 0.5:  # Set a minimum threshold for matches
                 matches.append({
                     "concept_id": concept_id,
                     "text": concept.text,
                     "match_score": score,
+                    "similarity": similarity,
+                    "pattern_score": pattern_score,
                     "domain": concept.domain,
                     "language": concept.language,
                     "concept_class": concept.concept_class
@@ -671,6 +745,24 @@ class RelationshipGraph:
         matches.sort(key=lambda x: x["match_score"], reverse=True)
 
         return matches[:max_results]
+
+    def _normalize_text(self, text: str, language: str = "en") -> str:
+        """
+        Normalize text for concept matching.
+
+        Args:
+            text: Text to normalize
+            language: Language code
+
+        Returns:
+            Normalized text
+        """
+        if not text:
+            return ""
+
+        # Create a temporary concept signature to use its normalization method
+        temp = ConceptSignature("temp", text, language=language)
+        return temp.normalized_text
 
 
 class MLCSProcessor:
@@ -688,6 +780,7 @@ class MLCSProcessor:
         """
         self.language = language
         self.stopwords = self._load_stopwords(language)
+        self.data_access = get_data_access()
 
     def _load_stopwords(self, language: str) -> Set[str]:
         """
@@ -1066,6 +1159,28 @@ class MLCSProcessor:
                 # Check for definition patterns in contexts
                 signature.definition = self._extract_definition(concept_text, contexts)
 
+            # Check for similar existing concepts before adding
+            similar_concepts = []
+            if self.data_access:
+                # Use data access to find similar concepts
+                similar_concepts = self.data_access.find_similar_concepts(
+                    concept_text,
+                    signature.domain,
+                    signature.language
+                )
+
+            # If we found a very similar concept, set it as canonical
+            if similar_concepts:
+                best_match = similar_concepts[0]
+                match_score = best_match.get('match_score', 0)
+                similarity = best_match.get('similarity', 0)
+
+                if match_score >= 3 or similarity > 0.85:
+                    # This is essentially the same concept, use the existing one as canonical
+                    canonical_id = best_match.get('concept_id')
+                    signature.canonical_concept_id = canonical_id
+                    logger.info(f"Using canonical concept {canonical_id} for similar concept: '{concept_text}'")
+
             signatures.append(signature)
 
         return signatures
@@ -1143,6 +1258,7 @@ class DomainKnowledgeBase:
                     "hermitian operator": {"weight": 0.9, "aliases": ["self-adjoint operator"]},
                     "hilbert space": {"weight": 0.9, "aliases": ["state space", "vector space"]},
                     "commutator": {"weight": 0.9, "aliases": ["commutation relation"]},
+                    "spherical harmonics": {"weight": 0.9, "aliases": ["spherical function"]},
 
                     # Other important physics concepts
                     "momentum": {"weight": 0.8, "aliases": ["linear momentum", "p"]},
@@ -1168,6 +1284,7 @@ class DomainKnowledgeBase:
                     "эрмитовый оператор": {"weight": 0.9, "aliases": ["самосопряженный оператор"]},
                     "гильбертово пространство": {"weight": 0.9, "aliases": ["пространство состояний", "векторное пространство"]},
                     "коммутатор": {"weight": 0.9, "aliases": ["соотношение коммутации"]},
+                    "шаровая функция": {"weight": 0.9, "aliases": ["сферическая гармоника", "сферическая функция"]},
 
                     # Other important physics concepts in Russian
                     "импульс": {"weight": 0.8, "aliases": ["линейный импульс", "p"]},
@@ -1357,6 +1474,7 @@ class ConceptExtractor:
         self.language = language
         self.mlcs_processor = MLCSProcessor(language)
         self.knowledge_base = DomainKnowledgeBase()
+        self.data_access = get_data_access()
 
     def extract_concepts_from_text(
         self,
@@ -1461,19 +1579,92 @@ class ConceptExtractor:
             if data["score"] < 2.0:
                 continue
 
-            concept_list.append({
+            # Create concept with properties for deduplication
+            normalized_text = self._normalize_concept_text(term, language)
+            concept_item = {
                 "text": term,
+                "normalized_text": normalized_text,
                 "score": data["score"],
                 "source": data["source"],
                 "definition": data.get("definition", ""),
-                "domain_match": data.get("domain_match", False)
-            })
+                "domain_match": data.get("domain_match", False),
+                "domain": domain,
+                "language": language
+            }
+
+            concept_list.append(concept_item)
 
         # Sort by score
         concept_list.sort(key=lambda x: x["score"], reverse=True)
 
+        # Check for similar existing concepts
+        for concept in concept_list:
+            # Check for similar existing concepts
+            similar_concepts = []
+            if self.data_access:
+                similar_concepts = self.data_access.find_similar_concepts(
+                    concept["text"],
+                    domain,
+                    language
+                )
+
+                # If we found a very similar concept, flag it
+                if similar_concepts:
+                    best_match = similar_concepts[0]
+                    match_score = best_match.get('match_score', 0)
+                    similarity = best_match.get('similarity', 0)
+
+                    if match_score >= 3 or similarity > 0.85:
+                        # This is essentially the same concept, mark it
+                        canonical_id = best_match.get('concept_id')
+                        concept["canonical_concept_id"] = canonical_id
+                        concept["similar_to"] = best_match.get('text')
+                        logger.info(f"Found similar concept: '{concept['text']}' matches '{best_match.get('text')}'")
+
         # Take top concepts
         return concept_list[:30]  # Limit to top 30
+
+    def _normalize_concept_text(self, text: str, language: str = "en") -> str:
+        """
+        Normalize concept text for better matching and deduplication.
+
+        Args:
+            text: Concept text
+            language: Language code
+
+        Returns:
+            Normalized text
+        """
+        if not text:
+            return ""
+
+        # Convert to lowercase
+        normalized = text.lower()
+
+        # Remove extra whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        # Remove common filler phrases based on language
+        if language == "ru":
+            # Russian filler phrases to remove
+            normalized = re.sub(r'\bэто\s+', '', normalized)   # "это " (this is)
+            normalized = re.sub(r'\bвот\s+', '', normalized)   # "вот " (here)
+            normalized = re.sub(r'\bда\s+', '', normalized)    # "да " (yes)
+            normalized = re.sub(r'\bну\s+', '', normalized)    # "ну " (well)
+            normalized = re.sub(r'^то\s+', '', normalized)     # "то " at beginning (then/that)
+            normalized = re.sub(r'^у\s+нас\s+', '', normalized)  # "у нас " (we have)
+            normalized = re.sub(r'^просто\s+', '', normalized) # "просто " (just)
+        else:
+            # English filler phrases to remove
+            normalized = re.sub(r'^the\s+', '', normalized)    # "the " at beginning
+            normalized = re.sub(r'^a\s+', '', normalized)      # "a " at beginning
+            normalized = re.sub(r'^an\s+', '', normalized)     # "an " at beginning
+            normalized = re.sub(r'^this\s+', '', normalized)   # "this " at beginning
+            normalized = re.sub(r'^that\s+', '', normalized)   # "that " at beginning
+            normalized = re.sub(r'^just\s+', '', normalized)   # "just " at beginning
+            normalized = re.sub(r'^so\s+', '', normalized)     # "so " at beginning
+
+        return normalized
 
     def _extract_definitions(self, text: str, language: str) -> Dict[str, str]:
         """
@@ -1719,6 +1910,7 @@ class ConceptSignatureGenerator:
                 enhanced_concept["hierarchy_score"] = signatures[i].hierarchy_score
                 enhanced_concept["confidence"] = signatures[i].confidence
                 enhanced_concept["definition"] = signatures[i].definition
+                enhanced_concept["canonical_concept_id"] = signatures[i].canonical_concept_id
                 enhanced_concept["related_concepts"] = [
                     {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
                     for rel_id, rel_data in signatures[i].related_concepts.items()
@@ -1891,7 +2083,9 @@ class ConceptSignatureGenerator:
                     "source": concept["source"],
                     "domain_match": concept.get("domain_match", False),
                     "definition": concept.get("definition", ""),
-                    "language": language
+                    "language": language,
+                    "canonical_concept_id": concept.get("canonical_concept_id"),
+                    "normalized_text": concept.get("normalized_text", "")
                 }
 
                 new_concepts.append(new_concept)
@@ -1973,7 +2167,8 @@ class ConceptSignatureGenerator:
                         rel_id for rel_id, _ in
                         self.relationship_graph.get_related_concepts(concept_id, min_strength=0.3)
                     ],
-                    "definition": concept.definition
+                    "definition": concept.definition,
+                    "canonical_concept_id": concept.canonical_concept_id
                 })
 
         # Create learning path structure
@@ -2010,9 +2205,11 @@ class ConceptSignatureGenerator:
                 concept_data = {
                     "concept_id": signature.concept_id,
                     "text": signature.text,
+                    "normalized_text": signature.normalized_text,
                     "domain": signature.domain,
                     "concept_class": signature.concept_class,
                     "language": signature.language,
+                    "canonical_concept_id": signature.canonical_concept_id,
                     "metadata": {
                         "signature_pattern": signature.signature_pattern,
                         "hierarchy_score": signature.hierarchy_score,
@@ -2092,7 +2289,8 @@ class ConceptSignatureGenerator:
                             "signature_pattern": concept.get("signature_pattern", []),
                             "prerequisites": concept.get("prerequisites", []),
                             "related_concepts": concept.get("related_concepts", []),
-                            "definition": concept.get("definition", "")
+                            "definition": concept.get("definition", ""),
+                            "canonical_concept_id": concept.get("canonical_concept_id")
                         })
                     else:
                         # Add enhanced concept to base

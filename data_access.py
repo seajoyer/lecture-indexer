@@ -10,8 +10,10 @@ import logging
 import time
 import threading
 import re
+import difflib  # For string similarity comparison
 from typing import Dict, List, Any, Optional, Tuple, Set, Union
 from contextlib import contextmanager
+from collections import Counter
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -183,10 +185,12 @@ class DataAccess:
         CREATE TABLE IF NOT EXISTS concepts (
             concept_id TEXT PRIMARY KEY,
             text TEXT NOT NULL,
+            normalized_text TEXT, -- Add normalized text field for better matching
             domain TEXT,
             concept_class TEXT,
             language TEXT,  -- Store concept language
-            total_occurrences INTEGER DEFAULT 0
+            total_occurrences INTEGER DEFAULT 0,
+            canonical_concept_id TEXT -- Reference to canonical concept if this is a variant
         );
 
         -- Create indexes for concept filtering
@@ -194,6 +198,7 @@ class DataAccess:
         CREATE INDEX IF NOT EXISTS idx_concepts_class ON concepts(concept_class);
         CREATE INDEX IF NOT EXISTS idx_concepts_text ON concepts(text);
         CREATE INDEX IF NOT EXISTS idx_concepts_language ON concepts(language);
+        CREATE INDEX IF NOT EXISTS idx_concepts_normalized_text ON concepts(normalized_text);
 
         -- Occurrences table for concept-segment associations
         CREATE TABLE IF NOT EXISTS occurrences (
@@ -250,11 +255,28 @@ class DataAccess:
             practical_patterns TEXT,  -- JSON array of practical patterns
             updated_at TEXT
         );
+
+        -- Add normalized_text column to concepts table if it doesn't exist
+        PRAGMA table_info(concepts);
         """
 
         try:
             with self.get_connection() as conn:
                 conn.executescript(schema_script)
+
+                # Check if normalized_text column exists, add if it doesn't
+                cursor = conn.cursor()
+                columns = cursor.execute("PRAGMA table_info(concepts)").fetchall()
+                column_names = [col[1] for col in columns]
+
+                if "normalized_text" not in column_names:
+                    conn.execute("ALTER TABLE concepts ADD COLUMN normalized_text TEXT")
+                    logger.info("Added normalized_text column to concepts table")
+
+                if "canonical_concept_id" not in column_names:
+                    conn.execute("ALTER TABLE concepts ADD COLUMN canonical_concept_id TEXT")
+                    logger.info("Added canonical_concept_id column to concepts table")
+
                 conn.commit()
             logger.info("Database schema initialized with optimizations")
         except Exception as e:
@@ -295,6 +317,7 @@ class DataAccess:
                 JOIN concepts c1 ON o1.concept_id = c1.concept_id
                 JOIN concepts c2 ON o2.concept_id = c2.concept_id
                 WHERE o1.concept_id != o2.concept_id
+                AND (c1.canonical_concept_id IS NULL OR c1.canonical_concept_id = '') -- Only include canonical concepts
                 GROUP BY c1.concept_id
             )
             SELECT c.*,
@@ -305,6 +328,7 @@ class DataAccess:
             JOIN occurrences o ON c.concept_id = o.concept_id
             JOIN videos v ON o.video_id = v.video_id
             LEFT JOIN concept_stats cs ON c.concept_id = cs.concept_id
+            WHERE (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '') -- Only include canonical concepts
             """
 
             # Add WHERE clause if we have filters
@@ -329,7 +353,7 @@ class DataAccess:
                 params.extend(video_ids)
 
             if where_clauses:
-                query += " WHERE " + " AND ".join(where_clauses)
+                query += " AND " + " AND ".join(where_clauses)
 
             # Group and order with enhanced sorting
             query += """
@@ -706,7 +730,7 @@ class DataAccess:
             self.cache_hits = 0
             self.cache_misses = 0
 
-            logger.info("Cleared entire cache")
+            logger.info("Cleared all cache")
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """
@@ -877,8 +901,8 @@ class DataAccess:
             # Prepare batch insert
             query = """
             INSERT INTO segments (
-                segment_id, video_id, start_time, end_time, text, context_type
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                segment_id, video_id, start_time, end_time, text, context_type, language
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """
 
             # Transform segments into parameter tuples
@@ -890,13 +914,16 @@ class DataAccess:
                 if not segment_id:
                     continue
 
+                language = segment.get("language", "")
+
                 params_list.append((
                     segment_id,
                     video_id,
                     segment.get("start_time", 0.0),
                     segment.get("end_time", 0.0),
                     segment.get("text", ""),
-                    segment.get("content_type", "mixed")
+                    segment.get("content_type", "mixed"),
+                    language
                 ))
 
                 # Prepare search index parameters
@@ -906,7 +933,8 @@ class DataAccess:
                     segment.get("domain", "unknown"),
                     segment.get("content_type", "mixed"),
                     "segment",
-                    video_id
+                    video_id,
+                    language
                 ))
 
             # Execute batch insert for segments
@@ -916,8 +944,8 @@ class DataAccess:
             if search_index_params:
                 search_query = """
                 INSERT INTO search_index (
-                    id, text, domain, context_type, item_type, video_id
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    id, text, domain, context_type, item_type, video_id, language
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_many(search_query, search_index_params)
 
@@ -983,10 +1011,127 @@ class DataAccess:
 
     # CONCEPT OPERATIONS
 
-    # Update the save_concept method to handle languages
+    def normalize_concept_text(self, text: str, language: str = "en") -> str:
+        """
+        Normalize concept text for better matching and deduplication.
+
+        Args:
+            text: Concept text
+            language: Language code
+
+        Returns:
+            Normalized text
+        """
+        if not text:
+            return ""
+
+        # Convert to lowercase
+        normalized = text.lower()
+
+        # Remove extra whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        # Remove common filler phrases based on language
+        if language == "ru":
+            # Russian filler phrases to remove
+            normalized = re.sub(r'\bэто\s+', '', normalized)   # "это " (this is)
+            normalized = re.sub(r'\bвот\s+', '', normalized)   # "вот " (here)
+            normalized = re.sub(r'\bда\s+', '', normalized)    # "да " (yes)
+            normalized = re.sub(r'\bну\s+', '', normalized)    # "ну " (well)
+            normalized = re.sub(r'^то\s+', '', normalized)     # "то " at beginning (then/that)
+            normalized = re.sub(r'^у\s+нас\s+', '', normalized)  # "у нас " (we have)
+            normalized = re.sub(r'^просто\s+', '', normalized) # "просто " (just)
+        else:
+            # English filler phrases to remove
+            normalized = re.sub(r'^the\s+', '', normalized)    # "the " at beginning
+            normalized = re.sub(r'^a\s+', '', normalized)      # "a " at beginning
+            normalized = re.sub(r'^an\s+', '', normalized)     # "an " at beginning
+            normalized = re.sub(r'^this\s+', '', normalized)   # "this " at beginning
+            normalized = re.sub(r'^that\s+', '', normalized)   # "that " at beginning
+            normalized = re.sub(r'^just\s+', '', normalized)   # "just " at beginning
+            normalized = re.sub(r'^so\s+', '', normalized)     # "so " at beginning
+
+        return normalized
+
+    def find_similar_concepts(self, concept_text: str, domain: str = None, language: str = None) -> List[Dict[str, Any]]:
+        """
+        Find concepts similar to the given text.
+
+        Args:
+            concept_text: Concept text to match
+            domain: Optional domain to limit search
+            language: Optional language to limit search
+
+        Returns:
+            List of similar concepts
+        """
+        if not concept_text:
+            return []
+
+        # Normalize text for matching
+        normalized_text = self.normalize_concept_text(concept_text, language)
+
+        # Base query looking for similar concepts
+        query = """
+        SELECT c.*,
+               CASE
+                   WHEN c.normalized_text = ? THEN 3
+                   WHEN c.normalized_text LIKE ? THEN 2
+                   WHEN ? LIKE '%' || c.normalized_text || '%' THEN 1
+                   ELSE 0
+               END as match_score
+        FROM concepts c
+        WHERE (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
+        """
+
+        params = [normalized_text, normalized_text + "%", normalized_text]
+
+        # Add domain filter if provided
+        if domain:
+            query += " AND c.domain = ?"
+            params.append(domain)
+
+        # Add language filter if provided
+        if language:
+            query += " AND c.language = ?"
+            params.append(language)
+
+        # Order by match quality and limit results
+        query += " ORDER BY match_score DESC LIMIT 10"
+
+        # Execute query
+        results = self.execute_query(query, tuple(params))
+
+        # Filter to only return actually similar concepts
+        similar_concepts = []
+        for concept in results:
+            # Skip concepts with no real similarity
+            if concept['match_score'] == 0:
+                continue
+
+            # For concepts that didn't get a perfect match score,
+            # perform additional string similarity check
+            if concept['match_score'] < 3:
+                # Calculate string similarity ratio
+                similarity = difflib.SequenceMatcher(None,
+                                                    normalized_text,
+                                                    concept.get('normalized_text', '')).ratio()
+
+                # Only include if similarity is high enough
+                if similarity < 0.6:  # Require at least 60% similarity
+                    continue
+
+                # Add similarity score to concept data
+                concept['similarity'] = similarity
+
+            similar_concepts.append(concept)
+
+        return similar_concepts
+
     def save_concept(self, concept_data: Dict[str, Any]) -> Optional[str]:
         """
         Save or update a concept with improved validation and language support.
+        Checks for similar existing concepts to avoid duplication.
 
         Args:
             concept_data: Concept data dictionary
@@ -1018,8 +1163,29 @@ class DataAccess:
             theoretical = concept_data.get("theoretical", False)
             concept_class = "theoretical" if theoretical else "practical"
 
+        # Normalize text for better matching
+        normalized_text = self.normalize_concept_text(concept_text, language)
+
         try:
-            # Check if concept exists
+            # STEP 1: Check for similar existing concepts before creating a new one
+            similar_concepts = self.find_similar_concepts(concept_text, domain, language)
+
+            canonical_concept_id = None
+
+            if similar_concepts:
+                # Get the best matching concept
+                best_match = similar_concepts[0]
+
+                # If we have a very similar match, use its ID as canonical
+                match_score = best_match.get('match_score', 0)
+                similarity = best_match.get('similarity', 0)
+
+                if match_score >= 3 or similarity > 0.85:
+                    # This is essentially the same concept, use the existing one as canonical
+                    canonical_concept_id = best_match.get('concept_id')
+                    logger.info(f"Using canonical concept {canonical_concept_id} for similar concept: '{concept_text}'")
+
+            # STEP 2: Check if concept exists
             existing = self.get_concept(concept_id)
 
             if existing:
@@ -1027,49 +1193,58 @@ class DataAccess:
                 query = """
                 UPDATE concepts SET
                     text = ?,
+                    normalized_text = ?,
                     domain = ?,
                     concept_class = ?,
                     language = ?,
-                    total_occurrences = ?
+                    total_occurrences = ?,
+                    canonical_concept_id = ?
                 WHERE concept_id = ?
                 """
                 self.execute_update(query, (
                     concept_text,
+                    normalized_text,
                     domain,
                     concept_class,
                     language,
                     concept_data.get("total_occurrences", 0),
+                    canonical_concept_id,
                     concept_id
                 ))
             else:
                 # Insert new concept
                 query = """
                 INSERT INTO concepts (
-                    concept_id, text, domain, concept_class, language, total_occurrences
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    concept_id, text, normalized_text, domain, concept_class, language,
+                    total_occurrences, canonical_concept_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     concept_id,
                     concept_text,
+                    normalized_text,
                     domain,
                     concept_class,
                     language,
-                    concept_data.get("total_occurrences", 0)
+                    concept_data.get("total_occurrences", 0),
+                    canonical_concept_id
                 ))
 
             # Index for search - delete and reinsert to ensure freshness
-            self.execute_update(
-                "DELETE FROM search_index WHERE id = ? AND item_type = 'concept'",
-                (concept_id,)
-            )
+            # Only index canonical concepts (ones that don't have a canonical_concept_id)
+            if not canonical_concept_id:
+                self.execute_update(
+                    "DELETE FROM search_index WHERE id = ? AND item_type = 'concept'",
+                    (concept_id,)
+                )
 
-            self.execute_update(
-                """
-                INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (concept_id, concept_text, domain, concept_class, "concept", None, language)
-            )
+                self.execute_update(
+                    """
+                    INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (concept_id, concept_text, domain, concept_class, "concept", None, language)
+                )
 
             # Save occurrences if provided
             video_id = concept_data.get("video_id")
@@ -1077,7 +1252,8 @@ class DataAccess:
                 # Find segments containing this concept
                 segments = self.get_video_segments(video_id)
 
-                # Create occurrences
+                # Create occurrences - if this concept is a variant (has canonical_concept_id),
+                # we still save its occurrences under its own ID
                 occurrences = self._find_concept_occurrences(concept_id, concept_text, segments, video_id)
 
                 if occurrences:
@@ -1087,7 +1263,9 @@ class DataAccess:
             self.clear_cache(f"concept_{concept_id}")
 
             logger.info(f"Saved concept {concept_id}: {concept_text}")
-            return concept_id
+
+            # Return the canonical concept ID if this is a variant
+            return canonical_concept_id or concept_id
 
         except Exception as e:
             logger.error(f"Error saving concept {concept_text}: {e}")
@@ -1281,6 +1459,7 @@ class DataAccess:
     ) -> List[Dict[str, Any]]:
         """
         Get concepts extracted from a video with caching.
+        Only returns canonical concepts (not duplicates/variants).
 
         Args:
             video_id: Video ID
@@ -1301,6 +1480,7 @@ class DataAccess:
         FROM concepts c
         JOIN occurrences o ON c.concept_id = o.concept_id
         WHERE o.video_id = ?
+        AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '') -- Only include canonical concepts
         """
         params = [video_id]
 
@@ -1320,6 +1500,7 @@ class DataAccess:
     def get_video_concepts(self, video_id: str) -> Optional[Dict[str, Any]]:
         """
         Get all concept and pattern information for a video.
+        Only returns canonical concepts (not duplicates/variants).
 
         Args:
             video_id: YouTube video ID
@@ -1488,6 +1669,7 @@ class DataAccess:
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
         Perform enhanced search using SQLite FTS with multilingual support.
+        Handles deduplication of similar concepts in results.
 
         Args:
             query: Query parameters dictionary
@@ -1523,19 +1705,26 @@ class DataAccess:
 
             cached_result = self._get_from_cache(cache_key)
             if cached_result:
-                logger.info(f"Using cached search results for: {query_text}")
+                logger.info(f"Using cached search results for query: {query_text}")
                 return cached_result
 
             # Build enhanced search query for non-exact matching
             search_query = self.build_enhanced_search_query(query_text, domain, language)
 
-            # Build SQL query with improved JOINs for better performance
+            # Build SQL query with improved JOINs for better performance and concept deduplication
             sql = """
             WITH matched_items AS (
                 SELECT si.id, si.text, si.domain, si.context_type, si.item_type, si.video_id,
                     si.language, rank
                 FROM search_index si
                 WHERE search_index MATCH ?
+            ),
+            -- Add a subquery to exclude non-canonical concepts
+            canonical_concepts AS (
+                SELECT c.concept_id, c.text
+                FROM concepts c
+                WHERE (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
+                AND c.concept_id IN (SELECT id FROM matched_items WHERE item_type = 'concept')
             )
 
             SELECT mi.id, mi.text, mi.domain, mi.context_type, mi.item_type, mi.video_id, mi.language,
@@ -1546,7 +1735,8 @@ class DataAccess:
             FROM matched_items mi
             LEFT JOIN videos v ON mi.video_id = v.video_id
             LEFT JOIN segments s ON mi.item_type = 'segment' AND mi.id = s.segment_id
-            LEFT JOIN concepts c ON mi.item_type = 'concept' AND mi.id = c.concept_id
+            LEFT JOIN canonical_concepts cc ON mi.item_type = 'concept' AND mi.id = cc.concept_id
+            WHERE (mi.item_type != 'concept' OR cc.concept_id IS NOT NULL) -- Only include canonical concepts
             """
 
             params = [search_query]
@@ -1572,7 +1762,7 @@ class DataAccess:
                 params.extend(filters["video_ids"])
 
             if where_clauses:
-                sql += " WHERE " + " AND ".join(where_clauses)
+                sql += " AND " + " AND ".join(where_clauses)
 
             # Apply theory/practice ratio filter
             context_type_order = ""
@@ -1596,10 +1786,19 @@ class DataAccess:
 
             # Count total results more efficiently
             count_sql = """
-            SELECT COUNT(*) as count FROM search_index
+            WITH canonical_concepts AS (
+                SELECT concept_id
+                FROM concepts
+                WHERE (canonical_concept_id IS NULL OR canonical_concept_id = '')
+                AND concept_id IN (SELECT id FROM search_index WHERE search_index MATCH ? AND item_type = 'concept')
+            )
+            SELECT COUNT(*) as count
+            FROM search_index si
+            LEFT JOIN canonical_concepts cc ON si.item_type = 'concept' AND si.id = cc.concept_id
             WHERE search_index MATCH ?
+            AND (si.item_type != 'concept' OR cc.concept_id IS NOT NULL) -- Only count canonical concepts
             """
-            count_params = [search_query]
+            count_params = [search_query, search_query]
 
             if domain:
                 count_sql += " AND domain = ?"
@@ -1808,6 +2007,17 @@ class DataAccess:
                 count = self.execute_query(f"SELECT COUNT(*) as count FROM {table}")
                 table_stats[table] = count[0]["count"] if count else 0
 
+            # Count canonical vs variant concepts
+            canonical_count = self.execute_query(
+                "SELECT COUNT(*) as count FROM concepts WHERE canonical_concept_id IS NULL OR canonical_concept_id = ''"
+            )
+            variant_count = self.execute_query(
+                "SELECT COUNT(*) as count FROM concepts WHERE canonical_concept_id IS NOT NULL AND canonical_concept_id != ''"
+            )
+
+            table_stats["canonical_concepts"] = canonical_count[0]["count"] if canonical_count else 0
+            table_stats["variant_concepts"] = variant_count[0]["count"] if variant_count else 0
+
             stats["tables"] = table_stats
 
             # Get domain distribution
@@ -1822,8 +2032,15 @@ class DataAccess:
                     SUM(CASE WHEN concept_class = 'theoretical' THEN 1 ELSE 0 END) as theoretical,
                     SUM(CASE WHEN concept_class = 'practical' THEN 1 ELSE 0 END) as practical
                 FROM concepts
+                WHERE canonical_concept_id IS NULL OR canonical_concept_id = ''
             """)
             stats["concepts"] = theory_practice[0] if theory_practice else {}
+
+            # Get language distribution
+            languages = self.execute_query(
+                "SELECT language, COUNT(*) as count FROM concepts GROUP BY language ORDER BY count DESC"
+            )
+            stats["languages"] = languages
 
             # Get cache stats
             stats["cache"] = self.get_cache_stats()
@@ -1837,7 +2054,7 @@ class DataAccess:
 # Global instance for singleton access
 _data_access = None
 
-def get_data_access(db_path: str = "data/index/indexer.db") -> DataAccess:
+def get_data_access(db_path: Optional[str] = "data/index/indexer.db") -> DataAccess:
     """
     Get or create the DataAccess instance.
 
