@@ -152,6 +152,14 @@ class SearchEngine:
                 language
             )
 
+            # Create a more comprehensive list of related concepts
+            # for all concept results to improve exploration
+            concept_results = [r for r in enhanced_results.get("results", [])
+                            if r.get("result_type") == "concept"]
+
+            if concept_results:
+                self._enhance_concept_results_with_occurrences(concept_results)
+
             # Cache the enhanced results
             execution_time_ms = int((time.time() - start_time) * 1000)
             enhanced_results["executionTimeMs"] = execution_time_ms
@@ -173,6 +181,65 @@ class SearchEngine:
                 "status": "error",
                 "message": str(e)
             }
+
+    def _enhance_concept_results_with_occurrences(self, concept_results: List[Dict[str, Any]]) -> None:
+        """
+        Enhance concept search results with occurrence count across all videos.
+
+        Args:
+            concept_results: List of concept search results to enhance
+        """
+        try:
+            for concept in concept_results:
+                concept_id = concept.get("concept_id")
+                if not concept_id:
+                    continue
+
+                # Get all videos where this concept appears (including as variants)
+                query = """
+                WITH all_concept_ids AS (
+                    SELECT ? AS id
+                    UNION ALL
+                    SELECT concept_id FROM concepts WHERE canonical_concept_id = ?
+                )
+                SELECT COUNT(DISTINCT o.video_id) as video_count,
+                    COUNT(o.occurrence_id) as total_occurrences
+                FROM occurrences o
+                JOIN all_concept_ids c ON o.concept_id = c.id
+                """
+
+                result = self.data_access.execute_query(query, (concept_id, concept_id))
+
+                if result and result[0]:
+                    # Add occurrence information to concept
+                    concept["video_count"] = result[0].get("video_count", 0)
+                    concept["total_occurrences"] = result[0].get("total_occurrences", 0)
+
+                    if result[0].get("video_count", 0) > 1:
+                        # Make it clear this concept appears in multiple videos
+                        concept["appears_in_multiple_videos"] = True
+
+                # Get a sample of videos where this concept appears
+                video_query = """
+                WITH all_concept_ids AS (
+                    SELECT ? AS id
+                    UNION ALL
+                    SELECT concept_id FROM concepts WHERE canonical_concept_id = ?
+                )
+                SELECT DISTINCT v.video_id, v.title
+                FROM videos v
+                JOIN occurrences o ON v.video_id = o.video_id
+                JOIN all_concept_ids c ON o.concept_id = c.id
+                LIMIT 3
+                """
+
+                videos = self.data_access.execute_query(video_query, (concept_id, concept_id))
+
+                if videos:
+                    concept["sample_videos"] = videos
+
+        except Exception as e:
+            logger.error(f"Error enhancing concept results: {e}")
 
     def _apply_canonical_concept_filtering(self, search_results: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -844,7 +911,7 @@ class SearchEngine:
     @time_function(5000)  # Log warning if takes more than 5 seconds
     def index_content(self, processed_result: Dict[str, Any]) -> bool:
         """
-        Index processed content for search with improved error handling.
+        Index processed content for search with improved error handling and batching.
 
         Args:
             processed_result: Processing result dictionary
@@ -853,28 +920,231 @@ class SearchEngine:
             True if successful, False otherwise
         """
         try:
-            # Extract key information for logging
+            # Extract key fields
             video_id = processed_result.get("video_id")
             if not video_id:
-                logger.error("Missing video_id in processed result")
+                logger.error("Missing video_id for indexing")
                 return False
 
-            # Index content using data access layer
-            success = self.data_access.index_content(processed_result)
+            metadata = processed_result.get("metadata", {})
+            transcript = processed_result.get("transcript", {})
+            domain_features = processed_result.get("domain_features", {})
 
-            if success:
-                logger.info(f"Successfully indexed content for video {video_id}")
-            else:
-                logger.error(f"Failed to index content for video {video_id}")
+            # Get language from transcript
+            language = transcript.get("language", "en")
+            domain = metadata.get("domain", "unknown")
 
-            return success
+            # Clear existing content for this video to avoid duplicates
+            self.data_access.execute_update("DELETE FROM segments WHERE video_id = ?", (video_id,))
+            self.data_access.execute_update("DELETE FROM occurrences WHERE video_id = ?", (video_id,))
+            self.data_access.execute_update(
+                "DELETE FROM search_index WHERE (item_type = 'segment' OR video_id = ?) AND video_id = ?",
+                (video_id, video_id)
+            )
+
+            # Save video metadata
+            video_data = {
+                "video_id": video_id,
+                "title": metadata.get("title", ""),
+                "description": metadata.get("description", ""),
+                "channel": metadata.get("channel", ""),
+                "publication_date": metadata.get("publication_date", ""),
+                "duration_seconds": metadata.get("duration_seconds", 0),
+                "language": language,
+                "domain": domain,
+                "domain_confidence": metadata.get("domain_confidence", 0.0),
+                "theory_practice_ratio": processed_result.get("theory_practice_results", {}).get("theory_practice_ratio", 0.5),
+                "theoretical_segments": processed_result.get("theory_practice_results", {}).get("theoretical_segments", 0),
+                "practical_segments": processed_result.get("theory_practice_results", {}).get("practical_segments", 0),
+                "processing_status": "completed",
+                "indexed_at": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            video_saved = self.data_access.save_video(video_data)
+            if not video_saved:
+                logger.error(f"Failed to save video metadata for {video_id}")
+                return False
+
+            # Save segments
+            segments = transcript.get("segments", [])
+
+            # Add domain and language to each segment if not present
+            for segment in segments:
+                if "domain" not in segment:
+                    segment["domain"] = domain
+                if "language" not in segment:
+                    segment["language"] = language
+
+            segments_saved = self.data_access.save_segments(video_id, segments)
+            if not segments_saved:
+                logger.error(f"Failed to save segments for {video_id}")
+                return False
+
+            # Save concepts in batches
+            key_concepts = domain_features.get("key_concepts", [])
+            if not key_concepts:
+                logger.warning(f"No concepts found for video {video_id}")
+                # We still want to return True as the segments were saved successfully
+                return True
+
+            # Make sure all concepts have domain and language
+            for concept in key_concepts:
+                if "domain" not in concept:
+                    concept["domain"] = domain
+                if "language" not in concept:
+                    concept["language"] = language
+
+            # Process concepts in batches of 20 for better performance
+            batch_size = 20
+            successful_concepts = 0
+            concept_ids = []
+
+            for i in range(0, len(key_concepts), batch_size):
+                batch = key_concepts[i:i + batch_size]
+                for concept in batch:
+                    concept_data = concept.copy()
+                    concept_data["video_id"] = video_id
+
+                    # If concept has score but no confidence, use score as confidence
+                    if "score" in concept_data and "confidence" not in concept_data:
+                        concept_data["confidence"] = concept_data["score"]
+
+                    concept_id = self.data_access.save_concept(concept_data)
+                    if concept_id:
+                        successful_concepts += 1
+                        concept_ids.append(concept_id)
+
+            # Save theoretical and practical concepts
+            theoretical_concepts = domain_features.get("theoretical_concepts", [])
+            practical_concepts = domain_features.get("practical_concepts", [])
+
+            # Save theoretical concepts
+            for concept in theoretical_concepts:
+                concept_data = concept.copy()
+                concept_data["video_id"] = video_id
+                concept_data["domain"] = domain
+                concept_data["language"] = language
+                concept_data["concept_class"] = "theoretical"
+                self.data_access.save_concept(concept_data)
+
+            # Save practical concepts
+            for concept in practical_concepts:
+                concept_data = concept.copy()
+                concept_data["video_id"] = video_id
+                concept_data["domain"] = domain
+                concept_data["language"] = language
+                concept_data["concept_class"] = "practical"
+                self.data_access.save_concept(concept_data)
+
+            # Log success and clear related caches
+            logger.info(f"Successfully indexed {successful_concepts}/{len(key_concepts)} concepts for video {video_id}")
+
+            # Clear caches related to this video
+            self.data_access.clear_cache(f"video_{video_id}")
+            self.data_access.clear_cache(f"segments_{video_id}")
+            self.data_access.clear_cache(f"video_concepts_{video_id}")
+            self.data_access.clear_cache(f"video_concept_data_{video_id}")
+
+            # Clear search cache
+            from cache_manager import cache_clear
+            cache_clear("search")
+
+            # Process relationships if ConceptSignatureGenerator is available
+            try:
+                from concept_signature_generator import get_concept_signature_generator
+                generator = get_concept_signature_generator()
+                generator.process_video_concepts(processed_result)
+                logger.info(f"Successfully processed concept relationships for video {video_id}")
+            except (ImportError, Exception) as e:
+                logger.warning(f"Could not process concept relationships: {e}")
+
+            return True
 
         except Exception as e:
-            logger.error(f"Error indexing content: {str(e)}")
-            # Log detailed exception
+            logger.error(f"Error indexing content: {e}")
+
+            # Log detailed exception but only in debug mode
             import traceback
             logger.debug(f"Indexing error details: {traceback.format_exc()}")
+
             return False
+
+    def _apply_cross_video_dedup(self, processed_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply cross-video concept deduplication to link similar concepts between videos.
+
+        Args:
+            processed_result: Video processing result dictionary
+
+        Returns:
+            Updated processing result with cross-video concept links
+        """
+        video_id = processed_result.get("video_id")
+        if not video_id:
+            return processed_result
+
+        # Get domain features with concepts
+        domain_features = processed_result.get("domain_features", {})
+        video_concepts = domain_features.get("key_concepts", [])
+
+        if not video_concepts:
+            return processed_result
+
+        # Get language from processed result
+        language = processed_result.get("transcript", {}).get("language", "en")
+
+        # For each concept in this video, find similar concepts in other videos
+        updated_concepts = []
+
+        for concept in video_concepts:
+            concept_text = concept.get("text", "").lower()
+            normalized_text = concept.get("normalized_text", concept_text)
+
+            # Skip if this concept is already a variant
+            if concept.get("canonical_concept_id"):
+                updated_concepts.append(concept)
+                continue
+
+            # Try to find similar concepts across all videos
+            query = f"""
+            SELECT c.concept_id, c.text, c.normalized_text, c.domain,
+                c.canonical_concept_id, v.video_id
+            FROM concepts c
+            JOIN occurrences o ON c.concept_id = o.concept_id
+            JOIN videos v ON o.video_id = v.video_id
+            WHERE
+                (c.normalized_text = ? OR c.text = ?) AND
+                v.video_id != ? AND
+                (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
+            LIMIT 5
+            """
+
+            similar_concepts = self.data_access.execute_query(
+                query, (normalized_text, concept_text, video_id)
+            )
+
+            # If we found similar concepts in other videos
+            if similar_concepts:
+                # Use the first one as canonical
+                canonical = similar_concepts[0]
+                canonical_id = canonical.get("concept_id")
+
+                # Mark this concept as a variant
+                updated_concept = concept.copy()
+                updated_concept["canonical_concept_id"] = canonical_id
+
+                logger.info(f"Linked concept '{concept_text}' to canonical concept {canonical_id} from video {canonical.get('video_id')}")
+
+                updated_concepts.append(updated_concept)
+            else:
+                # No similar concepts found, keep as is (this will be a new canonical concept)
+                updated_concepts.append(concept)
+
+        # Update the domain features with the modified concepts
+        domain_features["key_concepts"] = updated_concepts
+        processed_result["domain_features"] = domain_features
+
+        return processed_result
 
     @cached("concept")
     def get_concept_details(self, concept_id: str) -> Optional[Dict[str, Any]]:
@@ -902,17 +1172,34 @@ class SearchEngine:
                     return None
                 concept_id = canonical_id
 
-            # Get occurrences
-            occurrences_query = """
+            # Get all variant concept IDs for this canonical concept
+            variant_ids = []
+            if concept.get("canonical_concept_id") is None or concept.get("canonical_concept_id") == "":
+                variant_query = """
+                SELECT concept_id, text
+                FROM concepts
+                WHERE canonical_concept_id = ?
+                """
+                variants = self.data_access.execute_query(variant_query, (concept_id,))
+                variant_ids = [v["concept_id"] for v in variants]
+
+            # Log how many variant concepts were found
+            logger.info(f"Found {len(variant_ids)} variant concepts for canonical concept {concept_id}")
+
+            # Build query for occurrences - include both canonical and variant concepts
+            all_concept_ids = [concept_id] + variant_ids
+            placeholders = ",".join(["?"] * len(all_concept_ids))
+
+            occurrences_query = f"""
             SELECT o.*, v.title as video_title, v.domain as video_domain,
-                   s.text as segment_text
+                s.text as segment_text
             FROM occurrences o
             JOIN videos v ON o.video_id = v.video_id
             JOIN segments s ON o.segment_id = s.segment_id
-            WHERE o.concept_id = ?
+            WHERE o.concept_id IN ({placeholders})
             ORDER BY v.domain, o.video_id, o.start_time
             """
-            occurrences = self.data_access.execute_query(occurrences_query, (concept_id,))
+            occurrences = self.data_access.execute_query(occurrences_query, tuple(all_concept_ids))
 
             # Group occurrences by video
             videos = {}
@@ -943,19 +1230,11 @@ class SearchEngine:
                     "context_text": context_text
                 })
 
+            # Log how many occurrences and videos were found
+            logger.info(f"Found {len(occurrences)} occurrences across {len(videos)} videos for concept {concept_id} and its variants")
+
             # Find related concepts
             related_concepts = self._find_related_concepts(concept_id, concept["domain"])
-
-            # Get all variant concept IDs for this canonical concept
-            variant_ids = []
-            if concept.get("canonical_concept_id") is None or concept.get("canonical_concept_id") == "":
-                variant_query = """
-                SELECT concept_id, text
-                FROM concepts
-                WHERE canonical_concept_id = ?
-                """
-                variants = self.data_access.execute_query(variant_query, (concept_id,))
-                variant_ids = [v["concept_id"] for v in variants]
 
             # Combine into result
             result = {

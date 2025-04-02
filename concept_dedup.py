@@ -496,6 +496,12 @@ class ConceptDedupExtension:
 
         valid_concepts = [c for c in concepts if self.is_valid_concept(c.get("text", ""), lang)]
 
+        # Important fix: If all concepts were filtered out, return the original concepts as valid
+        # This prevents excessive filtering in some languages
+        if not valid_concepts and concepts:
+            logger.warning(f"All concepts were filtered out as invalid. Returning original concepts.")
+            valid_concepts = concepts.copy()
+
         if not valid_concepts:
             return []
 
@@ -526,8 +532,8 @@ class ConceptDedupExtension:
             # Normalize text for better matching
             normalized_text = self.normalize_concept_text(concept_text, lang)
 
-            # Skip invalid concepts after normalization
-            if not normalized_text:
+            # Skip invalid concepts after normalization - BUT only if normalization returned empty string
+            if normalized_text == "":
                 continue
 
             # Check if we've already processed an exact text match
@@ -613,16 +619,29 @@ class ConceptDedupExtension:
         practical_concepts = domain_features.get("practical_concepts", [])
 
         if not key_concepts:
+            logger.info("No concepts to deduplicate")
             return processed_result  # Nothing to deduplicate
 
         # First pass: filter out invalid concepts
         filtered_key_concepts = [c for c in key_concepts if self.is_valid_concept(c.get("text", ""), language)]
 
+        # Important: If all were filtered, keep original concepts
+        if not filtered_key_concepts and key_concepts:
+            logger.warning(f"All {len(key_concepts)} concepts would be filtered out. Keeping original concepts.")
+            filtered_key_concepts = key_concepts
+
         # Log number of filtered concepts
-        logger.info(f"Filtered out {len(key_concepts) - len(filtered_key_concepts)} invalid concepts")
+        num_filtered = len(key_concepts) - len(filtered_key_concepts)
+        if num_filtered > 0:
+            logger.info(f"Filtered out {num_filtered} invalid concepts")
 
         # Second pass: deduplicate the remaining concepts
         canonical_concepts = self.deduplicate_concepts(filtered_key_concepts, language)
+
+        # If deduplication resulted in 0 concepts, keep the original filtered concepts
+        if not canonical_concepts and filtered_key_concepts:
+            logger.warning("Deduplication resulted in 0 concepts. Keeping original filtered concepts.")
+            canonical_concepts = filtered_key_concepts
 
         # Create mapping from original text to canonical concept
         text_to_canonical = {}
@@ -639,7 +658,7 @@ class ConceptDedupExtension:
 
                 # Find the canonical concept
                 canonical = next((c for c in canonical_concepts
-                              if c.get("concept_id", c.get("id", "")) == canonical_id), None)
+                            if c.get("concept_id", c.get("id", "")) == canonical_id), None)
 
                 if canonical:
                     text_to_canonical[concept_text] = canonical
@@ -647,6 +666,13 @@ class ConceptDedupExtension:
         # Filter theoretical and practical concepts based on canonical relationships
         deduplicated_theoretical = self.deduplicate_concepts(theoretical_concepts, language)
         deduplicated_practical = self.deduplicate_concepts(practical_concepts, language)
+
+        # If deduplication resulted in empty lists, use original lists
+        if not deduplicated_theoretical and theoretical_concepts:
+            deduplicated_theoretical = theoretical_concepts
+
+        if not deduplicated_practical and practical_concepts:
+            deduplicated_practical = practical_concepts
 
         # Update domain features
         domain_features["key_concepts"] = canonical_concepts
@@ -661,27 +687,3 @@ class ConceptDedupExtension:
         logger.info(f"Established {len(canonical_ids)} canonical relationships")
 
         return processed_result
-
-
-def apply_concept_deduplication(processed_result: Dict[str, Any],
-                              data_access=None, language=None) -> Dict[str, Any]:
-    """
-    Apply concept deduplication to a processed video result using default settings.
-
-    Args:
-        processed_result: Video processing result dictionary
-        data_access: Optional data access layer instance
-        language: Optional language code
-
-    Returns:
-        Updated processing result with deduplicated concepts
-    """
-    # Get language from result if not specified
-    if language is None:
-        language = processed_result.get("transcript", {}).get("language", "en")
-
-    # Create deduplication extension
-    deduplicator = ConceptDedupExtension(data_access, language)
-
-    # Apply deduplication
-    return deduplicator.apply_concept_deduplication(processed_result)

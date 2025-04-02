@@ -1858,7 +1858,7 @@ class ConceptSignatureGenerator:
             processing_result: Video processing result from DataPipeline
 
         Returns:
-            Enhanced processing result
+            Enhanced processing result with signatures and relationships
         """
         video_id = processing_result.get("video_id")
         if not video_id:
@@ -1875,23 +1875,58 @@ class ConceptSignatureGenerator:
         key_concepts = domain_features.get("key_concepts", [])
 
         if not key_concepts or not segments:
-            logger.warning(f"No concepts or segments found for video {video_id}")
+            logger.warning(f"No concepts ({len(key_concepts)}) or segments ({len(segments)}) found for video {video_id}")
             return processing_result
 
         # Set language for processors
         self.mlcs_processor.language = language
         self.concept_extractor = ConceptExtractor(language)
 
+        # Ensure concepts have proper IDs
+        for concept in key_concepts:
+            if "concept_id" not in concept:
+                import hashlib
+                # Create deterministic ID based on text, domain and language
+                text_for_hash = concept.get("text", "").lower().strip()
+                concept_hash = hashlib.md5(f"{text_for_hash}:{domain}:{language}".encode()).hexdigest()
+                concept["concept_id"] = concept_hash
+                logger.debug(f"Generated concept_id {concept_hash} for '{text_for_hash}'")
+
         # Generate concept signatures
         signatures = self.mlcs_processor.generate_concept_signatures(key_concepts, segments)
 
         # Add to relationship graph
         for signature in signatures:
-            # Add video_id to the concept ID to avoid duplicates
-            signature.concept_id = f"{signature.concept_id}_{video_id}"
+            # Make sure concept has a proper ID
+            if not signature.concept_id or signature.concept_id == "":
+                import hashlib
+                text_for_hash = signature.text.lower().strip()
+                signature.concept_id = hashlib.md5(f"{text_for_hash}:{domain}:{language}".encode()).hexdigest()
+                logger.debug(f"Fixed missing concept_id for '{text_for_hash}'")
 
-            # Add to graph
+            # Add to graph - make sure to store in the database also
             self.relationship_graph.add_concept(signature)
+
+            # If we have data access, ensure concept is saved to database
+            if self.data_access:
+                concept_data = {
+                    "concept_id": signature.concept_id,
+                    "text": signature.text,
+                    "normalized_text": signature.normalized_text,
+                    "domain": signature.domain,
+                    "concept_class": signature.concept_class,
+                    "language": signature.language,
+                    "total_occurrences": len(signature.occurrences),
+                    "canonical_concept_id": signature.canonical_concept_id,
+                    "video_id": video_id,
+                    # Include signature data
+                    "signature_pattern": signature.signature_pattern,
+                    "hierarchy_score": signature.hierarchy_score,
+                    "confidence": signature.confidence,
+                    "definition": signature.definition
+                }
+
+                self.data_access.save_concept(concept_data)
 
         # Identify relationships between concepts
         self._identify_concept_relationships(signatures, segments)
@@ -1932,6 +1967,22 @@ class ConceptSignatureGenerator:
 
         # Return enhanced result
         processing_result["domain_features"] = domain_features
+
+        # Make sure concept IDs get saved to database
+        if self.data_access:
+            for concept in domain_features["key_concepts"]:
+                if "concept_id" in concept and concept.get("text"):
+                    # Set basic concept data
+                    concept_data = {
+                        "concept_id": concept["concept_id"],
+                        "text": concept["text"],
+                        "domain": domain,
+                        "concept_class": concept.get("concept_class", "theoretical"),
+                        "language": language,
+                        "video_id": video_id
+                    }
+                    self.data_access.save_concept(concept_data)
+
         return processing_result
 
     def _identify_concept_relationships(

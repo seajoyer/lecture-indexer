@@ -977,12 +977,25 @@ class DataPipeline:
                     "source": "collocation"
                 }
 
+        # If we have no candidates at all, extract simple frequent phrases as a fallback
+        if not candidates:
+            logger.warning(f"No concepts extracted using primary methods. Using fallback extraction for {language}.")
+            top_phrases = self._extract_frequent_phrases(segments, language)
+            for phrase, count in top_phrases.items():
+                candidates[phrase] = {
+                    "text": phrase,
+                    "frequency": count,
+                    "ngram_type": "frequent_phrase",
+                    "score": count * 0.8,  # Lower weight for simple frequent phrases
+                    "source": "fallback_extraction"
+                }
+
         # 2. Apply filters to remove unlikely concepts
         filtered_candidates = {}
 
         # Get language-specific minimum score threshold and word length
-        min_score_threshold = 2.0 if language == 'ru' else 1.0
-        min_word_length = 4 if language == 'ru' else 3
+        min_score_threshold = 0.5 if language == 'ru' else 1.0  # Lowered threshold for Russian
+        min_word_length = 3 if language == 'ru' else 3
 
         max_concept_length = 100
 
@@ -1003,7 +1016,7 @@ class DataPipeline:
             # Skip concepts with too many stopwords
             if len(words) > 1:
                 stopword_count = sum(1 for word in words if word.lower() in filtered_stopwords)
-                if stopword_count / len(words) > 0.5:  # More than half are stopwords
+                if stopword_count / len(words) > 0.6:  # Increased limit for Russian
                     continue
 
             # Skip concepts that appear too frequently (likely common words)
@@ -1041,8 +1054,13 @@ class DataPipeline:
         # Convert to list and sort by score
         ranked_concepts = []
         for concept_text, concept_data in filtered_candidates.items():
+            # Generate a deterministic concept_id based on text, domain and language
+            import hashlib
+            concept_id = hashlib.md5(f"{concept_text.lower().strip()}:{domain}:{language}".encode()).hexdigest()
+
             ranked_concepts.append({
                 "text": concept_text,
+                "concept_id": concept_id,
                 "frequency": concept_data.get("frequency", 0),
                 "domain": domain,
                 "theoretical": concept_data.get("theoretical", True),
@@ -1061,7 +1079,129 @@ class DataPipeline:
 
         # Take top concepts with a adaptive limit based on content length
         max_concepts = min(50, max(10, len(sentences) // 10))  # Scale with content length
+
+        # Make sure we have at least some concepts
+        if not ranked_concepts:
+            # If no concepts at all, try to extract at least some basic terms
+            simple_terms = self._extract_simple_terms(combined_text, language)
+            for term, freq in simple_terms:
+                import hashlib
+                concept_id = hashlib.md5(f"{term.lower().strip()}:{domain}:{language}".encode()).hexdigest()
+
+                ranked_concepts.append({
+                    "text": term,
+                    "concept_id": concept_id,
+                    "frequency": freq,
+                    "domain": domain,
+                    "theoretical": True,  # Default to theoretical
+                    "concept_class": "theoretical",
+                    "ngram_type": "simple_term",
+                    "pattern_match": False,
+                    "definitional": False,
+                    "collocation": False,
+                    "score": freq * 0.5,
+                    "source": "simple_term_extraction",
+                    "language": language
+                })
+
+            logger.warning(f"Using simple term extraction as last resort. Found {len(ranked_concepts)} terms.")
+            max_concepts = min(10, len(ranked_concepts))
+
         return ranked_concepts[:max_concepts]
+
+    def _extract_simple_terms(self, text: str, language: str) -> List[Tuple[str, int]]:
+        """
+        Extract simple frequent terms as a last resort when other methods fail.
+
+        Args:
+            text: Text to analyze
+            language: Language code
+
+        Returns:
+            List of (term, frequency) tuples
+        """
+        # Get language-specific stopwords
+        lang_code = language if language in self.stopwords else 'en'
+        stop_words = self.stopwords.get(lang_code, set())
+
+        # Try to tokenize
+        try:
+            words = word_tokenize(text.lower())
+        except:
+            words = text.lower().split()
+
+        # Filter words
+        filtered_words = [
+            word for word in words
+            if word not in stop_words
+            and len(word) > 3
+            and not word.isdigit()
+            and not all(c in string.punctuation for c in word)
+        ]
+
+        # Count frequencies
+        from collections import Counter
+        word_counts = Counter(filtered_words)
+
+        # Get most common words
+        return word_counts.most_common(20)
+
+    def _extract_frequent_phrases(self, segments: List[Dict], language: str) -> Dict[str, int]:
+        """
+        Extract frequent phrases as a fallback method when main extraction fails.
+
+        Args:
+            segments: Transcript segments
+            language: Language code
+
+        Returns:
+            Dictionary mapping phrases to frequencies
+        """
+        # Combine segment texts
+        text = " ".join([segment.get("text", "") for segment in segments])
+
+        # Get language-specific stopwords
+        lang_code = language if language in self.stopwords else 'en'
+        stop_words = self.stopwords.get(lang_code, set())
+
+        # Try to tokenize and get n-grams
+        try:
+            words = word_tokenize(text.lower())
+        except:
+            words = text.lower().split()
+
+        # Filter words
+        filtered_words = [
+            word for word in words
+            if word not in stop_words
+            and len(word) > 3
+            and not word.isdigit()
+            and not all(c in string.punctuation for c in word)
+        ]
+
+        # Extract bigrams and trigrams
+        bigrams = []
+        for i in range(len(filtered_words) - 1):
+            bigrams.append(f"{filtered_words[i]} {filtered_words[i+1]}")
+
+        trigrams = []
+        for i in range(len(filtered_words) - 2):
+            trigrams.append(f"{filtered_words[i]} {filtered_words[i+1]} {filtered_words[i+2]}")
+
+        # Count frequencies
+        from collections import Counter
+        bigram_counts = Counter(bigrams)
+        trigram_counts = Counter(trigrams)
+
+        # Combine results - giving higher weight to trigrams
+        phrases = {}
+        for bigram, count in bigram_counts.most_common(10):
+            phrases[bigram] = count
+
+        for trigram, count in trigram_counts.most_common(10):
+            phrases[trigram] = count * 1.5  # Weight trigrams higher
+
+        return phrases
 
     def _extract_ngram_concepts(
         self,

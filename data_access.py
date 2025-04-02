@@ -298,6 +298,14 @@ class DataAccess:
             List of concepts with stats
         """
         try:
+            # First, check if any concepts exist at all
+            basic_count_query = "SELECT COUNT(*) as count FROM concepts"
+            count_result = self.execute_query(basic_count_query)
+
+            if count_result and count_result[0]["count"] == 0:
+                logger.info("No concepts found in database")
+                return []
+
             # Get video IDs from playlist if specified
             video_ids = []
             if playlist_filter:
@@ -306,54 +314,42 @@ class DataAccess:
                     logger.warning(f"No videos found for playlist {playlist_filter}")
                     return []
 
-            # Build optimized query with pre-aggregated related concept counts
+            # First get concepts matching filters without requiring occurrences
             query = """
-            WITH concept_stats AS (
-                -- Pre-compute related concept counts for each concept
-                SELECT c1.concept_id,
-                       COUNT(DISTINCT c2.concept_id) as related_count
-                FROM occurrences o1
-                JOIN occurrences o2 ON o1.segment_id = o2.segment_id AND o1.video_id = o2.video_id
-                JOIN concepts c1 ON o1.concept_id = c1.concept_id
-                JOIN concepts c2 ON o2.concept_id = c2.concept_id
-                WHERE o1.concept_id != o2.concept_id
-                AND (c1.canonical_concept_id IS NULL OR c1.canonical_concept_id = '') -- Only include canonical concepts
-                GROUP BY c1.concept_id
-            )
             SELECT c.*,
                    COUNT(DISTINCT o.video_id) as video_count,
-                   COUNT(DISTINCT o.occurrence_id) as occurrence_count,
-                   COALESCE(cs.related_count, 0) as related_concepts_count
+                   COUNT(DISTINCT o.occurrence_id) as occurrence_count
             FROM concepts c
-            JOIN occurrences o ON c.concept_id = o.concept_id
-            JOIN videos v ON o.video_id = v.video_id
-            LEFT JOIN concept_stats cs ON c.concept_id = cs.concept_id
-            WHERE (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '') -- Only include canonical concepts
+            LEFT JOIN occurrences o ON c.concept_id = o.concept_id
             """
 
+            if video_filter:
+                query += " LEFT JOIN videos v ON o.video_id = v.video_id"
+
+            query += " WHERE 1=1"  # Start WHERE clause
+
             # Add WHERE clause if we have filters
-            where_clauses = []
             params = []
 
             if domain_filter:
-                where_clauses.append("c.domain = ?")
+                query += " AND c.domain = ?"
                 params.append(domain_filter)
 
             if video_filter:
-                where_clauses.append("o.video_id = ?")
+                query += " AND o.video_id = ?"
                 params.append(video_filter)
 
             if language:
-                where_clauses.append("(c.language = ? OR c.language IS NULL)")
+                query += " AND (c.language = ? OR c.language IS NULL)"
                 params.append(language)
 
             if video_ids:
                 placeholders = ",".join(['?'] * len(video_ids))
-                where_clauses.append(f"o.video_id IN ({placeholders})")
+                query += f" AND o.video_id IN ({placeholders})"
                 params.extend(video_ids)
 
-            if where_clauses:
-                query += " AND " + " AND ".join(where_clauses)
+            # Primary canonical concept filter - only include canonical concepts
+            query += " AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')"
 
             # Group and order with enhanced sorting
             query += """
@@ -361,12 +357,24 @@ class DataAccess:
             ORDER BY
                 c.domain,
                 c.concept_class,
-                occurrence_count DESC,
-                related_concepts_count DESC
+                occurrence_count DESC
             """
 
             # Execute the query with a custom timeout to avoid long-running queries
-            return self._execute_query_with_timeout(query, tuple(params), 10)  # 10 second timeout
+            concepts = self._execute_query_with_timeout(query, tuple(params), 10)  # 10 second timeout
+
+            if not concepts:
+                # If no results with the filters, try a simple query to see if we have any concepts
+                basic_query = "SELECT * FROM concepts LIMIT 10"
+                basic_results = self.execute_query(basic_query)
+
+                if basic_results:
+                    logger.info(f"Found {len(basic_results)} concepts in database, but none match the filters")
+                else:
+                    logger.info("No concepts found in database")
+
+            return concepts
+
         except Exception as e:
             logger.error(f"Error listing concepts: {e}")
             return []
@@ -1170,9 +1178,9 @@ class DataAccess:
             # STEP 1: Check for similar existing concepts before creating a new one
             similar_concepts = self.find_similar_concepts(concept_text, domain, language)
 
-            canonical_concept_id = None
+            canonical_concept_id = concept_data.get("canonical_concept_id")
 
-            if similar_concepts:
+            if similar_concepts and not canonical_concept_id:
                 # Get the best matching concept
                 best_match = similar_concepts[0]
 
@@ -1184,6 +1192,12 @@ class DataAccess:
                     # This is essentially the same concept, use the existing one as canonical
                     canonical_concept_id = best_match.get('concept_id')
                     logger.info(f"Using canonical concept {canonical_concept_id} for similar concept: '{concept_text}'")
+
+            # Calculate total_occurrences if missing
+            total_occurrences = concept_data.get("total_occurrences", 0)
+            if total_occurrences == 0:
+                # Try to get from frequency or occurrence_count
+                total_occurrences = concept_data.get("frequency", concept_data.get("occurrence_count", 1))
 
             # STEP 2: Check if concept exists
             existing = self.get_concept(concept_id)
@@ -1207,10 +1221,11 @@ class DataAccess:
                     domain,
                     concept_class,
                     language,
-                    concept_data.get("total_occurrences", 0),
+                    total_occurrences,
                     canonical_concept_id,
                     concept_id
                 ))
+                logger.debug(f"Updated existing concept: {concept_id} - {concept_text}")
             else:
                 # Insert new concept
                 query = """
@@ -1226,40 +1241,32 @@ class DataAccess:
                     domain,
                     concept_class,
                     language,
-                    concept_data.get("total_occurrences", 0),
+                    total_occurrences,
                     canonical_concept_id
                 ))
+                logger.debug(f"Inserted new concept: {concept_id} - {concept_text}")
 
-            # Index for search - delete and reinsert to ensure freshness
-            # Only index canonical concepts (ones that don't have a canonical_concept_id)
-            if not canonical_concept_id:
-                self.execute_update(
-                    "DELETE FROM search_index WHERE id = ? AND item_type = 'concept'",
-                    (concept_id,)
-                )
+            # STEP 3: Index for search - delete and reinsert to ensure freshness
+            self.execute_update(
+                "DELETE FROM search_index WHERE id = ? AND item_type = 'concept'",
+                (concept_id,)
+            )
 
-                self.execute_update(
-                    """
-                    INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (concept_id, concept_text, domain, concept_class, "concept", None, language)
-                )
+            self.execute_update(
+                """
+                INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (concept_id, concept_text, domain, concept_class, "concept", None, language)
+            )
 
-            # Save occurrences if provided
-            video_id = concept_data.get("video_id")
-            if video_id:
-                # Find segments containing this concept
-                segments = self.get_video_segments(video_id)
+            # STEP 4: Save metadata from the concept_data
+            metadata = concept_data.get("metadata", {})
+            if metadata:
+                # Store metadata in a separate table if needed
+                pass
 
-                # Create occurrences - if this concept is a variant (has canonical_concept_id),
-                # we still save its occurrences under its own ID
-                occurrences = self._find_concept_occurrences(concept_id, concept_text, segments, video_id)
-
-                if occurrences:
-                    self.save_occurrences(concept_id, occurrences)
-
-            # Clear cache for this concept
+            # STEP 5: Clear cache for this concept
             self.clear_cache(f"concept_{concept_id}")
 
             logger.info(f"Saved concept {concept_id}: {concept_text}")
@@ -1474,6 +1481,21 @@ class DataAccess:
         if cached_result is not None:
             return cached_result
 
+        # First check if there are any concepts in the database
+        count_query = "SELECT COUNT(*) as count FROM concepts"
+        count_result = self.execute_query(count_query)
+        if count_result and count_result[0]["count"] == 0:
+            logger.warning("No concepts found in database")
+            return []
+
+        # Check if there are any occurrences for this video
+        occurrence_count_query = "SELECT COUNT(*) as count FROM occurrences WHERE video_id = ?"
+        occurrence_count = self.execute_query(occurrence_count_query, (video_id,))
+        if occurrence_count and occurrence_count[0]["count"] == 0:
+            logger.warning(f"No concept occurrences found for video {video_id}")
+            return []
+
+        # Query for concepts in this video
         query = """
         SELECT c.*, COUNT(o.occurrence_id) as occurrence_count,
                MAX(o.start_time) as last_occurrence_time
@@ -1710,6 +1732,19 @@ class DataAccess:
 
             # Build enhanced search query for non-exact matching
             search_query = self.build_enhanced_search_query(query_text, domain, language)
+
+            # Check first if there are any items in the search index
+            count_query = "SELECT COUNT(*) as count FROM search_index"
+            count_result = self.execute_query(count_query)
+            if count_result and count_result[0]["count"] == 0:
+                logger.warning("No items in search index")
+                return {
+                    "results": [],
+                    "totalResults": 0,
+                    "executionTimeMs": int((time.time() - start_time) * 1000),
+                    "status": "empty_index",
+                    "message": "No content has been indexed yet"
+                }
 
             # Build SQL query with improved deduplication
             sql = """
@@ -2084,6 +2119,10 @@ class DataAccess:
 
             # Save concepts in batches
             key_concepts = domain_features.get("key_concepts", [])
+
+            if not key_concepts:
+                logger.warning(f"No concepts found for video {video_id}")
+                return True
 
             # Process concepts in batches of 20 for better performance
             batch_size = 20

@@ -169,6 +169,8 @@ def parse_arguments():
     parser.add_argument("--relationship-graph", action="store_true", help="Display concept relationship graph")
     parser.add_argument("--analyze-concepts", action="store_true", help="Analyze concept relationships across all videos")
 
+    parser.add_argument("--reindex", action="store_true", help="Reindex all videos with improved concept linking")
+
     return parser.parse_args()
 
 def load_config() -> Dict[str, Any]:
@@ -489,10 +491,6 @@ def list_concepts(data_access, args):
     if len(practical) > 20:
         print(f"  ... and {len(practical) - 20} more")
 
-"""
-Fix for the learning path display in demo.py
-"""
-
 def generate_learning_path(search_engine, args):
     """
     Generate a learning path from concepts.
@@ -506,18 +504,192 @@ def generate_learning_path(search_engine, args):
         return
     
     # Parse concepts from comma-separated list if needed
-    concept_ids = []
+    concept_inputs = []
     for concept_arg in args.concepts:
         # Check if it's a comma-separated list
         if ',' in concept_arg:
-            concept_ids.extend([c.strip() for c in concept_arg.split(',')])
+            concept_inputs.extend([c.strip() for c in concept_arg.split(',')])
         else:
-            concept_ids.append(concept_arg)
+            concept_inputs.append(concept_arg)
     
     # Set theory ratio
     theory_ratio = args.theory_ratio if args.theory_ratio is not None else 0.5
     
-    # Generate learning path
+    # Determine if inputs are IDs or text strings
+    concept_ids = []
+    data_access = search_engine.data_access
+    
+    for concept_input in concept_inputs:
+        # First, check if this is already a valid concept ID
+        concept = data_access.get_concept(concept_input)
+        if concept:
+            concept_ids.append(concept_input)
+            print(f"Using concept ID directly: {concept_input} - {concept.get('text')}")
+            continue
+        
+        # Check if text contains Cyrillic (Russian)
+        has_cyrillic = any('а' <= c.lower() <= 'я' for c in concept_input)
+        language = 'ru' if has_cyrillic else 'en'
+        
+        # Try finding the concept using multiple approaches
+        found_concept = False
+        
+        # 1. First try without language filter for exact matches
+        query = """
+        SELECT concept_id, text 
+        FROM concepts 
+        WHERE LOWER(text) = LOWER(?) OR LOWER(normalized_text) = LOWER(?)
+        """
+        exact_match = data_access.execute_query(query, (concept_input, concept_input))
+        
+        if exact_match:
+            concept_id = exact_match[0].get("concept_id")
+            concept_ids.append(concept_id)
+            print(f"Found concept by exact match: {concept_id} - {exact_match[0].get('text')}")
+            found_concept = True
+            continue
+        
+        # 2. Try with language filter for exact matches
+        query_with_lang = """
+        SELECT concept_id, text 
+        FROM concepts 
+        WHERE (LOWER(text) = LOWER(?) OR LOWER(normalized_text) = LOWER(?)) AND language = ?
+        """
+        exact_match_with_lang = data_access.execute_query(query_with_lang, (concept_input, concept_input, language))
+        
+        if exact_match_with_lang:
+            concept_id = exact_match_with_lang[0].get("concept_id")
+            concept_ids.append(concept_id)
+            print(f"Found concept by exact match (with language filter): {concept_id} - {exact_match_with_lang[0].get('text')}")
+            found_concept = True
+            continue
+        
+        # 3. Try pattern match without language filter
+        pattern_query = """
+        SELECT concept_id, text 
+        FROM concepts 
+        WHERE LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?)
+        ORDER BY length(text) ASC
+        """
+        pattern_match = data_access.execute_query(pattern_query, (f"%{concept_input}%", f"%{concept_input}%"))
+        
+        if pattern_match:
+            concept_id = pattern_match[0].get("concept_id")
+            concept_ids.append(concept_id)
+            print(f"Found concept by pattern match: {concept_id} - {pattern_match[0].get('text')}")
+            found_concept = True
+            continue
+        
+        # 4. Try pattern match with language filter - FIX: properly construct the query
+        pattern_query_with_lang = """
+        SELECT concept_id, text 
+        FROM concepts 
+        WHERE (LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?)) AND language = ?
+        ORDER BY length(text) ASC
+        """
+        pattern_match_with_lang = data_access.execute_query(
+            pattern_query_with_lang, 
+            (f"%{concept_input}%", f"%{concept_input}%", language)
+        )
+        
+        if pattern_match_with_lang:
+            concept_id = pattern_match_with_lang[0].get("concept_id")
+            concept_ids.append(concept_id)
+            print(f"Found concept by pattern match (with language filter): {concept_id} - {pattern_match_with_lang[0].get('text')}")
+            found_concept = True
+            continue
+        
+        # 5. Special case for Russian: try with words in different order
+        if language == 'ru':
+            # Split the input into words and try different combinations
+            words = concept_input.split()
+            if len(words) > 1:
+                print(f"Trying word combinations for Russian concept: {concept_input}")
+                
+                # Try reversed order for two-word concepts
+                if len(words) == 2:
+                    reversed_input = f"{words[1]} {words[0]}"
+                    
+                    # Try exact match with reversed order
+                    reversed_exact = data_access.execute_query(
+                        query, 
+                        (reversed_input, reversed_input)
+                    )
+                    
+                    if reversed_exact:
+                        concept_id = reversed_exact[0].get("concept_id")
+                        concept_ids.append(concept_id)
+                        print(f"Found Russian concept with reversed word order: {concept_id} - {reversed_exact[0].get('text')}")
+                        found_concept = True
+                        continue
+                
+                # Try with LIKE for each word separately
+                for word in words:
+                    if len(word) >= 3:  # Only use words that are long enough to be significant
+                        word_query = """
+                        SELECT concept_id, text
+                        FROM concepts
+                        WHERE (LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?))
+                        AND language = ?
+                        ORDER BY length(text) ASC
+                        """
+                        word_matches = data_access.execute_query(
+                            word_query,
+                            (f"%{word}%", f"%{word}%", language)
+                        )
+                        
+                        if word_matches:
+                            concept_id = word_matches[0].get("concept_id")
+                            concept_ids.append(concept_id)
+                            print(f"Found Russian concept containing the word '{word}': {concept_id} - {word_matches[0].get('text')}")
+                            found_concept = True
+                            break
+        
+        # 6. If still not found, try search
+        if not found_concept:            
+            # First try search with language filtering
+            search_query = {
+                "original_text": concept_input,
+                "filters": {},
+                "language": language,
+                "pagination": {"offset": 0, "limit": 10}
+            }
+            
+            if args.filter_domain:
+                search_query["filters"]["domain"] = args.filter_domain
+                
+            search_results = search_engine.search(search_query)
+            
+            found_concepts = [r for r in search_results.get("results", []) 
+                            if r.get("result_type") == "concept"]
+            
+            if found_concepts:
+                concept_id = found_concepts[0].get("concept_id")
+                concept_ids.append(concept_id)
+                print(f"Found concept by search: {concept_id} - {found_concepts[0].get('text')}")
+                found_concept = True
+            else:
+                # Try search without language filtering as a last resort
+                search_query.pop("language", None)
+                search_results = search_engine.search(search_query)
+                
+                found_concepts = [r for r in search_results.get("results", []) 
+                                if r.get("result_type") == "concept"]
+                
+                if found_concepts:
+                    concept_id = found_concepts[0].get("concept_id")
+                    concept_ids.append(concept_id)
+                    print(f"Found concept by search (without language filter): {concept_id} - {found_concepts[0].get('text')}")
+                    found_concept = True
+                else:
+                    print(f"Warning: Could not find concept '{concept_input}'")
+    
+    # If no valid concept IDs found, exit
+    if not concept_ids:
+        print("Error: No valid concept IDs found. Check your input.")
+        return
+    
+    # Generate learning path with valid concept IDs
     learning_path = search_engine.generate_learning_path(
         concept_ids,
         theory_practice_ratio=theory_ratio,
@@ -684,6 +856,76 @@ def search_content(search_engine, args):
         except Exception as e:
             print(f"Error during concept exploration: {e}")
 
+def reindex_all_videos(data_access, search_engine):
+    """
+    Reindex all videos to apply the new cross-video concept deduplication.
+    
+    Args:
+        data_access: DataAccess instance
+        search_engine: SearchEngine instance
+    """
+    # Get all videos
+    videos_query = "SELECT video_id FROM videos"
+    videos = data_access.execute_query(videos_query)
+    
+    if not videos:
+        print("No videos found to reindex")
+        return
+    
+    print(f"Found {len(videos)} videos to reindex")
+    
+    # Set up progress tracking
+    successful = 0
+    failed = 0
+    
+    # Reindex each video
+    for i, video in enumerate(videos):
+        video_id = video.get("video_id")
+        if not video_id:
+            continue
+            
+        print(f"Reindexing video {i+1}/{len(videos)}: {video_id}")
+        
+        try:
+            # Get cached processed result
+            from cache_manager import cache_get
+            cache_key = f"processed_video_{video_id}"
+            result = cache_get("video", cache_key)
+            
+            if not result:
+                print(f"  No cached result for video {video_id}, skipping")
+                failed += 1
+                continue
+                
+            # Apply cross-video deduplication
+            updated_result = search_engine._apply_cross_video_dedup(result)
+            
+            # Reindex the video
+            success = search_engine.data_access.index_content(updated_result)
+            
+            if success:
+                print(f"  Successfully reindexed video {video_id}")
+                successful += 1
+            else:
+                print(f"  Failed to reindex video {video_id}")
+                failed += 1
+                
+        except Exception as e:
+            print(f"  Error reindexing video {video_id}: {e}")
+            failed += 1
+    
+    print(f"\nReindexing complete: {successful} successful, {failed} failed")
+    
+    # Apply final optimizations
+    print("\nOptimizing database...")
+    search_engine.optimize_database()
+    
+    # Clear caches
+    print("Clearing caches...")
+    from cache_manager import cache_clear
+    cache_clear()
+    
+    print("Reindexing and optimization complete!")
 
 def display_concept_details(search_engine, concept_id):
     """
@@ -707,6 +949,11 @@ def display_concept_details(search_engine, concept_id):
     if concept.get('definition'):
         print(f"\nDefinition: {concept.get('definition')}")
     
+    # Display variant concept IDs if available
+    variant_ids = concept.get('variant_concept_ids', [])
+    if variant_ids:
+        print(f"\nVariant Concept IDs: {len(variant_ids)}")
+        
     # Display videos where this concept appears
     videos = concept.get('videos', [])
     if videos:
@@ -747,7 +994,12 @@ def display_concept_details(search_engine, concept_id):
             text = related.get('text', 'Unknown')
             relationship = related.get('relationship', 'related')
             relationship_type = f" ({relationship})" if relationship != "related" else ""
-            print(f"  {i+1}. {text}{relationship_type}")
+            
+            # Add video count if available
+            video_count = related.get('video_count', 0)
+            video_info = f" - appears in {video_count} videos" if video_count > 1 else ""
+            
+            print(f"  {i+1}. {text}{relationship_type}{video_info}")
             
             # If it's a prerequisite, mark it as important
             if relationship == "prerequisite":
@@ -1043,6 +1295,10 @@ def main():
         # Analyze concept relationships
         analyze_concepts(search_engine, data_access, args)
 
+    elif args.reindex:
+        # Reindex all videos with the improved system
+        reindex_all_videos(data_access, search_engine)
+
     else:
         # No specific action requested, show help
         print("No action specified. Use --help to see available options.")
@@ -1098,124 +1354,6 @@ def optimize_database(data_access, search_engine):
 
     except Exception as e:
         print(f"Error optimizing database: {e}")
-
-def extract_playlist_id(playlist_url_or_id):
-    """
-    Extract playlist ID from a URL or return the ID directly.
-
-    Args:
-        playlist_url_or_id: Playlist URL or ID
-
-    Returns:
-        Playlist ID
-    """
-    # Check if it's a URL
-    if "youtube.com" in playlist_url_or_id or "youtu.be" in playlist_url_or_id:
-        # Extract playlist ID from URL
-        import re
-        patterns = [
-            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([^&\s]+)',  # Standard playlist URL
-            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?.*[\?&]list=([^&\s]+)'  # Video URL with playlist
-        ]
-
-        for pattern in patterns:
-            match = re.match(pattern, playlist_url_or_id)
-            if match:
-                return match.group(1)
-
-        print(f"Warning: Could not extract playlist ID from URL: {playlist_url_or_id}")
-        return None
-    else:
-        # Assume it's already a playlist ID
-        return playlist_url_or_id
-
-def process_playlist(data_pipeline, search_engine, playlist_url_or_id, args):
-    """
-    Process all videos in a playlist.
-
-    Args:
-        data_pipeline: DataPipeline instance
-        search_engine: SearchEngine instance
-        playlist_url_or_id: Playlist URL or ID
-        args: Command-line arguments
-    """
-    # Extract playlist ID
-    playlist_id = extract_playlist_id(playlist_url_or_id)
-    if not playlist_id:
-        print(f"Error: Invalid playlist URL or ID: {playlist_url_or_id}")
-        return
-
-    print(f"Processing playlist: {playlist_id}")
-
-    # Get videos in playlist
-    videos = get_playlist_videos(playlist_id)
-    if not videos:
-        print(f"Error: No videos found in playlist: {playlist_id}")
-        return
-
-    print(f"Found {len(videos)} videos in playlist")
-
-    # Apply max videos limit if specified
-    if args.max_videos and not args.no_limit:
-        print(f"Limiting to {args.max_videos} videos")
-        videos = videos[:args.max_videos]
-
-    # Convert video IDs to URLs
-    video_urls = [f"https://www.youtube.com/watch?v={video_id}" for video_id in videos]
-
-    # Process videos
-    processed_videos = process_videos_batch(data_pipeline, search_engine, video_urls, args)
-
-    print(f"\nSummary: Processed {len(processed_videos)} out of {len(videos)} videos from playlist")
-
-    # Show processed video IDs
-    if processed_videos:
-        print("\nProcessed Videos:")
-        for i, video_id in enumerate(processed_videos):
-            print(f"  {i+1}. {video_id}")
-
-def process_videos_batch(data_pipeline, search_engine, videos, args):
-    """
-    Process a batch of videos.
-
-    Args:
-        data_pipeline: DataPipeline instance
-        search_engine: SearchEngine instance
-        videos: List of video URLs or IDs
-        args: Command-line arguments
-
-    Returns:
-        List of processed video IDs
-    """
-    # Set language preference
-    if args.language == "auto":
-        language_preference = ["en", "ru"]
-    else:
-        language_preference = [args.language]
-
-    processed_videos = []
-
-    for video in videos:
-        # Process the video
-        print(f"\nProcessing video: {video}")
-
-        result = data_pipeline.process_video(video, language_preference)
-
-        if result.get("status") == "completed":
-            video_id = result.get("video_id")
-            print(f"Successfully processed video: {video_id}")
-
-            # Index the content
-            success = search_engine.index_content(result)
-            if success:
-                print(f"Successfully indexed video content")
-                processed_videos.append(video_id)
-            else:
-                print(f"Failed to index video content")
-        else:
-            print(f"Failed to process video: {result.get('error', 'Unknown error')}")
-
-    return processed_videos
 
 def analyze_concepts(search_engine, data_access, args):
     """
@@ -1371,4 +1509,5 @@ def analyze_concepts(search_engine, data_access, args):
             print(f"  {i+1}. {sim['title1']} & {sim['title2']}")
             print(f"     Similarity: {sim['similarity']:.2f}")
             print(f"     Shared Concepts: {sim['shared_concepts']}")
+
             print(f"     Video IDs: {sim['video1']} & {sim['video2']}")
