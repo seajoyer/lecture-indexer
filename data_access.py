@@ -1669,7 +1669,7 @@ class DataAccess:
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
         Perform enhanced search using SQLite FTS with multilingual support.
-        Handles deduplication of similar concepts in results.
+        Improved handling of canonical concept relationships and text-based deduplication.
 
         Args:
             query: Query parameters dictionary
@@ -1711,7 +1711,7 @@ class DataAccess:
             # Build enhanced search query for non-exact matching
             search_query = self.build_enhanced_search_query(query_text, domain, language)
 
-            # Build SQL query with improved JOINs for better performance and concept deduplication
+            # Build SQL query with improved deduplication
             sql = """
             WITH matched_items AS (
                 SELECT si.id, si.text, si.domain, si.context_type, si.item_type, si.video_id,
@@ -1719,24 +1719,106 @@ class DataAccess:
                 FROM search_index si
                 WHERE search_index MATCH ?
             ),
-            -- Add a subquery to exclude non-canonical concepts
-            canonical_concepts AS (
-                SELECT c.concept_id, c.text
+            -- Enhanced canonical concept handling with text-based deduplication
+            concept_relationships AS (
+                -- Get canonical relationships for matched concepts
+                SELECT
+                    c.concept_id,
+                    c.text,
+                    LOWER(c.text) as text_lower, -- Add normalized text for grouping
+                    c.normalized_text,
+                    c.domain,
+                    c.concept_class,
+                    c.language,
+                    c.canonical_concept_id,
+                    CASE WHEN c.canonical_concept_id IS NULL OR c.canonical_concept_id = ''
+                        THEN c.concept_id ELSE c.canonical_concept_id END as effective_canonical_id
                 FROM concepts c
-                WHERE (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
-                AND c.concept_id IN (SELECT id FROM matched_items WHERE item_type = 'concept')
+                WHERE c.concept_id IN (SELECT id FROM matched_items WHERE item_type = 'concept')
+            ),
+            canonical_concepts AS (
+                -- Get canonical concepts data
+                SELECT
+                    c.concept_id,
+                    c.text,
+                    LOWER(c.text) as text_lower, -- Add normalized text for grouping
+                    c.normalized_text,
+                    c.domain,
+                    c.concept_class,
+                    c.language
+                FROM concepts c
+                WHERE c.concept_id IN (
+                    SELECT DISTINCT effective_canonical_id FROM concept_relationships
+                )
+                AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
+            ),
+            -- Group results by text and language to prevent duplicates
+            text_grouped_results AS (
+                SELECT
+                    mi.id,
+                    mi.text,
+                    LOWER(mi.text) as text_lower,
+                    mi.item_type,
+                    mi.domain,
+                    mi.context_type,
+                    mi.video_id,
+                    mi.language,
+                    mi.rank,
+                    -- For concepts, use canonical concept ID if available
+                    CASE WHEN mi.item_type = 'concept' THEN
+                        CASE WHEN cr.canonical_concept_id IS NOT NULL
+                            THEN cr.canonical_concept_id ELSE cr.concept_id END
+                        ELSE mi.id
+                    END as effective_id,
+                    -- Create a text-language group key for deduplication
+                    CASE WHEN mi.item_type = 'concept' THEN
+                        LOWER(
+                            CASE WHEN cr.canonical_concept_id IS NOT NULL
+                            THEN cc.text ELSE mi.text END
+                        ) || '_' || COALESCE(mi.language, '')
+                        ELSE mi.id -- For non-concepts, use ID as group key
+                    END as text_lang_key
+                FROM matched_items mi
+                LEFT JOIN concept_relationships cr ON mi.item_type = 'concept' AND mi.id = cr.concept_id
+                LEFT JOIN canonical_concepts cc ON cr.effective_canonical_id = cc.concept_id
+                WHERE (mi.item_type != 'concept' OR
+                    (mi.item_type = 'concept' AND
+                    (cr.concept_id IS NOT NULL OR
+                        mi.id NOT IN (SELECT concept_id FROM concept_relationships))))
+            ),
+            -- Get best result for each text-language group
+            deduplicated_results AS (
+                SELECT
+                    text_lang_key,
+                    MIN(rank) as min_rank,
+                    -- Prefer canonical concepts over variants
+                    MAX(CASE WHEN item_type = 'concept' AND effective_id = id THEN 1 ELSE 0 END) as is_canonical
+                FROM text_grouped_results
+                GROUP BY text_lang_key
             )
 
-            SELECT mi.id, mi.text, mi.domain, mi.context_type, mi.item_type, mi.video_id, mi.language,
+            -- Main query with improved deduplication
+            SELECT
+                tgr.id,
+                tgr.text,
+                tgr.domain,
+                tgr.context_type,
+                tgr.item_type,
+                tgr.video_id,
+                tgr.language,
                 v.title as video_title,
-                CASE WHEN mi.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
-                CASE WHEN mi.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
-                CASE WHEN mi.item_type = 'segment' THEN s.text ELSE mi.text END as context_text
-            FROM matched_items mi
-            LEFT JOIN videos v ON mi.video_id = v.video_id
-            LEFT JOIN segments s ON mi.item_type = 'segment' AND mi.id = s.segment_id
-            LEFT JOIN canonical_concepts cc ON mi.item_type = 'concept' AND mi.id = cc.concept_id
-            WHERE (mi.item_type != 'concept' OR cc.concept_id IS NOT NULL) -- Only include canonical concepts
+                CASE WHEN tgr.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
+                CASE WHEN tgr.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
+                CASE WHEN tgr.item_type = 'segment' THEN s.text ELSE tgr.text END as context_text,
+                tgr.effective_id,
+                CASE WHEN tgr.effective_id != tgr.id THEN tgr.effective_id ELSE NULL END as canonical_concept_id,
+                tgr.rank
+            FROM text_grouped_results tgr
+            JOIN deduplicated_results dr ON
+                tgr.text_lang_key = dr.text_lang_key AND
+                (tgr.rank = dr.min_rank OR (dr.is_canonical = 1 AND tgr.effective_id = tgr.id))
+            LEFT JOIN videos v ON tgr.video_id = v.video_id
+            LEFT JOIN segments s ON tgr.item_type = 'segment' AND tgr.id = s.segment_id
             """
 
             params = [search_query]
@@ -1745,38 +1827,38 @@ class DataAccess:
             where_clauses = []
 
             if domain:
-                where_clauses.append("mi.domain = ?")
+                where_clauses.append("tgr.domain = ?")
                 params.append(domain)
 
             if language:
-                where_clauses.append("(mi.language = ? OR mi.language IS NULL)")
+                where_clauses.append("(tgr.language = ? OR tgr.language IS NULL)")
                 params.append(language)
 
             if "video_id" in filters:
-                where_clauses.append("mi.video_id = ?")
+                where_clauses.append("tgr.video_id = ?")
                 params.append(filters["video_id"])
 
             if "video_ids" in filters and filters["video_ids"]:
                 placeholders = ", ".join(["?"] * len(filters["video_ids"]))
-                where_clauses.append(f"mi.video_id IN ({placeholders})")
+                where_clauses.append(f"tgr.video_id IN ({placeholders})")
                 params.extend(filters["video_ids"])
 
             if where_clauses:
-                sql += " AND " + " AND ".join(where_clauses)
+                sql += " WHERE " + " AND ".join(where_clauses)
 
             # Apply theory/practice ratio filter
             context_type_order = ""
             if theory_practice_ratio is not None:
                 if theory_practice_ratio > 0.7:
-                    context_type_order = " ORDER BY CASE WHEN mi.context_type = 'theoretical' THEN 1 ELSE 2 END, rank"
+                    context_type_order = " ORDER BY CASE WHEN tgr.context_type = 'theoretical' THEN 1 ELSE 2 END, tgr.rank"
                 elif theory_practice_ratio < 0.3:
-                    context_type_order = " ORDER BY CASE WHEN mi.context_type = 'practical' THEN 1 ELSE 2 END, rank"
+                    context_type_order = " ORDER BY CASE WHEN tgr.context_type = 'practical' THEN 1 ELSE 2 END, tgr.rank"
 
             # Apply ordering - use FTS5 rank for relevance
             if context_type_order:
                 sql += context_type_order
             else:
-                sql += " ORDER BY rank"
+                sql += " ORDER BY tgr.rank"
 
             # Apply pagination
             sql += f" LIMIT {limit} OFFSET {offset}"
@@ -1786,45 +1868,102 @@ class DataAccess:
 
             # Count total results more efficiently
             count_sql = """
-            WITH canonical_concepts AS (
-                SELECT concept_id
-                FROM concepts
-                WHERE (canonical_concept_id IS NULL OR canonical_concept_id = '')
-                AND concept_id IN (SELECT id FROM search_index WHERE search_index MATCH ? AND item_type = 'concept')
+            WITH matched_items AS (
+                SELECT si.id, si.item_type, si.text, si.language
+                FROM search_index si
+                WHERE search_index MATCH ?
+            ),
+            -- Text-based deduplication for counting
+            text_based_dedup AS (
+                SELECT
+                    LOWER(text) || '_' || COALESCE(language, '') as text_lang_key
+                FROM matched_items
+                WHERE item_type = 'concept'
+
+                UNION
+
+                SELECT id as text_lang_key
+                FROM matched_items
+                WHERE item_type != 'concept'
             )
-            SELECT COUNT(*) as count
-            FROM search_index si
-            LEFT JOIN canonical_concepts cc ON si.item_type = 'concept' AND si.id = cc.concept_id
-            WHERE search_index MATCH ?
-            AND (si.item_type != 'concept' OR cc.concept_id IS NOT NULL) -- Only count canonical concepts
+            SELECT COUNT(DISTINCT text_lang_key) as count
+            FROM text_based_dedup
             """
-            count_params = [search_query, search_query]
+
+            count_params = [search_query]
 
             if domain:
-                count_sql += " AND domain = ?"
+                count_sql = """
+                WITH matched_items AS (
+                    SELECT si.id, si.item_type, si.text, si.language, si.domain
+                    FROM search_index si
+                    WHERE search_index MATCH ? AND si.domain = ?
+                ),
+                -- Text-based deduplication for counting
+                text_based_dedup AS (
+                    SELECT
+                        LOWER(text) || '_' || COALESCE(language, '') as text_lang_key
+                    FROM matched_items
+                    WHERE item_type = 'concept'
+
+                    UNION
+
+                    SELECT id as text_lang_key
+                    FROM matched_items
+                    WHERE item_type != 'concept'
+                )
+                SELECT COUNT(DISTINCT text_lang_key) as count
+                FROM text_based_dedup
+                """
                 count_params.append(domain)
 
             if language:
-                count_sql += " AND (language = ? OR language IS NULL)"
+                if domain:
+                    count_sql = count_sql.replace("WHERE search_index MATCH ? AND si.domain = ?",
+                                                "WHERE search_index MATCH ? AND si.domain = ? AND (si.language = ? OR si.language IS NULL)")
+                else:
+                    count_sql = count_sql.replace("WHERE search_index MATCH ?",
+                                                "WHERE search_index MATCH ? AND (si.language = ? OR si.language IS NULL)")
                 count_params.append(language)
 
             if "video_id" in filters:
-                count_sql += " AND video_id = ?"
+                if "WHERE" in count_sql:
+                    if "AND" in count_sql:
+                        count_sql = count_sql.replace("WHERE search_index MATCH ?", f"WHERE search_index MATCH ? AND si.video_id = ?")
+                    else:
+                        count_sql = count_sql.replace("WHERE search_index MATCH ?", f"WHERE search_index MATCH ? AND si.video_id = ?")
+                else:
+                    count_sql = count_sql.replace("FROM search_index si", f"FROM search_index si WHERE si.video_id = ?")
                 count_params.append(filters["video_id"])
-
-            if "video_ids" in filters and filters["video_ids"]:
-                placeholders = ", ".join(["?"] * len(filters["video_ids"]))
-                count_sql += f" AND video_id IN ({placeholders})"
-                count_params.extend(filters["video_ids"])
 
             count_result = self.execute_query(count_sql, tuple(count_params))
             total_count = count_result[0]["count"] if count_result else 0
+
+            # Final post-processing deduplication
+            # Create a dictionary to track which concepts we've already seen by text+language
+            seen_concepts = {}
+            filtered_results = []
+
+            for result in results:
+                if result["item_type"] == "concept":
+                    # Create a unique key for this concept based on text and language
+                    key = f"{result['text'].lower()}_{result.get('language', '')}"
+
+                    # If we've already seen this concept, skip it
+                    if key in seen_concepts:
+                        continue
+
+                    # Otherwise, mark it as seen and include it
+                    seen_concepts[key] = True
+
+                # Include this result
+                filtered_results.append(result)
 
             # Count theoretical and practical results
             theoretical_count = 0
             practical_count = 0
 
-            for r in results:
+            for r in filtered_results:
                 if r["context_type"] == "theoretical":
                     theoretical_count += 1
                 elif r["context_type"] == "practical":
@@ -1832,7 +1971,7 @@ class DataAccess:
 
             # Format the results
             formatted_results = []
-            for r in results:
+            for r in filtered_results:
                 result = {
                     "result_type": r["item_type"],
                     "text": r["text"],
@@ -1846,12 +1985,15 @@ class DataAccess:
                     "language": r["language"]  # Include language in result
                 }
 
-                # Get additional data for concepts
+                # Add additional data for concepts
                 if r["item_type"] == "concept":
-                    concept = self.get_concept(r["id"])
-                    if concept:
-                        result["concept_id"] = r["id"]
-                        result["concept_class"] = concept["concept_class"]
+                    result["concept_id"] = r["id"]
+                    result["concept_class"] = r["context_type"]  # Use context_type as concept_class
+
+                    # Add canonical relationship info if available
+                    if r.get("canonical_concept_id"):
+                        result["canonical_concept_id"] = r["canonical_concept_id"]
+                        result["is_variant"] = True
 
                 formatted_results.append(result)
 

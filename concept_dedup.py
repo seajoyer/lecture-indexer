@@ -1,87 +1,133 @@
 """
-Enhanced concept deduplication for the Lecture Video Content Indexer.
-This extension improves concept similarity detection and prevents duplicate concepts
-when processing new videos.
+Concept deduplication module for the Lecture Video Content Indexer.
+Handles normalization, similarity detection, and merging of duplicate concepts.
+
+This module provides tools to:
+1. Normalize concept text for consistent matching
+2. Detect and deduplicate similar concepts
+3. Establish canonical concept relationships
+4. Improve search quality by reducing duplicates
 """
 
 import re
-import unicodedata
-from typing import Dict, List, Any, Tuple, Optional, Set
+import logging
+import difflib
+from typing import Dict, List, Any, Optional, Tuple, Set
 from collections import defaultdict
 
-class ConceptDedupExtension:
-    """Extension for concept deduplication in the Lecture Video Content Indexer."""
+# Configure logging
+logger = logging.getLogger(__name__)
 
-    def __init__(self, data_access, config=None):
+class ConceptDedupExtension:
+    """
+    Handles concept deduplication by detecting and merging similar concepts.
+    """
+
+    def __init__(self, data_access=None, language="en"):
         """
-        Initialize concept deduplication extension.
+        Initialize the concept deduplication extension.
 
         Args:
-            data_access: Data access instance
-            config: Optional configuration dictionary
+            data_access: Optional data access layer instance
+            language: Default language for normalization
         """
         self.data_access = data_access
-        self.config = config or {}
-        self.similarity_threshold = self.config.get("similarity_threshold", 0.7)
-        self.concept_cache = {}  # Cache for quick lookups
+        self.language = language
 
-        # Pre-built stop words for concept normalization
-        self.stop_words = {
-            'ru': {
-                'это', 'такая', 'такое', 'просто', 'самое', 'наша', 'наше', 'вот', 'эта', 'эти',
-                'тогда', 'когда', 'у', 'нас', 'вас', 'нашего', 'вашего', 'да', 'нет'
-            },
-            'en': {
-                'the', 'a', 'an', 'this', 'that', 'these', 'those', 'our', 'your', 'my',
-                'is', 'are', 'was', 'were', 'be', 'been', 'being', 'just', 'very', 'then', 'when'
-            }
+        # Filler phrases to remove by language - enhanced for Russian
+        self.filler_phrases = {
+            "en": [
+                r'^the\s+', r'^a\s+', r'^an\s+', r'^this\s+', r'^that\s+',
+                r'^just\s+', r'^so\s+', r'^only\s+', r'^about\s+', r'^there\s+',
+                r'^here\s+', r'^these\s+', r'^those\s+', r'^such\s+', r'^like\s+',
+                r'^what\s+', r'^which\s+', r'^where\s+', r'^when\s+', r'^why\s+',
+                r'^how\s+', r'^who\s+', r'^I\s+', r'^we\s+', r'^you\s+', r'^it\s+',
+                r'\s+is$', r'\s+are$', r'\s+was$', r'\s+were$', r'\s+been$',
+                r'\s+can$', r'\s+will$', r'\s+should$', r'\s+could$', r'\s+would$',
+                r'\s+have$', r'\s+has$', r'\s+had$'
+            ],
+            "ru": [
+                # Starting phrases (significantly enhanced)
+                r'^это\s+', r'^вот\s+', r'^та\s+', r'^тот\s+', r'^те\s+', r'^та\s+',
+                r'^такая\s+', r'^такой\s+', r'^такое\s+', r'^такие\s+', r'^просто\s+',
+                r'^только\s+', r'^лишь\s+', r'^да\s+', r'^ну\s+', r'^и\s+',
+                r'^в\s+', r'^но\s+', r'^на\s+', r'^по\s+', r'^то\s+', r'^у\s+нас\s+',
+                r'^мы\s+', r'^я\s+', r'^вы\s+', r'^они\s+', r'^он\s+', r'^она\s+',
+                r'^оно\s+', r'^как\s+', r'^что\s+', r'^когда\s+', r'^где\s+',
+                r'^давайте\s+', r'^потому\s+', r'^причин\s+', r'^здесь\s+', r'^тут\s+',
+                r'^значит\s+', r'^теперь\s+', r'^итак\s+', r'^тогда\s+', r'^дальше\s+',
+                r'^там\s+', r'^вообще\s+', r'^кстати\s+', r'^собственно\s+', r'^фактически\s+',
+                r'^почему\s+', r'^зачем\s+', r'^чтобы\s+', r'^если\s+', r'^поскольку\s+',
+                r'^наверное\s+', r'^наверно\s+', r'^может\s+быть\s+', r'^возможно\s+',
+                r'^пожалуй\s+', r'^кажется\s+', r'^действительно\s+',
+
+                # Ending phrases (significantly enhanced)
+                r'\s+должна$', r'\s+должен$', r'\s+должно$', r'\s+должны$',
+                r'\s+может$', r'\s+могут$', r'\s+будет$', r'\s+будут$', r'\s+было$',
+                r'\s+были$', r'\s+есть$', r'\s+имеет$', r'\s+имеют$', r'\s+нужно$',
+                r'\s+нужна$', r'\s+надо$', r'\s+необходимо$', r'\s+требуется$',
+                r'\s+следует$', r'\s+стоит$', r'\s+хочет$', r'\s+хотят$',
+                r'\s+являются$', r'\s+является$', r'\s+представляет$', r'\s+представляют$',
+                r'\s+собой$', r'\s+так$', r'\s+вот$', r'\s+просто$', r'\s+только$',
+                r'\s+еще$', r'\s+ещё$', r'\s+уже$', r'\s+тоже$', r'\s+также$',
+                r'\s+так\s+далее$', r'\s+так\s+далее\s+тому\s+подобное$',
+                r'\s+да$', r'\s+нет$', r'\s+конечно$', r'\s+точно$', r'\s+именно$'
+            ]
         }
 
-        # Word replacements for normalization (e.g., synonyms)
-        self.word_replacements = {
-            'ru': {
-                'волновая': ['волна', 'волн'],
-                'шаровая': ['сферическая', 'шар'],
-                'функция': ['функц'],
-                'координатном': ['координат', 'координатах'],
-                'представлении': ['представление', 'представ'],
-                'основного': ['основное', 'основн'],
-                'состояния': ['состояние', 'состоян']
-            },
-            'en': {
-                'wave': ['wavefunction', 'wavefunct'],
-                'function': ['functional', 'funct'],
-                'spherical': ['sphere', 'spher'],
-                'coordinate': ['coordinates', 'coord'],
-                'representation': ['represents', 'represent'],
-                'ground': ['grounded', 'base'],
-                'state': ['status', 'condition']
-            }
+        # Complete phrases to remove - entire matches
+        self.complete_phrases = {
+            "en": [
+                "we have", "we can see", "we can say", "this is", "that is",
+                "it is", "it's", "there is", "there are", "we know", "let's",
+                "we will", "as we know", "you can see", "you can find", "you know"
+            ],
+            "ru": [
+                "мы имеем", "мы видим", "мы можем", "мы можем видеть", "мы можем сказать",
+                "мы знаем", "как мы знаем", "мы будем", "давайте",
+                "у нас есть", "у нас будет", "это есть", "это будет", "это значит",
+                "это означает", "то есть", "то означает", "то значит", "вот это",
+                "да это", "да вот", "ну вот", "ну это", "я думаю", "я считаю",
+                "мне кажется", "нам кажется", "нам надо", "нам нужно", "вот так",
+                "вот здесь", "вот тут", "вот этот", "вот эта", "вот это", "вот эти",
+                "просто так", "просто потому что", "просто надо", "просто нужно",
+                "можно видеть", "можно сказать", "можно утверждать", "можно заметить",
+                "можно отметить", "можно тогда", "можно так", "можно здесь",
+                "вы видите", "вы знаете", "вы можете видеть", "вы можете найти"
+            ]
         }
 
-    def detect_language(self, text: str) -> str:
-        """
-        Detect language of text.
+        # Simple conjunctions and prepositions to remove when they're standalone
+        self.simple_terms = {
+            "en": {"the", "a", "an", "and", "or", "but", "if", "of", "in", "on", "at", "by", "for", "with", "about"},
+            "ru": {"и", "или", "но", "если", "в", "на", "под", "над", "при", "у", "для", "о", "об", "к", "от", "из", "до", "с", "со"}
+        }
 
-        Args:
-            text: Input text
+        # Updated similarity thresholds - more strict for better deduplication
+        self.similarity_thresholds = {
+            "exact_match": 1.0,    # Exact match (after normalization)
+            "high_match": 0.92,    # High confidence match (increased from 0.90)
+            "medium_match": 0.85,  # Medium confidence match (increased from 0.80)
+            "low_match": 0.75      # Low confidence match (increased from 0.70)
+        }
 
-        Returns:
-            Language code ('ru' or 'en')
-        """
-        # Simple language detection based on character set
-        cyrillic_count = sum(1 for c in text if 'а' <= c.lower() <= 'я' or c.lower() in 'ёэіїєґў')
-        latin_count = sum(1 for c in text if 'a' <= c.lower() <= 'z')
+        # Updated concept length thresholds
+        self.min_concept_length = 3  # Minimum number of characters for a valid concept
+        self.min_words = 1           # Minimum number of words for a valid concept
+        self.max_words = 6           # Maximum of 6 words (reduced from 7)
 
-        return 'ru' if cyrillic_count > latin_count else 'en'
+        # Increased word overlap threshold for better precision
+        self.word_overlap_threshold = 0.6  # Increased from 0.5
+
+        logger.info(f"Concept deduplication extension initialized with language: {language}")
 
     def normalize_concept_text(self, text: str, language: Optional[str] = None) -> str:
         """
-        Normalize concept text for better matching.
+        Enhanced normalization of concept text for better matching and deduplication.
 
         Args:
-            text: Input concept text
-            language: Optional language code
+            text: Concept text
+            language: Language code (defaults to instance language)
 
         Returns:
             Normalized text
@@ -89,306 +135,553 @@ class ConceptDedupExtension:
         if not text:
             return ""
 
-        # Detect language if not provided
-        if not language:
-            language = self.detect_language(text)
+        # Use specified language or instance language
+        lang = language or self.language
 
-        # Convert to lowercase and strip whitespace
-        text = text.lower().strip()
+        # Convert to lowercase
+        normalized = text.lower()
 
-        # Remove accents and normalize Unicode
-        text = unicodedata.normalize('NFKD', text)
-        text = ''.join([c for c in text if not unicodedata.combining(c)])
+        # Remove extra whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
 
-        # Replace multiple spaces with a single space
-        text = re.sub(r'\s+', ' ', text)
+        # First, remove complete phrases (whole-phrase matches)
+        lang_key = lang if lang in self.complete_phrases else 'en'
+        for phrase in self.complete_phrases.get(lang_key, []):
+            if normalized == phrase:
+                return ""  # Complete match with a filler phrase - invalid concept
+            normalized = normalized.replace(phrase, " ")
 
-        # Remove stop words
-        stop_words = self.stop_words.get(language, self.stop_words['en'])
-        words = text.split()
-        words = [w for w in words if w not in stop_words]
+        # Remove filler phrases based on language
+        lang_key = lang if lang in self.filler_phrases else 'en'
+        patterns = self.filler_phrases.get(lang_key, [])
 
-        # Apply word replacements (stemming/normalization)
-        replacements = self.word_replacements.get(language, {})
-        normalized_words = []
+        for pattern in patterns:
+            normalized = re.sub(pattern, '', normalized)
 
-        for word in words:
-            replaced = False
-            for target, alternatives in replacements.items():
-                if word == target or any(alt in word for alt in alternatives):
-                    normalized_words.append(target)
-                    replaced = True
+        # Remove specific filler patterns for multi-word phrases
+        if ' ' in normalized:
+            # Remove phrases starting with filler verbs/phrases
+            verb_prefixes = ['is ', 'are ', 'can ', 'will ', 'has ', 'have ', 'need ', 'should '] if lang == 'en' else \
+                            ['является ', 'будет ', 'имеет ', 'нужно ', 'должна ', 'может ', 'хочет ', 'надо ']
+
+            for prefix in verb_prefixes:
+                if normalized.startswith(prefix):
+                    normalized = normalized[len(prefix):]
                     break
-            if not replaced:
-                normalized_words.append(word)
 
-        return ' '.join(normalized_words)
+            # Remove filler endings
+            verb_suffixes = [' is', ' are', ' be', ' can', ' will'] if lang == 'en' else \
+                            [' есть', ' будет', ' имеет', ' должна', ' может', ' надо', ' нужно']
 
-    def calculate_similarity(self, text1: str, text2: str, language: Optional[str] = None) -> float:
+            for suffix in verb_suffixes:
+                if normalized.endswith(suffix):
+                    normalized = normalized[:-len(suffix)]
+                    break
+
+        # Remove any remaining leading/trailing whitespace
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        # Final check: if normalized text is just a simple conjunction or preposition, invalidate it
+        simple_terms = self.simple_terms.get(lang if lang in self.simple_terms else 'en', set())
+        if normalized in simple_terms:
+            return ""
+
+        return normalized
+
+    def is_valid_concept(self, text: str, language: Optional[str] = None) -> bool:
         """
-        Calculate similarity between two concept texts.
+        Enhanced check if text represents a valid concept based on length and content.
 
         Args:
-            text1: First concept text
-            text2: Second concept text
-            language: Optional language code
+            text: Concept text
+            language: Language code
 
         Returns:
-            Similarity score between 0 and 1
+            True if valid concept, False otherwise
         """
-        # Normalize texts
-        norm_text1 = self.normalize_concept_text(text1, language)
-        norm_text2 = self.normalize_concept_text(text2, language)
+        # Normalize and check length
+        normalized = self.normalize_concept_text(text, language)
 
-        # If either text is empty after normalization, return 0
-        if not norm_text1 or not norm_text2:
-            return 0.0
+        if not normalized:
+            return False
 
-        # Get words for each text
-        words1 = set(norm_text1.split())
-        words2 = set(norm_text2.split())
+        # Check minimum character length
+        if len(normalized) < self.min_concept_length:
+            return False
 
-        # Calculate Jaccard similarity (intersection over union)
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
+        # Check word count
+        word_count = len(normalized.split())
 
-        if not union:
-            return 0.0
+        if word_count < self.min_words or word_count > self.max_words:
+            return False
 
-        jaccard = len(intersection) / len(union)
+        # Check if it's mostly numbers
+        if sum(c.isdigit() for c in normalized) / len(normalized) > 0.3:  # Reduced threshold to 30%
+            return False
 
-        # Exact match bonus
-        if norm_text1 == norm_text2:
-            jaccard = min(jaccard + 0.3, 1.0)
+        # Check if it's a common stopword or filler phrase (too generic)
+        lang = language or self.language
+        common_words = {'the', 'a', 'an', 'this', 'that', 'these', 'those', 'and', 'or', 'but'} if lang != 'ru' else \
+                       {'и', 'или', 'но', 'это', 'этот', 'эти', 'тот', 'те', 'что', 'как', 'да', 'нет'}
 
-        # Substring match bonus
-        elif norm_text1 in norm_text2 or norm_text2 in norm_text1:
-            jaccard = min(jaccard + 0.2, 1.0)
+        if word_count == 1 and normalized in common_words:
+            return False
 
-        # Length similarity bonus (for short concepts)
-        if len(words1) <= 3 and len(words2) <= 3 and abs(len(words1) - len(words2)) <= 1:
-            jaccard = min(jaccard + 0.1, 1.0)
+        # Additional check for invalid Russian concepts
+        if lang == 'ru':
+            # Single words ending with common verb endings are often not valid concepts
+            if word_count == 1 and any(normalized.endswith(suffix) for suffix in
+                ['ет', 'ут', 'ют', 'ит', 'ат', 'ят', 'ем', 'им']):
+                return False
 
-        return jaccard
+            # Check for common phrases that aren't valid concepts
+            invalid_phrases = [
+                'вот так', 'вот это', 'вот тут', 'вот здесь', 'просто так',
+                'да вот', 'ну вот', 'ну да', 'ну нет', 'ну ладно',
+                'может быть', 'да м'
+            ]
 
-    def find_similar_concept(self, concept_text: str, domain: str, language: str = None) -> Optional[Dict[str, Any]]:
+            if normalized in invalid_phrases:
+                return False
+
+        return True
+
+    def calculate_concept_similarity(self, concept1: str, concept2: str, language: Optional[str] = None) -> float:
         """
-        Find similar existing concept in database.
+        Enhanced calculation of similarity between two concept texts.
 
         Args:
-            concept_text: Concept text to search for
-            domain: Concept domain
-            language: Optional language code
+            concept1: First concept text
+            concept2: Second concept text
+            language: Language code
 
         Returns:
-            Similar concept or None if not found
+            Similarity score between 0.0 and 1.0
         """
-        # Detect language if not provided
-        if not language:
-            language = self.detect_language(concept_text)
+        # Normalize both concepts
+        norm1 = self.normalize_concept_text(concept1, language)
+        norm2 = self.normalize_concept_text(concept2, language)
 
-        # Normalize input concept
-        normalized_text = self.normalize_concept_text(concept_text, language)
+        # If either normalization resulted in an empty string, they're not valid concepts
+        if not norm1 or not norm2:
+            return 0.0
 
-        # Try exact match first
-        query = """
-        SELECT c.* FROM concepts c
-        WHERE c.domain = ? AND c.language = ?
+        # Check for exact match after normalization
+        if norm1 == norm2:
+            return 1.0
+
+        # Check for substring match
+        if norm1 in norm2 or norm2 in norm1:
+            # Calculate containment score based on length ratio
+            shorter = min(len(norm1), len(norm2))
+            longer = max(len(norm1), len(norm2))
+            return shorter / longer * 0.95  # Slightly penalize to prioritize exact matches
+
+        # Calculate string similarity
+        string_similarity = difflib.SequenceMatcher(None, norm1, norm2).ratio()
+
+        # Calculate word-level similarity
+        words1 = set(norm1.split())
+        words2 = set(norm2.split())
+
+        # Skip word-level similarity for very short concepts
+        if len(words1) <= 1 or len(words2) <= 1:
+            return string_similarity
+
+        # Calculate Jaccard similarity for words
+        intersection = len(words1.intersection(words2))
+        union = len(words1.union(words2))
+
+        word_similarity = intersection / union if union > 0 else 0.0
+
+        # Weight the two similarity measures based on concept length
+        if len(words1) > 2 or len(words2) > 2:
+            # For longer concepts, give more weight to word similarity
+            combined_similarity = (string_similarity * 0.6) + (word_similarity * 0.4)
+        else:
+            # For shorter concepts, rely more on string similarity
+            combined_similarity = (string_similarity * 0.8) + (word_similarity * 0.2)
+
+        return combined_similarity
+
+    def find_similar_concepts(self, concept: Dict[str, Any], concept_list: List[Dict[str, Any]],
+                             threshold: float = 0.8, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        params = [domain, language]
+        Enhanced similar concept detection with more precise matching.
 
-        # Execute query
-        concepts = self.data_access.execute_query(query, tuple(params))
+        Args:
+            concept: Source concept dictionary
+            concept_list: List of concept dictionaries to compare against
+            threshold: Minimum similarity threshold
+            language: Language code
 
-        # Filter concepts by similarity
+        Returns:
+            List of similar concepts with similarity scores
+        """
+        if not concept or not concept_list:
+            return []
+
+        concept_text = concept.get("text", "")
+
+        # Skip invalid concepts
+        if not self.is_valid_concept(concept_text, language):
+            return []
+
+        lang = language or concept.get("language", self.language)
+
+        # Find similar concepts
         similar_concepts = []
 
-        for concept in concepts:
-            similarity = self.calculate_similarity(
-                concept_text, concept.get("text", ""), language
-            )
+        for other_concept in concept_list:
+            # Skip identical concepts
+            if concept == other_concept:
+                continue
 
-            if similarity >= self.similarity_threshold:
-                similar_concepts.append({
-                    "concept_id": concept.get("concept_id"),
-                    "text": concept.get("text"),
-                    "similarity": similarity
-                })
+            other_text = other_concept.get("text", "")
+
+            # Skip invalid comparison concepts
+            if not self.is_valid_concept(other_text, lang):
+                continue
+
+            # Calculate similarity
+            similarity = self.calculate_concept_similarity(concept_text, other_text, lang)
+
+            # Add to results if above threshold
+            if similarity >= threshold:
+                result = other_concept.copy()
+                result["similarity"] = similarity
+                similar_concepts.append(result)
 
         # Sort by similarity (highest first)
-        similar_concepts.sort(key=lambda x: x["similarity"], reverse=True)
+        similar_concepts.sort(key=lambda x: x.get("similarity", 0), reverse=True)
 
-        # Return most similar concept if any found
-        if similar_concepts:
-            # Get full concept details
-            return self.data_access.get_concept(similar_concepts[0]["concept_id"])
+        return similar_concepts
 
-        return None
-
-    def add_to_data_access(self, data_access):
+    def get_canonical_concept(self, concept: Dict[str, Any], concept_list: List[Dict[str, Any]],
+                            language: Optional[str] = None) -> Tuple[Dict[str, Any], bool]:
         """
-        Add concept deduplication method to data access class.
+        Enhanced determination of canonical concept with more sophisticated selection criteria.
 
         Args:
-            data_access: DataAccess instance
+            concept: Source concept dictionary
+            concept_list: List of concept dictionaries to compare against
+            language: Language code
+
+        Returns:
+            Tuple of (canonical_concept, is_new_canonical)
         """
-        # Store original method
-        original_save_concept = data_access.save_concept
+        # Find similar concepts
+        similar_concepts = self.find_similar_concepts(
+            concept,
+            concept_list,
+            threshold=self.similarity_thresholds["low_match"],
+            language=language
+        )
 
-        # Define enhanced method
-        def enhanced_save_concept(concept_data):
-            """
-            Enhanced concept saving with deduplication.
+        if not similar_concepts:
+            # No similar concepts found, this is a new canonical concept
+            return concept, True
 
-            Args:
-                concept_data: Concept data dictionary
+        # Check for high confidence matches
+        high_confidence_matches = [c for c in similar_concepts
+                                if c.get("similarity", 0) >= self.similarity_thresholds["high_match"]]
 
-            Returns:
-                Concept ID if successful, None otherwise
-            """
-            # Check if we need to deduplicate
-            if not concept_data.get("skip_deduplication", False):
-                # Look for similar concepts
-                similar_concept = self.find_similar_concept(
-                    concept_data.get("text", ""),
-                    concept_data.get("domain", "unknown"),
-                    concept_data.get("language", "en")
-                )
+        if high_confidence_matches:
+            # For high confidence, select best match as canonical
+            best_match = high_confidence_matches[0]
 
-                # If similar concept found, use it instead
-                if similar_concept:
-                    # Get concept ID
-                    concept_id = similar_concept.get("concept_id")
+            # Enhanced selection logic
+            # Calculate quality scores for both concepts
+            concept_quality = self._calculate_concept_quality(concept, language)
+            match_quality = self._calculate_concept_quality(best_match, language)
 
-                    # Save occurrences if provided
-                    video_id = concept_data.get("video_id")
-                    occurrences = concept_data.get("occurrences", [])
+            # Compare quality scores with a preference for the current concept
+            # (to avoid too many redirects to existing concepts)
+            if concept_quality > match_quality * 1.2:
+                # This concept is significantly better, use it as canonical
+                return concept, True
 
-                    if video_id and not occurrences:
-                        # Find occurrences in the provided video
-                        segments = data_access.get_video_segments(video_id)
-                        if segments:
-                            concept_extractor = getattr(data_access, "_find_concept_occurrences", None)
-                            if concept_extractor:
-                                occurrences = concept_extractor(
-                                    concept_id,
-                                    concept_data.get("text", ""),
-                                    segments,
-                                    video_id
-                                )
+            # Use existing as canonical
+            return best_match, False
 
-                    # Save occurrences if found
-                    if occurrences:
-                        data_access.save_occurrences(concept_id, occurrences)
+        # For medium confidence, apply more sophisticated selection
+        medium_matches = [c for c in similar_concepts
+                        if c.get("similarity", 0) >= self.similarity_thresholds["medium_match"]]
 
-                    # Return existing concept ID
-                    return concept_id
+        if medium_matches:
+            # Select canonical based on multiple factors
+            candidates = [concept] + medium_matches
 
-            # Otherwise, save as new concept
-            return original_save_concept(concept_data)
+            # Calculate quality score for each candidate
+            candidates_with_scores = [(c, self._calculate_concept_quality(c, language)) for c in candidates]
 
-        # Replace the method
-        data_access.save_concept = enhanced_save_concept
-        data_access.find_similar_concept = self.find_similar_concept
+            # Sort by quality score
+            candidates_with_scores.sort(key=lambda x: x[1], reverse=True)
 
-        return data_access
+            # Return best candidate and whether it's the original concept
+            best_candidate = candidates_with_scores[0][0]
+            return best_candidate, best_candidate == concept
 
-    def enhance_search_results(self, search_engine):
+        # No strong matches, use this concept as canonical
+        return concept, True
+
+    def _calculate_concept_quality(self, concept: Dict[str, Any], language: Optional[str] = None) -> float:
         """
-        Enhance search engine to deduplicate search results.
+        Calculate a quality score for a concept based on multiple factors.
 
         Args:
-            search_engine: SearchEngine instance
+            concept: Concept dictionary
+            language: Language code
+
+        Returns:
+            Quality score (higher is better)
         """
-        # Store original method
-        original_search = search_engine.search
+        concept_text = concept.get("text", "")
+        normalized_text = self.normalize_concept_text(concept_text, language)
 
-        # Define enhanced method
-        def enhanced_search(query):
-            """
-            Enhanced search with result deduplication.
+        if not normalized_text:
+            return 0.0
 
-            Args:
-                query: Search query dictionary
+        # Word count score (concepts with 2-3 words tend to be best)
+        word_count = len(normalized_text.split())
+        if word_count == 2 or word_count == 3:
+            word_count_score = 1.0
+        elif word_count == 1:
+            word_count_score = 0.7
+        elif word_count == 4:
+            word_count_score = 0.8
+        else:
+            word_count_score = 0.5
 
-            Returns:
-                Search results with deduplicated concepts
-            """
-            # Get original results
-            results = original_search(query)
+        # Frequency score (more occurrences is better)
+        freq = concept.get("frequency", concept.get("total_occurrences", concept.get("occurrence_count", 1)))
+        freq_score = min(freq / 5, 1.0)  # Normalize frequency (max 5)
 
-            # Deduplicate concept results
-            if "results" in results:
-                # Group results by normalized text
-                concept_groups = defaultdict(list)
+        # Confidence/score from concept extraction
+        conf_score = min(concept.get("score", concept.get("confidence", 0)) / 10, 1.0)
 
-                # Track concept results for deduplication
-                concept_results = []
-                other_results = []
+        # Canonical preference (prefer concepts that are already canonical)
+        canonical_score = 0.3 if not concept.get("canonical_concept_id") else 0.0
 
-                for result in results["results"]:
-                    # Separate concept results from other results
-                    if result.get("result_type") == "concept":
-                        concept_results.append(result)
-                    else:
-                        other_results.append(result)
+        # Video count score (concepts appearing in more videos are better)
+        video_count = concept.get("video_count", 1)
+        video_score = min(video_count / 3, 1.0)  # Normalize video count (max 3)
 
-                # Get language from query
-                language = query.get("language")
+        # Combined quality score with weightings
+        return (
+            word_count_score * 0.3 +
+            freq_score * 0.2 +
+            conf_score * 0.15 +
+            canonical_score * 0.15 +
+            video_score * 0.2
+        )
 
-                # Group similar concepts
-                for result in concept_results:
-                    normalized_text = self.normalize_concept_text(
-                        result.get("text", ""), language
-                    )
-                    concept_groups[normalized_text].append(result)
+    def deduplicate_concepts(self, concepts: List[Dict[str, Any]], language: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Enhanced concept deduplication with better handling of near-duplicate concepts.
+        Improves text-based deduplication to prevent duplicates with same text but different IDs.
 
-                # Take only the best result from each group
-                deduplicated_concepts = []
+        Args:
+            concepts: List of concept dictionaries
+            language: Language code
 
-                for normalized_text, group in concept_groups.items():
-                    # Sort by relevance score
-                    group.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
-                    # Take the best one
-                    deduplicated_concepts.append(group[0])
+        Returns:
+            Deduplicated list of concepts with canonical relationships
+        """
+        if not concepts:
+            return []
 
-                # Combine deduplicated concepts with other results
-                deduplicated_results = other_results + deduplicated_concepts
+        # First, filter out invalid concepts
+        lang = language or next((c.get("language") for c in concepts if "language" in c), self.language)
 
-                # Re-sort all results by relevance score
-                deduplicated_results.sort(
-                    key=lambda x: x.get("relevance_score", 0), reverse=True
-                )
+        valid_concepts = [c for c in concepts if self.is_valid_concept(c.get("text", ""), lang)]
 
-                # Update results
-                results["results"] = deduplicated_results
+        if not valid_concepts:
+            return []
 
-                # Update counts
-                results["deduplicated_count"] = len(concept_results) - len(deduplicated_concepts)
+        # Initialize result containers
+        canonical_concepts = []  # List of canonical concepts
+        canonical_map = {}       # Map of concept_id -> canonical_concept_id
+        processed_texts = set()  # Set of normalized texts already processed
 
-            return results
+        # Keep track of concept texts and their canonical representations
+        text_to_canonical = {}   # Map of normalized_text -> canonical concept
 
-        # Replace the method
-        search_engine.search = enhanced_search
+        # Process concepts in order of quality score (higher first)
+        # This ensures better concepts become canonical
+        sorted_concepts = sorted(
+            valid_concepts,
+            key=lambda x: self._calculate_concept_quality(x, lang),
+            reverse=True
+        )
 
-        return search_engine
+        for concept in sorted_concepts:
+            concept_text = concept.get("text", "")
+            concept_id = concept.get("concept_id", concept.get("id", ""))
 
-def apply_concept_deduplication(data_pipeline, search_engine, data_access):
+            # Skip if no text or ID
+            if not concept_text or not concept_id:
+                continue
+
+            # Normalize text for better matching
+            normalized_text = self.normalize_concept_text(concept_text, lang)
+
+            # Skip invalid concepts after normalization
+            if not normalized_text:
+                continue
+
+            # Check if we've already processed an exact text match
+            if normalized_text in processed_texts:
+                # This is a duplicate - find which canonical concept it belongs to
+                if normalized_text in text_to_canonical:
+                    canonical_id = text_to_canonical[normalized_text].get("concept_id")
+                    canonical_map[concept_id] = canonical_id
+                    concept["canonical_concept_id"] = canonical_id
+                    logger.debug(f"Text-based duplicate: '{concept_text}' -> canonical '{text_to_canonical[normalized_text].get('text')}'")
+                continue
+
+            # STEP 1: Check for similar existing concepts before creating a new one
+            similar_concepts = self.find_similar_concepts(concept, canonical_concepts, lang)
+
+            canonical_concept_id = None
+
+            if similar_concepts:
+                # Get the best matching concept
+                best_match = similar_concepts[0]
+
+                # If we have a very similar match, use its ID as canonical
+                match_score = best_match.get('similarity', 0)
+
+                if match_score > 0.85:
+                    # This is essentially the same concept, use the existing one as canonical
+                    canonical_concept_id = best_match.get('concept_id')
+                    logger.info(f"Using canonical concept {canonical_concept_id} for similar concept: '{concept_text}'")
+
+                    # Mark as processed
+                    processed_texts.add(normalized_text)
+
+                    # Map this concept to its canonical
+                    canonical_map[concept_id] = canonical_concept_id
+                    concept["canonical_concept_id"] = canonical_concept_id
+
+                    continue
+
+            # This is a new canonical concept
+            # Clone and add metadata
+            canonical_concept = concept.copy()
+
+            # Ensure it has normalized_text field
+            if "normalized_text" not in canonical_concept:
+                canonical_concept["normalized_text"] = normalized_text
+
+            # Add to canonical concepts list
+            canonical_concepts.append(canonical_concept)
+
+            # Record normalized text as processed
+            processed_texts.add(normalized_text)
+
+            # Map this concept to itself (it is canonical)
+            if concept_id:
+                canonical_map[concept_id] = concept_id
+
+            # Store mapping from text to canonical concept
+            text_to_canonical[normalized_text] = canonical_concept
+
+        # Return canonical concepts
+        return canonical_concepts
+
+    def apply_concept_deduplication(self, processed_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply enhanced concept deduplication to a processed video result.
+
+        Args:
+            processed_result: Video processing result dictionary
+
+        Returns:
+            Updated processing result
+        """
+        if not processed_result:
+            return processed_result
+
+        # Extract domain features and language
+        domain_features = processed_result.get("domain_features", {})
+        language = processed_result.get("transcript", {}).get("language", self.language)
+
+        # Extract concepts
+        key_concepts = domain_features.get("key_concepts", [])
+        theoretical_concepts = domain_features.get("theoretical_concepts", [])
+        practical_concepts = domain_features.get("practical_concepts", [])
+
+        if not key_concepts:
+            return processed_result  # Nothing to deduplicate
+
+        # First pass: filter out invalid concepts
+        filtered_key_concepts = [c for c in key_concepts if self.is_valid_concept(c.get("text", ""), language)]
+
+        # Log number of filtered concepts
+        logger.info(f"Filtered out {len(key_concepts) - len(filtered_key_concepts)} invalid concepts")
+
+        # Second pass: deduplicate the remaining concepts
+        canonical_concepts = self.deduplicate_concepts(filtered_key_concepts, language)
+
+        # Create mapping from original text to canonical concept
+        text_to_canonical = {}
+        canonical_ids = set()
+
+        for concept in filtered_key_concepts:
+            concept_text = concept.get("text", "").lower()
+            concept_id = concept.get("concept_id", concept.get("id", ""))
+            canonical_id = concept.get("canonical_concept_id")
+
+            # Add all canonical IDs to a set for quick lookup
+            if canonical_id:
+                canonical_ids.add(canonical_id)
+
+                # Find the canonical concept
+                canonical = next((c for c in canonical_concepts
+                              if c.get("concept_id", c.get("id", "")) == canonical_id), None)
+
+                if canonical:
+                    text_to_canonical[concept_text] = canonical
+
+        # Filter theoretical and practical concepts based on canonical relationships
+        deduplicated_theoretical = self.deduplicate_concepts(theoretical_concepts, language)
+        deduplicated_practical = self.deduplicate_concepts(practical_concepts, language)
+
+        # Update domain features
+        domain_features["key_concepts"] = canonical_concepts
+        domain_features["theoretical_concepts"] = deduplicated_theoretical
+        domain_features["practical_concepts"] = deduplicated_practical
+
+        # Update processed result
+        processed_result["domain_features"] = domain_features
+
+        # Log deduplication results
+        logger.info(f"Deduplicated from {len(filtered_key_concepts)} to {len(canonical_concepts)} canonical concepts")
+        logger.info(f"Established {len(canonical_ids)} canonical relationships")
+
+        return processed_result
+
+
+def apply_concept_deduplication(processed_result: Dict[str, Any],
+                              data_access=None, language=None) -> Dict[str, Any]:
     """
-    Apply concept deduplication to all components.
+    Apply concept deduplication to a processed video result using default settings.
 
     Args:
-        data_pipeline: DataPipeline instance
-        search_engine: SearchEngine instance
-        data_access: DataAccess instance
+        processed_result: Video processing result dictionary
+        data_access: Optional data access layer instance
+        language: Optional language code
+
+    Returns:
+        Updated processing result with deduplicated concepts
     """
+    # Get language from result if not specified
+    if language is None:
+        language = processed_result.get("transcript", {}).get("language", "en")
+
     # Create deduplication extension
-    dedup = ConceptDedupExtension(data_access)
+    deduplicator = ConceptDedupExtension(data_access, language)
 
-    # Apply to data access
-    data_access = dedup.add_to_data_access(data_access)
-
-    # Apply to search engine
-    search_engine = dedup.enhance_search_results(search_engine)
-
-    return data_pipeline, search_engine, data_access
+    # Apply deduplication
+    return deduplicator.apply_concept_deduplication(processed_result)

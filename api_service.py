@@ -629,6 +629,226 @@ async def clear_cache_endpoint(
         logger.error(f"Error clearing cache: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class ConceptLinkRequest(BaseModel):
+    """Request model for linking concepts."""
+    canonical_concept_id: str = Field(..., description="ID of the canonical concept")
+    variant_concept_ids: List[str] = Field(..., description="List of variant concept IDs to link to the canonical concept")
+
+@app.post("/api/v1/concepts/link", response_model=Dict[str, Any])
+async def link_concepts(
+    request: ConceptLinkRequest,
+    api_key: str = Depends(get_api_key)
+):
+    """
+    Link variant concepts to a canonical concept.
+    This allows manual correction of concept relationships.
+
+    - **canonical_concept_id**: ID of the canonical concept
+    - **variant_concept_ids**: List of concept IDs to mark as variants of the canonical concept
+    """
+    try:
+        # Verify canonical concept exists
+        canonical_concept = data_access.get_concept(request.canonical_concept_id)
+        if not canonical_concept:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Canonical concept not found: {request.canonical_concept_id}"
+            )
+
+        # Ensure canonical concept doesn't have its own canonical (it must be a root concept)
+        if canonical_concept.get("canonical_concept_id"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Specified canonical concept is itself a variant of another concept"
+            )
+
+        # Update each variant concept
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+
+        for variant_id in request.variant_concept_ids:
+            # Skip if variant is the same as canonical
+            if variant_id == request.canonical_concept_id:
+                skipped_count += 1
+                continue
+
+            # Get variant concept
+            variant = data_access.get_concept(variant_id)
+            if not variant:
+                errors.append(f"Variant concept not found: {variant_id}")
+                continue
+
+            # Update variant to point to canonical
+            try:
+                update_query = """
+                UPDATE concepts
+                SET canonical_concept_id = ?
+                WHERE concept_id = ?
+                """
+                data_access.execute_update(update_query, (request.canonical_concept_id, variant_id))
+                updated_count += 1
+
+                # Clear cache for this concept
+                data_access.clear_cache(f"concept_{variant_id}")
+
+            except Exception as e:
+                errors.append(f"Error updating concept {variant_id}: {str(e)}")
+
+        # Clear search cache to reflect changes
+        cache_clear("search")
+
+        # Clear cache for canonical concept
+        data_access.clear_cache(f"concept_{request.canonical_concept_id}")
+
+        return {
+            "status": "success",
+            "canonical_concept_id": request.canonical_concept_id,
+            "canonical_concept_text": canonical_concept.get("text", ""),
+            "updated_variants": updated_count,
+            "skipped": skipped_count,
+            "errors": errors,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error linking concepts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/concepts/deduplicate", response_model=Dict[str, Any])
+async def deduplicate_concepts(
+    domain: Optional[str] = Query(None, description="Optional domain to limit deduplication"),
+    language: Optional[str] = Query(None, description="Optional language to limit deduplication"),
+    threshold: float = Query(0.85, description="Similarity threshold (0.0-1.0)"),
+    api_key: str = Depends(get_api_key)
+):
+    """
+    Run automatic concept deduplication process.
+
+    - **domain**: Optional domain to limit deduplication scope
+    - **language**: Optional language to limit deduplication scope
+    - **threshold**: Similarity threshold for merging concepts (0.0-1.0)
+    """
+    try:
+        # Import concept deduplication extension
+        try:
+            from concept_dedup import ConceptDedupExtension
+        except ImportError:
+            raise HTTPException(
+                status_code=500,
+                detail="Concept deduplication module not available"
+            )
+
+        # Instantiate deduplicator
+        deduplicator = ConceptDedupExtension(data_access, language)
+
+        # Get concepts to deduplicate
+        query = """
+        SELECT *
+        FROM concepts
+        WHERE canonical_concept_id IS NULL OR canonical_concept_id = ''
+        """
+
+        params = []
+
+        if domain:
+            query += " AND domain = ?"
+            params.append(domain)
+
+        if language:
+            query += " AND language = ?"
+            params.append(language)
+
+        # Add limit to prevent processing too many concepts at once
+        query += " LIMIT 1000"
+
+        concepts = data_access.execute_query(query, tuple(params))
+
+        if not concepts:
+            return {
+                "status": "success",
+                "message": "No concepts found for deduplication",
+                "processed": 0,
+                "linked": 0
+            }
+
+        # Process in batches for better performance
+        processed_count = 0
+        linked_count = 0
+        canonical_map = {}  # concept_id -> canonical_concept_id
+
+        # First pass: identify similar concepts and establish canonical relationships
+        for concept in concepts:
+            concept_id = concept.get("concept_id")
+
+            # Skip if already processed
+            if concept_id in canonical_map:
+                continue
+
+            # Find similar concepts
+            similar = deduplicator.find_similar_concepts(
+                concept,
+                [c for c in concepts if c.get("concept_id") != concept_id],
+                threshold=threshold,
+                language=language
+            )
+
+            # Process similar concepts
+            if similar:
+                # Determine canonical concept
+                candidates = [concept] + similar
+
+                # Sort candidates by quality (score, frequency, word count)
+                candidates.sort(key=lambda c: (
+                    c.get("score", 0) * 0.4 +
+                    c.get("frequency", 0) * 0.3 +
+                    len(c.get("text", "").split()) * 0.3
+                ), reverse=True)
+
+                # Use the best concept as canonical
+                canonical = candidates[0]
+                canonical_id = canonical.get("concept_id")
+
+                # Map all other candidates to this canonical
+                for candidate in candidates[1:]:
+                    candidate_id = candidate.get("concept_id")
+                    if candidate_id and candidate_id != canonical_id:
+                        canonical_map[candidate_id] = canonical_id
+                        linked_count += 1
+
+            processed_count += 1
+
+        # Second pass: update the database with canonical relationships
+        update_query = """
+        UPDATE concepts
+        SET canonical_concept_id = ?
+        WHERE concept_id = ?
+        """
+
+        for variant_id, canonical_id in canonical_map.items():
+            data_access.execute_update(update_query, (canonical_id, variant_id))
+            # Clear cache for this concept
+            data_access.clear_cache(f"concept_{variant_id}")
+
+        # Clear search cache
+        cache_clear("search")
+
+        return {
+            "status": "success",
+            "message": "Concept deduplication completed",
+            "processed": processed_count,
+            "linked": linked_count,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in concept deduplication: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Configure custom OpenAPI schema
 def custom_openapi():
     if app.openapi_schema:

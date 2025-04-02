@@ -630,6 +630,36 @@ class DataPipeline:
             domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
             logger.info(f"Extracted {len(domain_features['key_concepts'])} key concepts")
 
+            # Step 7: Apply concept deduplication
+            try:
+                # Import here to avoid circular dependency
+                from concept_dedup import apply_concept_deduplication
+
+                # Get detected language
+                language = processed_transcript.get("language", "en")
+
+                # Apply deduplication
+                result = {
+                    "job_id": job_id,
+                    "status": "completed",
+                    "timestamp": datetime.now().isoformat(),
+                    "video_id": video_id,
+                    "video_url": video_url,
+                    "metadata": metadata,
+                    "transcript": processed_transcript,
+                    "domain_features": domain_features,
+                    "theory_practice_results": theory_practice_results
+                }
+
+                # Apply deduplication and update result
+                deduplicated_result = apply_concept_deduplication(result, language=language)
+
+                # Get updated domain features after deduplication
+                domain_features = deduplicated_result.get("domain_features", domain_features)
+                logger.info(f"Applied concept deduplication, resulting in {len(domain_features['key_concepts'])} canonical concepts")
+            except ImportError:
+                logger.warning("Concept deduplication module not available - using original concepts")
+
             # Prepare result
             processing_time = timer.stop() / 1000  # Convert from ms to seconds
 

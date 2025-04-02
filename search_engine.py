@@ -86,13 +86,13 @@ class SearchEngine:
     @time_function(2000)  # Log warning if takes more than 2 seconds
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Enhanced search for content matching the query with improved ranking and language support.
+        Search for content across indexed videos with improved handling of canonical concepts.
 
         Args:
             query: Query parameters dictionary
 
         Returns:
-            Search results dictionary
+            Search results dictionary with deduplicated concepts
         """
         start_time = time.time()
 
@@ -113,23 +113,23 @@ class SearchEngine:
                 return {
                     "results": [],
                     "totalResults": 0,
-                    "executionTimeMs": 0,
-                    "status": "error",
-                    "message": "Empty search query"
+                    "executionTimeMs": 0
                 }
 
-            # Generate cache key for this query
-            cache_key = self._generate_cache_key(query_text, filters, theory_practice_ratio, domain, offset, limit, language)
-            cached_results = cache_get("search", cache_key)
+            # Generate cache key
+            cache_key = f"search_{query_text}_{domain}_{theory_practice_ratio}_{offset}_{limit}_{language}"
+            if filters:
+                cache_key += f"_filters:{hash(str(filters))}"
 
-            if cached_results:
+            cached_result = cache_get("search", cache_key)
+            if cached_result:
                 logger.info(f"Using cached search results for query: {query_text}")
-                return cached_results
+                return cached_result
 
             # Add language to the query for data access layer
             query["language"] = language
 
-            # Execute base search through data access layer
+            # Execute search through data access layer
             base_results = self.data_access.search(query)
 
             if not base_results.get("results"):
@@ -139,6 +139,9 @@ class SearchEngine:
                     logger.info(f"No results for '{query_text}', trying with synonyms: '{expanded_query}'")
                     query["original_text"] = expanded_query
                     base_results = self.data_access.search(query)
+
+            # Handle canonical concept relationships
+            base_results = self._apply_canonical_concept_filtering(base_results)
 
             # Enhanced ranking and processing of results
             enhanced_results = self._enhance_search_results(
@@ -170,6 +173,182 @@ class SearchEngine:
                 "status": "error",
                 "message": str(e)
             }
+
+    def _apply_canonical_concept_filtering(self, search_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply canonical concept filtering to search results with improved text-based deduplication.
+        Ensures that only canonical concepts are included in results, with variants merged.
+        Also ensures concepts with the same text are properly deduplicated.
+
+        Args:
+            search_results: Original search results
+
+        Returns:
+            Updated search results with canonical concepts only and no duplicates
+        """
+        if not search_results or not search_results.get("results"):
+            return search_results
+
+        results = search_results.get("results", [])
+
+        # Process only if there are concept results
+        concept_results = [r for r in results if r.get("result_type") == "concept"]
+
+        if not concept_results:
+            return search_results  # No concepts to process
+
+        # Extract concept IDs that need checking
+        concept_ids = [r.get("concept_id") for r in concept_results if r.get("concept_id")]
+
+        if not concept_ids:
+            return search_results
+
+        # Find canonical mappings for all these concepts
+        canonical_map = {}
+        seen_canonical_ids = set()  # Track canonical IDs we've already included
+
+        try:
+            # First get all canonical relationships
+            placeholders = ", ".join(["?"] * len(concept_ids))
+            query = f"""
+            SELECT concept_id, canonical_concept_id, text, language
+            FROM concepts
+            WHERE concept_id IN ({placeholders})
+            """
+
+            canon_results = self.data_access.execute_query(query, tuple(concept_ids))
+
+            # Build mapping from concept ID to canonical ID
+            for result in canon_results:
+                concept_id = result.get("concept_id")
+                canonical_id = result.get("canonical_concept_id")
+
+                if canonical_id:
+                    canonical_map[concept_id] = canonical_id
+
+            # Now fetch canonical concepts so we have their data
+            canonical_ids = list(set(canonical_map.values()))
+            if canonical_ids:
+                placeholders = ", ".join(["?"] * len(canonical_ids))
+                query = f"""
+                SELECT *
+                FROM concepts
+                WHERE concept_id IN ({placeholders})
+                """
+                canonical_concepts_data = self.data_access.execute_query(query, tuple(canonical_ids))
+                canonical_concepts = {c["concept_id"]: c for c in canonical_concepts_data}
+            else:
+                canonical_concepts = {}
+
+        except Exception as e:
+            logger.warning(f"Error checking canonical concepts: {e}")
+            canonical_map = {}
+            canonical_concepts = {}
+
+        # Filter and deduplicate results
+        filtered_results = []
+
+        # Dictionary to track canonical concepts by ID
+        included_canonical_concepts = {}
+
+        # Dictionary to deduplicate by text+language
+        seen_concept_texts = {}
+
+        # First process non-concept results (keep all of them)
+        for result in results:
+            if result.get("result_type") != "concept":
+                filtered_results.append(result)
+                continue
+
+            concept_id = result.get("concept_id")
+            if not concept_id:
+                filtered_results.append(result)
+                continue
+
+            # Create a unique key by text+language to avoid duplicates
+            text_key = f"{result.get('text', '').lower()}_{result.get('language', '')}"
+
+            # Skip if we've already seen this text
+            if text_key in seen_concept_texts:
+                continue
+
+            # Check if this is a variant concept
+            canonical_id = canonical_map.get(concept_id)
+
+            if not canonical_id:
+                # This is already a canonical concept or has no canonical relationship
+                # Only include if we haven't already seen this canonical ID
+                if concept_id not in seen_canonical_ids:
+                    filtered_results.append(result)
+                    seen_canonical_ids.add(concept_id)
+                    included_canonical_concepts[concept_id] = result
+                    seen_concept_texts[text_key] = True
+                continue
+
+            # Skip if we've already included this canonical concept
+            if canonical_id in seen_canonical_ids:
+                continue
+
+            # Get canonical concept data
+            canonical_concept = canonical_concepts.get(canonical_id)
+
+            if canonical_concept:
+                # Create a result entry for the canonical concept with merged metadata
+                # Use the higher relevance score between variant and canonical
+                relevance_score = result.get("relevance_score", 0)
+                if canonical_id in included_canonical_concepts:
+                    # If we already have this canonical concept in results from another variant,
+                    # use the higher relevance score
+                    existing_result = included_canonical_concepts[canonical_id]
+                    if relevance_score > existing_result.get("relevance_score", 0):
+                        # Update existing result with higher score
+                        existing_result["relevance_score"] = relevance_score
+                        # Keep track of the variant that caused this result
+                        if "variant_matches" not in existing_result:
+                            existing_result["variant_matches"] = []
+                        existing_result["variant_matches"].append(result.get("text"))
+                    continue
+                else:
+                    # Create new canonical result with merged metadata
+                    canonical_result = {
+                        "result_type": "concept",
+                        "concept_id": canonical_id,
+                        "text": canonical_concept.get("text", result.get("text")),
+                        "domain": canonical_concept.get("domain", result.get("domain")),
+                        "context_type": canonical_concept.get("concept_class", result.get("context_type")),
+                        "concept_class": canonical_concept.get("concept_class", result.get("concept_class")),
+                        "language": canonical_concept.get("language", result.get("language")),
+                        "relevance_score": relevance_score,
+                        "is_canonical": True,
+                        "variant_matches": [result.get("text")]
+                    }
+
+                    # Copy over other fields if available
+                    if "video_id" in result:
+                        canonical_result["video_id"] = result.get("video_id")
+                    if "video_title" in result:
+                        canonical_result["video_title"] = result.get("video_title")
+
+                    filtered_results.append(canonical_result)
+                    seen_canonical_ids.add(canonical_id)
+                    included_canonical_concepts[canonical_id] = canonical_result
+                    # Mark the canonical concept text as seen
+                    canonical_text_key = f"{canonical_concept.get('text', '').lower()}_{canonical_concept.get('language', '')}"
+                    seen_concept_texts[canonical_text_key] = True
+            else:
+                # Couldn't find canonical concept, use the original
+                filtered_results.append(result)
+                seen_canonical_ids.add(concept_id)  # Mark as seen to prevent duplicates
+                seen_concept_texts[text_key] = True
+
+        # Re-sort results by relevance score
+        filtered_results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+
+        # Update the result count and return
+        search_results["results"] = filtered_results
+        search_results["totalResults"] = len(filtered_results)
+
+        return search_results
 
     def _generate_cache_key(
         self,
