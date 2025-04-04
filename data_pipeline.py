@@ -17,6 +17,7 @@ import json
 from youtube_extractor import YouTubeExtractor
 from transcript_processor import TranscriptProcessor
 from unified_concept_extractor import UnifiedConceptExtractor
+from concept_dedup import apply_concept_deduplication
 from performance_utils import time_function, Timer
 from cache_manager import cache_get, cache_set
 
@@ -124,9 +125,10 @@ class DataPipeline:
             domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
             logger.info(f"Extracted {len(domain_features['key_concepts'])} key concepts")
 
-            # Prepare result
-            processing_time = timer.stop() / 1000  # Convert from ms to seconds
+            # Step 7: Apply concept deduplication to eliminate bad concepts and duplicates
+            detected_language = processed_transcript.get("language", "en")
 
+            # Prepare result
             result = {
                 "job_id": job_id,
                 "status": "completed",
@@ -136,18 +138,24 @@ class DataPipeline:
                 "metadata": metadata,
                 "transcript": processed_transcript,
                 "domain_features": domain_features,
-                "theory_practice_results": theory_practice_results,
-                "processing_time": processing_time
+                "theory_practice_results": theory_practice_results
             }
 
+            # Apply the concept deduplication
+            deduplicated_result = apply_concept_deduplication(result, detected_language)
+
+            # Calculate processing time
+            processing_time = timer.stop() / 1000  # Convert from ms to seconds
+            deduplicated_result["processing_time"] = processing_time
+
             # Cache the result
-            cache_set("video", cache_key, result)
+            cache_set("video", cache_key, deduplicated_result)
 
             # Save result to file (for backward compatibility)
-            self._save_result(result)
+            self._save_result(deduplicated_result)
 
             logger.info(f"Successfully processed video {video_id} in {processing_time:.2f} seconds")
-            return result
+            return deduplicated_result
 
         except Exception as e:
             logger.error(f"Error processing video {video_url}: {e}")

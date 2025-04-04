@@ -1,29 +1,29 @@
-#!/usr/bin/env python3
 """
-Demo application for the Lecture Video Content Indexer.
-Provides command-line access to key functionality including video processing,
-concept exploration, and search.
+Update to the demo.py file for improved concept listing.
+Enhances list_concepts functionality to use the unified concept extractor approach.
 """
 
 import os
 import sys
 import argparse
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Set, Any, Optional
 import time
-import json
+import re
 
 # Import project modules
 from data_pipeline import DataPipeline
 from search_engine import SearchEngine
 from data_access import get_data_access
 from cache_manager import get_cache_stats, cache_clear
+
+# New imports for enhanced concept extraction
 try:
-    from concept_signature_generator import get_concept_signature_generator, RelationshipGraph
-    HAS_CONCEPT_GENERATOR = True
+    from unified_concept_extractor import UnifiedConceptExtractor
+    UNIFIED_EXTRACTOR_AVAILABLE = True
 except ImportError:
-    HAS_CONCEPT_GENERATOR = False
-    print("Warning: concept_signature_generator module not available, related features will be disabled")
+    UNIFIED_EXTRACTOR_AVAILABLE = False
+    print("Warning: UnifiedConceptExtractor not available")
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def truncate_text(text, max_length=100):
+def truncate_text(text: str, max_length: int = 100) -> str:
     """
     Truncate text to maximum length while preserving whole words.
 
@@ -54,7 +54,7 @@ def truncate_text(text, max_length=100):
         # If no space found, just cut at max_length
         return text[:max_length] + "..."
 
-def extract_playlist_id(playlist_url_or_id):
+def extract_playlist_id(playlist_url_or_id: str) -> Optional[str]:
     """
     Extract playlist ID from a URL or return the ID directly.
 
@@ -62,12 +62,11 @@ def extract_playlist_id(playlist_url_or_id):
         playlist_url_or_id: Playlist URL or ID
 
     Returns:
-        Playlist ID
+        Playlist ID or None if invalid
     """
     # Check if it's a URL
     if "youtube.com" in playlist_url_or_id or "youtu.be" in playlist_url_or_id:
         # Extract playlist ID from URL
-        import re
         patterns = [
             r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([^&\s]+)',  # Standard playlist URL
             r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?.*[\?&]list=([^&\s]+)'  # Video URL with playlist
@@ -84,50 +83,34 @@ def extract_playlist_id(playlist_url_or_id):
         # Assume it's already a playlist ID
         return playlist_url_or_id
 
-def process_playlist(data_pipeline, search_engine, playlist_url_or_id, args):
+def extract_video_id(video_url_or_id: str) -> Optional[str]:
     """
-    Process all videos in a playlist.
+    Extract video ID from a URL or return the ID directly.
 
     Args:
-        data_pipeline: DataPipeline instance
-        search_engine: SearchEngine instance
-        playlist_url_or_id: Playlist URL or ID
-        args: Command-line arguments
+        video_url_or_id: Video URL or ID
+
+    Returns:
+        Video ID or None if invalid
     """
-    # Extract playlist ID
-    playlist_id = extract_playlist_id(playlist_url_or_id)
-    if not playlist_id:
-        print(f"Error: Invalid playlist URL or ID: {playlist_url_or_id}")
-        return
+    # Check if it's a URL
+    if "youtube.com" in video_url_or_id or "youtu.be" in video_url_or_id:
+        # Extract video ID from URL
+        patterns = [
+            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&\s]+)',  # Standard YouTube URL
+            r'(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^&\s]+)'  # Short YouTube URL
+        ]
 
-    print(f"Processing playlist: {playlist_id}")
+        for pattern in patterns:
+            match = re.match(pattern, video_url_or_id)
+            if match:
+                return match.group(1)
 
-    # Get videos in playlist
-    videos = get_playlist_videos(playlist_id)
-    if not videos:
-        print(f"Error: No videos found in playlist: {playlist_id}")
-        return
-
-    print(f"Found {len(videos)} videos in playlist")
-
-    # Apply max videos limit if specified
-    if args.max_videos and not args.no_limit:
-        print(f"Limiting to {args.max_videos} videos")
-        videos = videos[:args.max_videos]
-
-    # Convert video IDs to URLs
-    video_urls = [f"https://www.youtube.com/watch?v={video_id}" for video_id in videos]
-
-    # Process videos
-    processed_videos = process_videos_batch(data_pipeline, search_engine, video_urls, args)
-
-    print(f"\nSummary: Processed {len(processed_videos)} out of {len(videos)} videos from playlist")
-
-    # Show processed video IDs
-    if processed_videos:
-        print("\nProcessed Videos:")
-        for i, video_id in enumerate(processed_videos):
-            print(f"  {i+1}. {video_id}")
+        print(f"Warning: Could not extract video ID from URL: {video_url_or_id}")
+        return None
+    else:
+        # Assume it's already a video ID
+        return video_url_or_id
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -154,22 +137,20 @@ def parse_arguments():
     parser.add_argument("--filter-playlist", help="Filter to a specific playlist ID")
     parser.add_argument("--filter-language", choices=["en", "ru"], help="Filter by language")
 
+    # New option for direct extraction
+    parser.add_argument("--use-unified-extractor", action="store_true", help="Use the unified concept extractor directly")
+
     # Learning path options
     parser.add_argument("--concepts", nargs="+", help="Concept IDs for learning path generation")
 
     # System options
     parser.add_argument("--cache-stats", action="store_true", help="Show cache statistics")
-    parser.add_argument("--optimize-db", action="store_true", help="Optimize database before running")
     parser.add_argument("--clear-cache", action="store_true", help="Clear all caches before running")
     parser.add_argument("--language", choices=["en", "ru", "auto"], default="auto", help="Preferred language for processing (auto=detect)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
-    # Advanced concept analysis
-    parser.add_argument("--concept-signatures", action="store_true", help="Show concept signatures for indexed concepts")
-    parser.add_argument("--relationship-graph", action="store_true", help="Display concept relationship graph")
-    parser.add_argument("--analyze-concepts", action="store_true", help="Analyze concept relationships across all videos")
-
-    parser.add_argument("--reindex", action="store_true", help="Reindex all videos with improved concept linking")
+    # Limit option
+    parser.add_argument("--limit", type=int, default=0, help="Limit number of concepts shown")
 
     return parser.parse_args()
 
@@ -215,9 +196,18 @@ def init_components(args):
     data_pipeline = DataPipeline(config)
     search_engine = SearchEngine(config)
 
+    # Initialize unified concept extractor if requested and available
+    unified_extractor = None
+    if args.use_unified_extractor and UNIFIED_EXTRACTOR_AVAILABLE:
+        language = args.filter_language or args.language
+        if language == "auto":
+            language = "en"
+        unified_extractor = UnifiedConceptExtractor(language)
+        print(f"Initialized UnifiedConceptExtractor with language: {language}")
+
     logger.info("Components initialized")
 
-    return data_pipeline, search_engine, data_access
+    return data_pipeline, search_engine, data_access, unified_extractor
 
 def process_or_show_video(data_pipeline, search_engine, video_id_or_url, language_preference=None):
     """
@@ -259,35 +249,50 @@ def process_or_show_video(data_pipeline, search_engine, video_id_or_url, languag
         # It's a video ID, show details
         show_video_details(search_engine, video_id_or_url)
 
-def extract_playlist_id(playlist_url_or_id):
+def show_video_details(search_engine, video_id):
     """
-    Extract playlist ID from a URL or return the ID directly.
+    Show details for a specific video.
 
     Args:
-        playlist_url_or_id: Playlist URL or ID
-
-    Returns:
-        Playlist ID
+        search_engine: SearchEngine instance
+        video_id: YouTube video ID
     """
-    # Check if it's a URL
-    if "youtube.com" in playlist_url_or_id or "youtu.be" in playlist_url_or_id:
-        # Extract playlist ID from URL
-        import re
-        patterns = [
-            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([^&\s]+)',  # Standard playlist URL
-            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?.*[\?&]list=([^&\s]+)'  # Video URL with playlist
-        ]
+    # Get video concepts
+    video_concepts = search_engine.get_video_concepts(video_id)
+    if not video_concepts:
+        print(f"Video not found or not processed: {video_id}")
+        return
 
-        for pattern in patterns:
-            match = re.match(pattern, playlist_url_or_id)
-            if match:
-                return match.group(1)
+    # Extract video details
+    video = video_concepts.get("video", {})
+    concepts = video_concepts.get("concepts", [])
+    theory_practice_ratio = video.get("theory_practice_ratio", 0.5)
 
-        print(f"Warning: Could not extract playlist ID from URL: {playlist_url_or_id}")
-        return None
-    else:
-        # Assume it's already a playlist ID
-        return playlist_url_or_id
+    # Print video information
+    print(f"\n=== Video Details: {video_id} ===")
+    print(f"Title: {video.get('title', 'N/A')}")
+    print(f"Channel: {video.get('channel', 'N/A')}")
+    print(f"Domain: {video.get('domain', 'N/A')}")
+    print(f"Theory/Practice Ratio: {theory_practice_ratio:.2f}")
+    print(f"Total Concepts: {len(concepts)}")
+
+    # Print theoretical concepts
+    theoretical = [c for c in concepts if c.get("concept_class") == "theoretical"]
+    print(f"\nTheoretical Concepts ({len(theoretical)}):")
+    for i, concept in enumerate(theoretical[:10]):  # Show top 10
+        print(f"  {i+1}. {concept.get('text', 'N/A')}")
+    if len(theoretical) > 10:
+        print(f"  ... and {len(theoretical) - 10} more")
+
+    # Print practical concepts
+    practical = [c for c in concepts if c.get("concept_class") == "practical"]
+    print(f"\nPractical Concepts ({len(practical)}):")
+    for i, concept in enumerate(practical[:10]):  # Show top 10
+        print(f"  {i+1}. {concept.get('text', 'N/A')}")
+    if len(practical) > 10:
+        print(f"  ... and {len(practical) - 10} more")
+
+    print("\nVideo URL: https://www.youtube.com/watch?v=" + video_id)
 
 def process_playlist(data_pipeline, search_engine, playlist_url_or_id, args):
     """
@@ -387,58 +392,105 @@ def process_videos_batch(data_pipeline, search_engine, videos, args):
 
     return processed_videos
 
-def show_video_details(search_engine, video_id):
+def get_playlist_videos(playlist_id):
     """
-    Show details for a specific video.
+    Get video IDs in a playlist.
 
     Args:
-        search_engine: SearchEngine instance
-        video_id: YouTube video ID
+        playlist_id: YouTube playlist ID
+
+    Returns:
+        List of video IDs
     """
-    # Get video concepts
-    video_concepts = search_engine.get_video_concepts(video_id)
-    if not video_concepts:
-        print(f"Video not found or not processed: {video_id}")
-        return
+    # Check if we have this playlist in the database
+    data_access = get_data_access()
+    playlist_query = "SELECT video_ids FROM playlists WHERE playlist_id = ?"
+    playlists = data_access.execute_query(playlist_query, (playlist_id,))
 
-    # Extract video details
-    video = video_concepts.get("video", {})
-    concepts = video_concepts.get("concepts", [])
-    theory_practice_ratio = video.get("theory_practice_ratio", 0.5)
+    if playlists and playlists[0].get("video_ids"):
+        # Split comma-separated video IDs
+        return playlists[0].get("video_ids").split(",")
 
-    # Print video information
-    print(f"\n=== Video Details: {video_id} ===")
-    print(f"Title: {video.get('title', 'N/A')}")
-    print(f"Channel: {video.get('channel', 'N/A')}")
-    print(f"Domain: {video.get('domain', 'N/A')}")
-    print(f"Theory/Practice Ratio: {theory_practice_ratio:.2f}")
-    print(f"Total Concepts: {len(concepts)}")
+    # If not in database, try to get it from YouTube API if available
+    try:
+        # Import and check for YouTube API key
+        from youtube_extractor import YouTubeExtractor
+        api_key = os.environ.get("YOUTUBE_API_KEY")
 
-    # Print theoretical concepts
-    theoretical = [c for c in concepts if c.get("concept_class") == "theoretical"]
-    print(f"\nTheoretical Concepts ({len(theoretical)}):")
-    for i, concept in enumerate(theoretical[:10]):  # Show top 10
-        print(f"  {i+1}. {concept.get('text', 'N/A')}")
-    if len(theoretical) > 10:
-        print(f"  ... and {len(theoretical) - 10} more")
+        if api_key:
+            # Get extractor
+            extractor = YouTubeExtractor(api_key)
 
-    # Print practical concepts
-    practical = [c for c in concepts if c.get("concept_class") == "practical"]
-    print(f"\nPractical Concepts ({len(practical)}):")
-    for i, concept in enumerate(practical[:10]):  # Show top 10
-        print(f"  {i+1}. {concept.get('text', 'N/A')}")
-    if len(practical) > 10:
-        print(f"  ... and {len(practical) - 10} more")
+            # Try to get playlist items through the YouTube API
+            youtube = extractor.youtube
 
-    print("\nVideo URL: https://www.youtube.com/watch?v=" + video_id)
+            # Request playlist items
+            request = youtube.playlistItems().list(
+                part="snippet",
+                playlistId=playlist_id,
+                maxResults=50
+            )
+            response = request.execute()
 
-def list_concepts(data_access, args):
+            # Extract video IDs
+            video_ids = []
+            for item in response.get("items", []):
+                video_id = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+                if video_id:
+                    video_ids.append(video_id)
+
+            # Save to database for future use
+            if video_ids:
+                data_access.execute_update(
+                    "INSERT OR REPLACE INTO playlists (playlist_id, video_ids, video_count, created_at) VALUES (?, ?, ?, datetime('now'))",
+                    (playlist_id, ",".join(video_ids), len(video_ids))
+                )
+
+            return video_ids
+    except Exception as e:
+        print(f"Error getting playlist from YouTube API: {e}")
+
+    return []
+
+def process_concepts_unified_extractor(unified_extractor, segments, domain="physics", language="en"):
+    """
+    Process concepts using the unified concept extractor directly.
+    This function bypasses the database and generates concepts directly.
+
+    Args:
+        unified_extractor: UnifiedConceptExtractor instance
+        segments: List of transcript segments
+        domain: Content domain
+        language: Language code
+
+    Returns:
+        List of concepts
+    """
+    if not unified_extractor:
+        return []
+
+    # Extract concepts using the unified extractor
+    print(f"Extracting concepts directly using UnifiedConceptExtractor ({domain}, {language})...")
+
+    # If segments is empty, return empty list
+    if not segments:
+        print("No segments provided")
+        return []
+
+    # Extract concepts
+    concepts = unified_extractor.extract_concepts_from_segments(segments, domain, language)
+
+    print(f"Extracted {len(concepts)} concepts directly")
+    return concepts
+
+def list_concepts(data_access, args, unified_extractor=None):
     """
     List all indexed concepts with optional filtering.
 
     Args:
         data_access: DataAccess instance
         args: Command-line arguments
+        unified_extractor: Optional UnifiedConceptExtractor instance
     """
     # Apply filters
     domain_filter = args.filter_domain
@@ -446,13 +498,43 @@ def list_concepts(data_access, args):
     playlist_filter = args.filter_playlist
     language_filter = args.filter_language
 
-    # Query concepts
-    concepts = data_access.list_concepts(
-        domain_filter=domain_filter,
-        video_filter=video_filter,
-        playlist_filter=playlist_filter,
-        language=language_filter
-    )
+    # If using unified extractor directly, get segments and process them
+    if args.use_unified_extractor and unified_extractor and video_filter:
+        # Get video details and segments
+        video_query = "SELECT * FROM videos WHERE video_id = ?"
+        video_result = data_access.execute_query(video_query, (video_filter,))
+
+        if not video_result:
+            print(f"Video {video_filter} not found in database")
+            return
+
+        video = video_result[0]
+        domain = video.get("domain", "physics")
+        language = video.get("language", "en")
+
+        # Get segments
+        segments_query = "SELECT * FROM segments WHERE video_id = ? ORDER BY start_time"
+        segments = data_access.execute_query(segments_query, (video_filter,))
+
+        if not segments:
+            print(f"No segments found for video {video_filter}")
+            return
+
+        # Extract concepts using unified extractor
+        concepts = process_concepts_unified_extractor(
+            unified_extractor,
+            segments,
+            domain=domain,
+            language=language
+        )
+    else:
+        # Use database query to get concepts
+        concepts = data_access.list_concepts(
+            domain_filter=domain_filter,
+            video_filter=video_filter,
+            playlist_filter=playlist_filter,
+            language=language_filter
+        )
 
     if not concepts:
         print("No concepts found matching the criteria")
@@ -461,6 +543,11 @@ def list_concepts(data_access, args):
     # Separate theoretical and practical concepts
     theoretical = [c for c in concepts if c.get("concept_class") == "theoretical"]
     practical = [c for c in concepts if c.get("concept_class") == "practical"]
+
+    # Limit the number of concepts if specified
+    if args.limit > 0:
+        theoretical = theoretical[:args.limit]
+        practical = practical[:args.limit]
 
     # Print summary
     print(f"\n=== Concepts Summary ===")
@@ -476,6 +563,8 @@ def list_concepts(data_access, args):
         print(f"Filter: Playlist ID = {playlist_filter}")
     if language_filter:
         print(f"Filter: Language = {language_filter}")
+    if args.use_unified_extractor:
+        print("Using: UnifiedConceptExtractor (direct extraction)")
 
     # Print theoretical concepts
     print(f"\nTheoretical Concepts:")
@@ -494,7 +583,7 @@ def list_concepts(data_access, args):
 def generate_learning_path(search_engine, args):
     """
     Generate a learning path from concepts.
-    
+
     Args:
         search_engine: SearchEngine instance
         args: Command-line arguments
@@ -502,235 +591,61 @@ def generate_learning_path(search_engine, args):
     if not args.concepts:
         print("Error: No concept IDs provided. Use --concepts to specify concept IDs.")
         return
-    
+
     # Parse concepts from comma-separated list if needed
-    concept_inputs = []
+    concept_ids = []
     for concept_arg in args.concepts:
         # Check if it's a comma-separated list
         if ',' in concept_arg:
-            concept_inputs.extend([c.strip() for c in concept_arg.split(',')])
+            concept_ids.extend([c.strip() for c in concept_arg.split(',')])
         else:
-            concept_inputs.append(concept_arg)
-    
+            concept_ids.append(concept_arg)
+
     # Set theory ratio
     theory_ratio = args.theory_ratio if args.theory_ratio is not None else 0.5
-    
-    # Determine if inputs are IDs or text strings
-    concept_ids = []
-    data_access = search_engine.data_access
-    
-    for concept_input in concept_inputs:
-        # First, check if this is already a valid concept ID
-        concept = data_access.get_concept(concept_input)
-        if concept:
-            concept_ids.append(concept_input)
-            print(f"Using concept ID directly: {concept_input} - {concept.get('text')}")
-            continue
-        
-        # Check if text contains Cyrillic (Russian)
-        has_cyrillic = any('а' <= c.lower() <= 'я' for c in concept_input)
-        language = 'ru' if has_cyrillic else 'en'
-        
-        # Try finding the concept using multiple approaches
-        found_concept = False
-        
-        # 1. First try without language filter for exact matches
-        query = """
-        SELECT concept_id, text 
-        FROM concepts 
-        WHERE LOWER(text) = LOWER(?) OR LOWER(normalized_text) = LOWER(?)
-        """
-        exact_match = data_access.execute_query(query, (concept_input, concept_input))
-        
-        if exact_match:
-            concept_id = exact_match[0].get("concept_id")
-            concept_ids.append(concept_id)
-            print(f"Found concept by exact match: {concept_id} - {exact_match[0].get('text')}")
-            found_concept = True
-            continue
-        
-        # 2. Try with language filter for exact matches
-        query_with_lang = """
-        SELECT concept_id, text 
-        FROM concepts 
-        WHERE (LOWER(text) = LOWER(?) OR LOWER(normalized_text) = LOWER(?)) AND language = ?
-        """
-        exact_match_with_lang = data_access.execute_query(query_with_lang, (concept_input, concept_input, language))
-        
-        if exact_match_with_lang:
-            concept_id = exact_match_with_lang[0].get("concept_id")
-            concept_ids.append(concept_id)
-            print(f"Found concept by exact match (with language filter): {concept_id} - {exact_match_with_lang[0].get('text')}")
-            found_concept = True
-            continue
-        
-        # 3. Try pattern match without language filter
-        pattern_query = """
-        SELECT concept_id, text 
-        FROM concepts 
-        WHERE LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?)
-        ORDER BY length(text) ASC
-        """
-        pattern_match = data_access.execute_query(pattern_query, (f"%{concept_input}%", f"%{concept_input}%"))
-        
-        if pattern_match:
-            concept_id = pattern_match[0].get("concept_id")
-            concept_ids.append(concept_id)
-            print(f"Found concept by pattern match: {concept_id} - {pattern_match[0].get('text')}")
-            found_concept = True
-            continue
-        
-        # 4. Try pattern match with language filter - FIX: properly construct the query
-        pattern_query_with_lang = """
-        SELECT concept_id, text 
-        FROM concepts 
-        WHERE (LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?)) AND language = ?
-        ORDER BY length(text) ASC
-        """
-        pattern_match_with_lang = data_access.execute_query(
-            pattern_query_with_lang, 
-            (f"%{concept_input}%", f"%{concept_input}%", language)
-        )
-        
-        if pattern_match_with_lang:
-            concept_id = pattern_match_with_lang[0].get("concept_id")
-            concept_ids.append(concept_id)
-            print(f"Found concept by pattern match (with language filter): {concept_id} - {pattern_match_with_lang[0].get('text')}")
-            found_concept = True
-            continue
-        
-        # 5. Special case for Russian: try with words in different order
-        if language == 'ru':
-            # Split the input into words and try different combinations
-            words = concept_input.split()
-            if len(words) > 1:
-                print(f"Trying word combinations for Russian concept: {concept_input}")
-                
-                # Try reversed order for two-word concepts
-                if len(words) == 2:
-                    reversed_input = f"{words[1]} {words[0]}"
-                    
-                    # Try exact match with reversed order
-                    reversed_exact = data_access.execute_query(
-                        query, 
-                        (reversed_input, reversed_input)
-                    )
-                    
-                    if reversed_exact:
-                        concept_id = reversed_exact[0].get("concept_id")
-                        concept_ids.append(concept_id)
-                        print(f"Found Russian concept with reversed word order: {concept_id} - {reversed_exact[0].get('text')}")
-                        found_concept = True
-                        continue
-                
-                # Try with LIKE for each word separately
-                for word in words:
-                    if len(word) >= 3:  # Only use words that are long enough to be significant
-                        word_query = """
-                        SELECT concept_id, text
-                        FROM concepts
-                        WHERE (LOWER(text) LIKE LOWER(?) OR LOWER(normalized_text) LIKE LOWER(?))
-                        AND language = ?
-                        ORDER BY length(text) ASC
-                        """
-                        word_matches = data_access.execute_query(
-                            word_query,
-                            (f"%{word}%", f"%{word}%", language)
-                        )
-                        
-                        if word_matches:
-                            concept_id = word_matches[0].get("concept_id")
-                            concept_ids.append(concept_id)
-                            print(f"Found Russian concept containing the word '{word}': {concept_id} - {word_matches[0].get('text')}")
-                            found_concept = True
-                            break
-        
-        # 6. If still not found, try search
-        if not found_concept:            
-            # First try search with language filtering
-            search_query = {
-                "original_text": concept_input,
-                "filters": {},
-                "language": language,
-                "pagination": {"offset": 0, "limit": 10}
-            }
-            
-            if args.filter_domain:
-                search_query["filters"]["domain"] = args.filter_domain
-                
-            search_results = search_engine.search(search_query)
-            
-            found_concepts = [r for r in search_results.get("results", []) 
-                            if r.get("result_type") == "concept"]
-            
-            if found_concepts:
-                concept_id = found_concepts[0].get("concept_id")
-                concept_ids.append(concept_id)
-                print(f"Found concept by search: {concept_id} - {found_concepts[0].get('text')}")
-                found_concept = True
-            else:
-                # Try search without language filtering as a last resort
-                search_query.pop("language", None)
-                search_results = search_engine.search(search_query)
-                
-                found_concepts = [r for r in search_results.get("results", []) 
-                                if r.get("result_type") == "concept"]
-                
-                if found_concepts:
-                    concept_id = found_concepts[0].get("concept_id")
-                    concept_ids.append(concept_id)
-                    print(f"Found concept by search (without language filter): {concept_id} - {found_concepts[0].get('text')}")
-                    found_concept = True
-                else:
-                    print(f"Warning: Could not find concept '{concept_input}'")
-    
-    # If no valid concept IDs found, exit
-    if not concept_ids:
-        print("Error: No valid concept IDs found. Check your input.")
-        return
-    
-    # Generate learning path with valid concept IDs
+
+    # Generate learning path
     learning_path = search_engine.generate_learning_path(
         concept_ids,
         theory_practice_ratio=theory_ratio,
         domain=args.filter_domain
     )
-    
+
     if not learning_path:
         print("Error: Could not generate learning path. Check that concept IDs are valid.")
         return
-    
+
     # Print learning path
     print(f"\n=== Learning Path ===")
     print(f"Total Concepts: {learning_path.get('total_concepts', 0)}")
     print(f"Theoretical Concepts: {learning_path.get('theoretical_concepts', 0)}")
     print(f"Practical Concepts: {learning_path.get('practical_concepts', 0)}")
-    
-    # Fix the theory practice ratio display to handle both dictionary and float formats
+
+    # Handle different theory practice ratio formats
     theory_practice_ratio = learning_path.get('theory_practice_ratio', 0.5)
     if isinstance(theory_practice_ratio, dict):
         actual_ratio = theory_practice_ratio.get('actual', 0.5)
     else:
         actual_ratio = theory_practice_ratio
-    
+
     print(f"Theory/Practice Ratio: {actual_ratio:.2f}")
-    
+
     if args.filter_domain:
         print(f"Domain Filter: {args.filter_domain}")
-    
+
     # Print concepts in order
     concepts = learning_path.get("concepts", [])
     print(f"\nLearning Sequence:")
     for i, concept in enumerate(concepts):
         concept_class = concept.get("concept_class", "unknown")
         print(f"  {i+1}. {concept.get('text', 'N/A')} ({concept_class})")
-        
+
         # Print recommended videos if available
         recommended_videos = concept.get("recommended_videos", [])
         if recommended_videos:
             print(f"     Recommended Video: {recommended_videos[0].get('title', 'N/A')}")
             print(f"     Video URL: https://www.youtube.com/watch?v={recommended_videos[0].get('video_id', '')}")
-    
+
     # Print sections if available
     sections = learning_path.get("sections", [])
     if sections:
@@ -742,7 +657,7 @@ def generate_learning_path(search_engine, args):
 
 def search_content(search_engine, args):
     """
-    Search for content matching a query with interactive concept exploration.
+    Search for content matching a query.
 
     Args:
         search_engine: SearchEngine instance
@@ -804,12 +719,8 @@ def search_content(search_engine, args):
     # Print result items
     result_items = results.get("results", [])
     print(f"\nTop Results:")
-    
-    # Track concept results for interactive selection
-    concept_results = {}
-    
+
     for i, result in enumerate(result_items[:15]):  # Show top 15
-        result_num = i + 1
         result_type = result.get("result_type", "unknown")
         context_type = result.get("context_type", "unknown")
         text = result.get("text", "N/A")
@@ -818,13 +729,8 @@ def search_content(search_engine, args):
         video_id = result.get("video_id", "")
         video_title = result.get("video_title", "")
 
-        print(f"  {result_num}. {text}")
+        print(f"  {i+1}. {text}")
         print(f"     Type: {result_type} ({context_type})")
-        
-        # Store concept results with their index for later reference
-        if result_type == "concept" and result.get("concept_id"):
-            concept_results[result_num] = result.get("concept_id")
-            
         print(f"     Video: {video_title}")
         if video_id:
             print(f"     URL: https://www.youtube.com/watch?v={video_id}")
@@ -836,399 +742,20 @@ def search_content(search_engine, args):
 
     if len(result_items) > 15:
         print(f"  ... and {len(result_items) - 15} more results")
-    
-    # Interactive mode - offer to explore concepts
-    if concept_results:
-        print("\nConcepts found in search results. You can explore details for any concept.")
-        print("Enter the number of a concept to see details, or press Enter to continue:")
-        
-        try:
-            choice = input("> ")
-            if choice.strip() and choice.isdigit():
-                choice_num = int(choice)
-                if choice_num in concept_results:
-                    concept_id = concept_results[choice_num]
-                    display_concept_details(search_engine, concept_id)
-                else:
-                    print(f"Invalid choice: {choice}. No concept at that position.")
-        except KeyboardInterrupt:
-            print("\nExploration cancelled.")
-        except Exception as e:
-            print(f"Error during concept exploration: {e}")
 
-def reindex_all_videos(data_access, search_engine):
-    """
-    Reindex all videos to apply the new cross-video concept deduplication.
-    
-    Args:
-        data_access: DataAccess instance
-        search_engine: SearchEngine instance
-    """
-    # Get all videos
-    videos_query = "SELECT video_id FROM videos"
-    videos = data_access.execute_query(videos_query)
-    
-    if not videos:
-        print("No videos found to reindex")
-        return
-    
-    print(f"Found {len(videos)} videos to reindex")
-    
-    # Set up progress tracking
-    successful = 0
-    failed = 0
-    
-    # Reindex each video
-    for i, video in enumerate(videos):
-        video_id = video.get("video_id")
-        if not video_id:
-            continue
-            
-        print(f"Reindexing video {i+1}/{len(videos)}: {video_id}")
-        
-        try:
-            # Get cached processed result
-            from cache_manager import cache_get
-            cache_key = f"processed_video_{video_id}"
-            result = cache_get("video", cache_key)
-            
-            if not result:
-                print(f"  No cached result for video {video_id}, skipping")
-                failed += 1
-                continue
-                
-            # Apply cross-video deduplication
-            updated_result = search_engine._apply_cross_video_dedup(result)
-            
-            # Reindex the video
-            success = search_engine.data_access.index_content(updated_result)
-            
-            if success:
-                print(f"  Successfully reindexed video {video_id}")
-                successful += 1
-            else:
-                print(f"  Failed to reindex video {video_id}")
-                failed += 1
-                
-        except Exception as e:
-            print(f"  Error reindexing video {video_id}: {e}")
-            failed += 1
-    
-    print(f"\nReindexing complete: {successful} successful, {failed} failed")
-    
-    # Apply final optimizations
-    print("\nOptimizing database...")
-    search_engine.optimize_database()
-    
-    # Clear caches
-    print("Clearing caches...")
-    from cache_manager import cache_clear
-    cache_clear()
-    
-    print("Reindexing and optimization complete!")
+def show_cache_stats():
+    """Show cache statistics."""
+    stats = get_cache_stats()
 
-def display_concept_details(search_engine, concept_id):
-    """
-    Display detailed information about a concept.
-    
-    Args:
-        search_engine: SearchEngine instance
-        concept_id: Concept ID to display
-    """
-    concept = search_engine.get_concept_details(concept_id)
-    if not concept:
-        print(f"Error: Concept not found: {concept_id}")
-        return
-    
-    print(f"\n=== Concept Details: {concept.get('text', 'Unknown')} ===")
-    print(f"Concept ID: {concept_id}")
-    print(f"Domain: {concept.get('domain', 'Unknown')}")
-    print(f"Classification: {concept.get('concept_class', 'Unknown')}")
-    
-    # Display definition if available
-    if concept.get('definition'):
-        print(f"\nDefinition: {concept.get('definition')}")
-    
-    # Display variant concept IDs if available
-    variant_ids = concept.get('variant_concept_ids', [])
-    if variant_ids:
-        print(f"\nVariant Concept IDs: {len(variant_ids)}")
-        
-    # Display videos where this concept appears
-    videos = concept.get('videos', [])
-    if videos:
-        print(f"\nAppears in {len(videos)} videos:")
-        for i, video in enumerate(videos[:5]):  # Show up to 5 videos
-            print(f"  {i+1}. {video.get('title', 'Unknown')}")
-            print(f"     Video ID: {video.get('video_id', 'Unknown')}")
-            print(f"     URL: https://www.youtube.com/watch?v={video.get('video_id', '')}")
-            
-            # Show occurrences within this video
-            occurrences = video.get('occurrences', [])
-            if occurrences:
-                print(f"     Occurrences: {len(occurrences)}")
-                for j, occurrence in enumerate(occurrences[:3]):  # Show up to 3 occurrences
-                    start_time = occurrence.get('start_time', 0)
-                    time_str = f"{int(start_time // 60)}:{int(start_time % 60):02d}"
-                    context_type = occurrence.get('context_type', 'unknown')
-                    print(f"       - at {time_str} ({context_type})")
-                    
-                    # Show short context snippet
-                    context = occurrence.get('context_text', '')
-                    if context:
-                        print(f"         \"{truncate_text(context, 80)}\"")
-                
-                if len(occurrences) > 3:
-                    print(f"       ... and {len(occurrences) - 3} more occurrences")
-        
-        if len(videos) > 5:
-            print(f"  ... and {len(videos) - 5} more videos")
-    else:
-        print("\nNo videos found for this concept.")
-    
-    # Display related concepts
-    related_concepts = concept.get('related_concepts', [])
-    if related_concepts:
-        print(f"\nRelated Concepts:")
-        for i, related in enumerate(related_concepts[:10]):  # Show up to 10 related concepts
-            text = related.get('text', 'Unknown')
-            relationship = related.get('relationship', 'related')
-            relationship_type = f" ({relationship})" if relationship != "related" else ""
-            
-            # Add video count if available
-            video_count = related.get('video_count', 0)
-            video_info = f" - appears in {video_count} videos" if video_count > 1 else ""
-            
-            print(f"  {i+1}. {text}{relationship_type}{video_info}")
-            
-            # If it's a prerequisite, mark it as important
-            if relationship == "prerequisite":
-                print(f"     (Important: This is a prerequisite for understanding {concept.get('text', 'the concept')})")
-        
-        if len(related_concepts) > 10:
-            print(f"  ... and {len(related_concepts) - 10} more related concepts")
-    else:
-        print("\nNo related concepts found.")
-    
-    # Offer to explore a related concept
-    if related_concepts:
-        print("\nWould you like to explore a related concept? Enter number or press Enter to continue:")
-        try:
-            choice = input("> ")
-            if choice.strip() and choice.isdigit():
-                choice_num = int(choice)
-                if 1 <= choice_num <= len(related_concepts):
-                    related_concept_id = related_concepts[choice_num-1].get('concept_id')
-                    if related_concept_id:
-                        display_concept_details(search_engine, related_concept_id)
-                else:
-                    print(f"Invalid choice: {choice}")
-        except KeyboardInterrupt:
-            print("\nExploration cancelled.")
-        except Exception as e:
-            print(f"Error during concept exploration: {e}")
-
-def get_playlist_videos(playlist_id):
-    """
-    Get video IDs in a playlist.
-
-    Args:
-        playlist_id: YouTube playlist ID
-
-    Returns:
-        List of video IDs
-    """
-    # This is a simplified implementation
-    # In a real implementation, you would use the YouTube API
-    # to get the videos in the playlist
-
-    # For now, just check if we have this playlist in the database
-    data_access = get_data_access()
-    playlist_query = "SELECT video_ids FROM playlists WHERE playlist_id = ?"
-    playlists = data_access.execute_query(playlist_query, (playlist_id,))
-
-    if playlists and playlists[0].get("video_ids"):
-        # Split comma-separated video IDs
-        return playlists[0].get("video_ids").split(",")
-
-    # If not in database, try to get it from YouTube API if available
-    try:
-        # Import and check for YouTube API key
-        from youtube_extractor import YouTubeExtractor
-        api_key = os.environ.get("YOUTUBE_API_KEY")
-
-        if api_key:
-            # Get extractor
-            extractor = YouTubeExtractor(api_key)
-
-            # Try to get playlist items through the YouTube API
-            youtube = extractor.youtube
-
-            # Request playlist items
-            request = youtube.playlistItems().list(
-                part="snippet",
-                playlistId=playlist_id,
-                maxResults=50
-            )
-            response = request.execute()
-
-            # Extract video IDs
-            video_ids = []
-            for item in response.get("items", []):
-                video_id = item.get("snippet", {}).get("resourceId", {}).get("videoId")
-                if video_id:
-                    video_ids.append(video_id)
-
-            # Save to database for future use
-            if video_ids:
-                data_access.execute_update(
-                    "INSERT OR REPLACE INTO playlists (playlist_id, video_ids, video_count, created_at) VALUES (?, ?, ?, datetime('now'))",
-                    (playlist_id, ",".join(video_ids), len(video_ids))
-                )
-
-            return video_ids
-    except Exception as e:
-        print(f"Error getting playlist from YouTube API: {e}")
-
-    return []
-
-def show_concept_signatures(args):
-    """
-    Show concept signatures for indexed concepts.
-
-    Args:
-        args: Command-line arguments
-    """
-    if not HAS_CONCEPT_GENERATOR:
-        print("Error: concept_signature_generator module not available")
-        return
-
-    # Get the concept signature generator
-    generator = get_concept_signature_generator()
-
-    # Get relationship graph
-    graph = generator.relationship_graph
-
-    # Apply filters
-    domain = args.filter_domain
-
-    # Print summary
-    print(f"\n=== Concept Signatures ===")
-    print(f"Total Concepts: {len(graph.concepts)}")
-
-    if domain:
-        # Filter concepts by domain
-        domain_concepts = {cid: c for cid, c in graph.concepts.items() if c.domain == domain}
-        print(f"Domain Filter: {domain}")
-        print(f"Matching Concepts: {len(domain_concepts)}")
-        concepts = domain_concepts
-    else:
-        concepts = graph.concepts
-
-    # Print signatures
-    for i, (concept_id, concept) in enumerate(list(concepts.items())[:20]):  # Show top 20
-        print(f"\n{i+1}. {concept.text} (ID: {concept_id})")
-        print(f"   Domain: {concept.domain}")
-        print(f"   Class: {concept.concept_class}")
-        print(f"   Hierarchy Score: {concept.hierarchy_score:.2f}")
-        print(f"   Signature Pattern: {', '.join(concept.signature_pattern[:10])}")
-        if concept.definition:
-            print(f"   Definition: {concept.definition}")
-
-        # Print related concepts
-        if concept.related_concepts:
-            print(f"   Related Concepts:")
-            for rel_id, rel_data in list(concept.related_concepts.items())[:5]:
-                rel_concept = graph.concepts.get(rel_id)
-                if rel_concept:
-                    print(f"     - {rel_concept.text} ({rel_data.get('type', 'related')})")
-
-    if len(concepts) > 20:
-        print(f"\n... and {len(concepts) - 20} more concepts")
-
-def show_relationship_graph(args):
-    """
-    Display concept relationship graph.
-
-    Args:
-        args: Command-line arguments
-    """
-    if not HAS_CONCEPT_GENERATOR:
-        print("Error: concept_signature_generator module not available")
-        return
-
-    # Get the concept signature generator
-    generator = get_concept_signature_generator()
-
-    # Get relationship graph
-    graph = generator.relationship_graph
-
-    # Apply filters
-    domain = args.filter_domain
-
-    # Print summary
-    print(f"\n=== Concept Relationship Graph ===")
-    print(f"Total Concepts: {len(graph.concepts)}")
-    print(f"Total Relationships: {sum(len(targets) for targets in graph.adjacency_list.values())}")
-
-    if domain:
-        print(f"Domain Filter: {domain}")
-
-    # Print domains
-    domains = {}
-    for concept in graph.concepts.values():
-        domains[concept.domain] = domains.get(concept.domain, 0) + 1
-
-    print(f"\nDomain Distribution:")
-    for domain_name, count in sorted(domains.items(), key=lambda x: x[1], reverse=True):
-        print(f"  {domain_name}: {count} concepts")
-
-    # Print top concepts by hierarchy score
-    print(f"\nTop Fundamental Concepts (by hierarchy score):")
-    top_concepts = sorted(
-        graph.concepts.values(),
-        key=lambda c: c.hierarchy_score,
-        reverse=True
-    )
-
-    if domain:
-        top_concepts = [c for c in top_concepts if c.domain == domain]
-
-    for i, concept in enumerate(top_concepts[:15]):
-        print(f"  {i+1}. {concept.text}")
-        print(f"     Hierarchy Score: {concept.hierarchy_score:.2f}")
-        print(f"     Domain: {concept.domain}")
-        print(f"     Related Concepts: {len(concept.related_concepts)}")
-
-    # Print most connected concepts
-    print(f"\nMost Connected Concepts:")
-    connected_concepts = sorted(
-        graph.concepts.values(),
-        key=lambda c: len(c.related_concepts),
-        reverse=True
-    )
-
-    if domain:
-        connected_concepts = [c for c in connected_concepts if c.domain == domain]
-
-    for i, concept in enumerate(connected_concepts[:10]):
-        print(f"  {i+1}. {concept.text}")
-        print(f"     Related Concepts: {len(concept.related_concepts)}")
-        print(f"     Domain: {concept.domain}")
-
-        # Show top relationships for this concept
-        if concept.related_concepts:
-            print(f"     Top Related Concepts:")
-            for rel_id, rel_data in list(sorted(
-                concept.related_concepts.items(),
-                key=lambda x: x[1].get("strength", 0),
-                reverse=True
-            ))[:5]:
-                rel_concept = graph.concepts.get(rel_id)
-                if rel_concept:
-                    print(f"       - {rel_concept.text} ({rel_data.get('type', 'related')}, " +
-                          f"strength: {rel_data.get('strength', 0):.2f})")
-
+    print("\n=== Cache Statistics ===")
+    for cache_type, cache_stats in stats.items():
+        print(f"\n{cache_type.capitalize()} Cache:")
+        print(f"  Size: {cache_stats.get('size', 0)} items")
+        print(f"  Hits: {cache_stats.get('hits', 0)}")
+        print(f"  Misses: {cache_stats.get('misses', 0)}")
+        hit_rate = cache_stats.get('hit_rate', 0) * 100
+        print(f"  Hit Rate: {hit_rate:.2f}%")
+        print(f"  TTL: {cache_stats.get('ttl_seconds', 0)} seconds")
 
 def main():
     """Main function to run the demo."""
@@ -1241,16 +768,12 @@ def main():
         logger.info("Debug logging enabled")
 
     # Initialize components
-    data_pipeline, search_engine, data_access = init_components(args)
+    data_pipeline, search_engine, data_access, unified_extractor = init_components(args)
 
     # Clear cache if requested
     if args.clear_cache:
         cache_clear()
         print("All caches cleared")
-
-    # Optimize database if requested
-    if args.optimize_db:
-        optimize_database(data_access, search_engine)
 
     # Show cache statistics if requested
     if args.cache_stats:
@@ -1273,7 +796,7 @@ def main():
 
     elif args.list_concepts:
         # List all indexed concepts
-        list_concepts(data_access, args)
+        list_concepts(data_access, args, unified_extractor)
 
     elif args.learning_path:
         # Generate learning path
@@ -1282,22 +805,6 @@ def main():
     elif args.search:
         # Search for content
         search_content(search_engine, args)
-
-    elif args.concept_signatures:
-        # Show concept signatures
-        show_concept_signatures(args)
-
-    elif args.relationship_graph:
-        # Display concept relationship graph
-        show_relationship_graph(args)
-
-    elif args.analyze_concepts:
-        # Analyze concept relationships
-        analyze_concepts(search_engine, data_access, args)
-
-    elif args.reindex:
-        # Reindex all videos with the improved system
-        reindex_all_videos(data_access, search_engine)
 
     else:
         # No specific action requested, show help
@@ -1308,206 +815,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-def show_cache_stats():
-    """Show cache statistics."""
-    stats = get_cache_stats()
-
-    print("\n=== Cache Statistics ===")
-    for cache_type, cache_stats in stats.items():
-        print(f"\n{cache_type.capitalize()} Cache:")
-        print(f"  Size: {cache_stats.get('size', 0)} / {cache_stats.get('max_size', 0)}")
-        print(f"  Hits: {cache_stats.get('hits', 0)}")
-        print(f"  Misses: {cache_stats.get('misses', 0)}")
-        print(f"  Hit Rate: {cache_stats.get('hit_rate_percent', 0):.2f}%")
-        print(f"  TTL: {cache_stats.get('default_ttl', 0)} seconds")
-        print(f"  Valid Entries: {cache_stats.get('valid_entries', 0)}")
-        print(f"  Expired Entries: {cache_stats.get('expired_entries', 0)}")
-
-def optimize_database(data_access, search_engine):
-    """
-    Optimize the database.
-
-    Args:
-        data_access: DataAccess instance
-        search_engine: SearchEngine instance
-    """
-    print("\n=== Optimizing Database ===")
-
-    try:
-        # Execute VACUUM
-        print("Running VACUUM...")
-        data_access.execute_update("VACUUM")
-
-        # Execute ANALYZE
-        print("Running ANALYZE...")
-        data_access.execute_update("ANALYZE")
-
-        # Optimize search engine
-        print("Optimizing search index...")
-        success = search_engine.optimize_database()
-
-        if success:
-            print("Database optimization completed successfully")
-        else:
-            print("Database optimization completed with warnings")
-
-    except Exception as e:
-        print(f"Error optimizing database: {e}")
-
-def analyze_concepts(search_engine, data_access, args):
-    """
-    Analyze concept relationships across all videos.
-
-    Args:
-        search_engine: SearchEngine instance
-        data_access: DataAccess instance
-        args: Command-line arguments
-    """
-    # Get all indexed videos
-    videos_query = "SELECT video_id, title, domain, theory_practice_ratio FROM videos ORDER BY domain, title"
-    videos = data_access.execute_query(videos_query)
-
-    if not videos:
-        print("No indexed videos found")
-        return
-
-    print(f"\n=== Concept Analysis Across {len(videos)} Videos ===")
-
-    # Apply domain filter
-    if args.filter_domain:
-        videos = [v for v in videos if v.get("domain") == args.filter_domain]
-        print(f"Domain Filter: {args.filter_domain}")
-        print(f"Matching Videos: {len(videos)}")
-
-    if not videos:
-        print("No videos match the filter criteria")
-        return
-
-    # Apply playlist filter
-    if args.filter_playlist:
-        playlist_videos = get_playlist_videos(args.filter_playlist)
-        if playlist_videos:
-            videos = [v for v in videos if v.get("video_id") in playlist_videos]
-            print(f"Playlist Filter: {args.filter_playlist}")
-            print(f"Matching Videos: {len(videos)}")
-        else:
-            print(f"No videos found for playlist {args.filter_playlist}")
-            return
-
-    # Apply max videos limit if specified
-    if args.max_videos and not args.no_limit:
-        videos = videos[:args.max_videos]
-        print(f"Limited to {args.max_videos} videos")
-
-    # Collect all concepts
-    all_concepts = {}
-    video_concept_map = {}
-
-    for video in videos:
-        video_id = video.get("video_id")
-        video_concepts = search_engine.get_video_concepts(video_id)
-
-        if video_concepts:
-            concepts = video_concepts.get("concepts", [])
-            video_concept_map[video_id] = concepts
-
-            for concept in concepts:
-                concept_id = concept.get("concept_id")
-                concept_text = concept.get("text")
-
-                if concept_id and concept_text:
-                    if concept_id in all_concepts:
-                        all_concepts[concept_id]["video_count"] += 1
-                        all_concepts[concept_id]["videos"].append(video_id)
-                    else:
-                        all_concepts[concept_id] = {
-                            "id": concept_id,
-                            "text": concept_text,
-                            "domain": concept.get("domain", "unknown"),
-                            "concept_class": concept.get("concept_class", "unknown"),
-                            "video_count": 1,
-                            "videos": [video_id]
-                        }
-
-    # Print common concepts
-    common_concepts = sorted(
-        all_concepts.values(),
-        key=lambda c: c["video_count"],
-        reverse=True
-    )
-
-    print(f"\nTotal Unique Concepts: {len(all_concepts)}")
-    print(f"Most Common Concepts (appearing in multiple videos):")
-    for i, concept in enumerate(common_concepts[:20]):
-        if concept["video_count"] > 1:
-            print(f"  {i+1}. {concept['text']} (in {concept['video_count']} videos)")
-            print(f"     Class: {concept['concept_class']}")
-            print(f"     Domain: {concept['domain']}")
-
-    # Analyze domain distribution
-    domain_counts = {}
-    for concept in all_concepts.values():
-        domain = concept.get("domain", "unknown")
-        domain_counts[domain] = domain_counts.get(domain, 0) + 1
-
-    print(f"\nConcept Domain Distribution:")
-    for domain, count in sorted(domain_counts.items(), key=lambda x: x[1], reverse=True):
-        print(f"  {domain}: {count} concepts")
-
-    # Analyze concept class distribution
-    theoretical_count = sum(1 for c in all_concepts.values() if c.get("concept_class") == "theoretical")
-    practical_count = sum(1 for c in all_concepts.values() if c.get("concept_class") == "practical")
-
-    print(f"\nConcept Class Distribution:")
-    print(f"  Theoretical: {theoretical_count} concepts")
-    print(f"  Practical: {practical_count} concepts")
-
-    # Calculate video similarity based on shared concepts
-    if len(videos) > 1:
-        print(f"\nVideo Similarity Analysis (based on shared concepts):")
-
-        # For each pair of videos, calculate Jaccard similarity
-        video_ids = list(video_concept_map.keys())
-
-        # Show only the top 10 most similar pairs
-        similarities = []
-
-        for i in range(len(video_ids)):
-            for j in range(i + 1, len(video_ids)):
-                video1 = video_ids[i]
-                video2 = video_ids[j]
-
-                concepts1 = set(c.get("concept_id") for c in video_concept_map.get(video1, []))
-                concepts2 = set(c.get("concept_id") for c in video_concept_map.get(video2, []))
-
-                # Calculate Jaccard similarity
-                intersection = len(concepts1.intersection(concepts2))
-                union = len(concepts1.union(concepts2))
-
-                if union > 0:
-                    similarity = intersection / union
-
-                    # Find video titles
-                    title1 = next((v.get("title") for v in videos if v.get("video_id") == video1), "Unknown")
-                    title2 = next((v.get("title") for v in videos if v.get("video_id") == video2), "Unknown")
-
-                    similarities.append({
-                        "video1": video1,
-                        "video2": video2,
-                        "title1": title1,
-                        "title2": title2,
-                        "similarity": similarity,
-                        "shared_concepts": intersection
-                    })
-
-        # Sort by similarity
-        similarities.sort(key=lambda x: x["similarity"], reverse=True)
-
-        # Show top 10 most similar pairs
-        for i, sim in enumerate(similarities[:10]):
-            print(f"  {i+1}. {sim['title1']} & {sim['title2']}")
-            print(f"     Similarity: {sim['similarity']:.2f}")
-            print(f"     Shared Concepts: {sim['shared_concepts']}")
-
-            print(f"     Video IDs: {sim['video1']} & {sim['video2']}")
