@@ -41,11 +41,77 @@ class ConceptDedupExtension:
         self.similarity_thresholds = {
             "exact_match": 1.0,    # Exact match (after normalization)
             "high_match": 0.92,    # High confidence match
-            "medium_match": 0.85,  # Medium confidence match - REDUCED from 0.85 to avoid over-aggressive merging
-            "low_match": 0.70      # Low confidence match
+            "medium_match": 0.80,  # Medium confidence match - REDUCED from 0.85 to avoid over-aggressive merging
+            "low_match": 0.65      # Low confidence match - Reduced for better precision
         }
 
+        # Load language-specific resources
+        self._load_language_resources()
+
         logger.info(f"ConceptDedupExtension initialized with language: {language}")
+
+    def _load_language_resources(self):
+        """Load language-specific resources for better deduplication."""
+
+        # Filler phrases to be ignored for similarity calculations
+        self.filler_phrases = {
+            "en": ["the", "a", "an", "is", "are", "of", "and", "or", "in", "on", "at", "to", "for"],
+            "ru": ["это", "вот", "такое", "такой", "такая", "такие", "и", "или", "в", "на", "с", "из", "для", "к"]
+        }
+
+        # Domain-specific terms that should not be removed during normalization
+        # These are important academic terms that help distinguish concepts
+        self.domain_terms = {
+            "physics": {
+                "en": ["quantum", "wave", "function", "state", "operator", "eigenvalue", "eigenstate",
+                       "hamiltonian", "hermitian", "hilbert", "space", "momentum", "energy", "position"],
+                "ru": ["квантовый", "квантовая", "волновая", "функция", "состояние", "оператор",
+                       "собственное", "значение", "собственный", "гамильтониан", "эрмитов",
+                       "гильбертово", "пространство", "импульс", "энергия", "положение"]
+            },
+            "mathematics": {
+                "en": ["function", "derivative", "integral", "vector", "matrix", "theorem", "lemma", "proof"],
+                "ru": ["функция", "производная", "интеграл", "вектор", "матрица", "теорема", "лемма", "доказательство"]
+            }
+        }
+
+        # Words that should be treated as equivalent for similarity comparison
+        self.equivalent_terms = {
+            "physics": {
+                "en": {
+                    "wave function": ["wavefunction", "wave-function"],
+                    "quantum mechanics": ["quantum theory", "quantum physics"],
+                    "eigenvalue": ["eigen-value", "eigen value", "characteristic value"],
+                    "eigenstate": ["eigen-state", "eigen state", "characteristic state"],
+                    "hamiltonian": ["hamilton operator", "energy operator"],
+                    "hermitian operator": ["self-adjoint operator"],
+                    "hilbert space": ["state space", "vector space"]
+                },
+                "ru": {
+                    "волновая функция": ["волновой функции", "волновую функцию"],
+                    "квантовая механика": ["квантовой механики", "квантовую механику", "квантовая теория"],
+                    "собственное значение": ["собственным значением", "собственного значения", "характеристическое значение"],
+                    "собственное состояние": ["собственным состоянием", "собственного состояния"],
+                    "гамильтониан": ["оператор гамильтона", "гамильтонов оператор", "оператор энергии"],
+                    "эрмитов оператор": ["эрмитовый оператор", "эрмитова оператор", "самосопряженный оператор"],
+                    "гильбертово пространство": ["пространство состояний", "векторное пространство"]
+                }
+            }
+        }
+
+        # Common problematic phrases in Russian that should be normalized
+        self.problematic_phrases = {
+            "ru": {
+                "то обсуждений давайте": "",
+                "то состояние второго определённо такое": "",
+                "вакуумное состояние оно": "вакуумное состояние",
+                "эрмитово оператора": "эрмитов оператор",
+                "любое собственное состояние": "собственное состояние",
+                "эрмитово операторов": "эрмитов оператор",
+                "операторы рождения определенные": "операторы рождения",
+                "операторы уничтожения определенные": "операторы уничтожения"
+            }
+        }
 
     def normalize_concept_text(self, text: str, language: Optional[str] = None) -> str:
         """
@@ -73,10 +139,15 @@ class ConceptDedupExtension:
         # Remove extra whitespace
         normalized = re.sub(r'\s+', ' ', normalized).strip()
 
-        # Remove common filler phrases at beginning
+        # Language-specific normalization
         lang = language or self.language
+
         if lang == "ru":
-            # Russian filler phrases
+            # Replace problematic phrases
+            for phrase, replacement in self.problematic_phrases.get("ru", {}).items():
+                normalized = normalized.replace(phrase, replacement)
+
+            # Remove common filler phrases at beginning
             normalized = re.sub(r'^это\s+', '', normalized)   # "это " (this is)
             normalized = re.sub(r'^вот\s+', '', normalized)   # "вот " (here)
             normalized = re.sub(r'^да\s+', '', normalized)    # "да " (yes)
@@ -120,12 +191,7 @@ class ConceptDedupExtension:
             normalized = re.sub(r'^they\s+', '', normalized)   # "they " at beginning
             normalized = re.sub(r'^it\s+', '', normalized)     # "it " at beginning
 
-        # Remove common filler phrases at end
-        if lang == "ru":
-            normalized = re.sub(r'\s+это$', '', normalized)     # " это" at end
-            normalized = re.sub(r'\s+оно$', '', normalized)     # " оно" at end
-            normalized = re.sub(r'\s+такое$', '', normalized)   # " такое" at end
-        else:
+            # Remove common filler phrases at end
             normalized = re.sub(r'\s+is$', '', normalized)      # " is" at end
             normalized = re.sub(r'\s+are$', '', normalized)     # " are" at end
             normalized = re.sub(r'\s+be$', '', normalized)      # " be" at end
@@ -140,6 +206,7 @@ class ConceptDedupExtension:
             "то состояние второго", "то состояние", "состояние второго",
             "определённо такое", "второго определённо", "давайте это"
         ]
+
         if lang == "ru" and normalized in invalid_phrases:
             return ""
 
@@ -192,7 +259,7 @@ class ConceptDedupExtension:
                 "это", "вот", "то", "такое", "так", "оно", "она", "они", "мы", "вы", "я",
                 "давайте", "обсуждений", "рассмотрим", "посмотрим", "второго", "определённо",
                 "да", "нет", "просто", "только", "всегда", "сейчас", "здесь", "там",
-                "эрмитово", "оператора"  # Specific problematic terms from output
+                "буду", "будем", "могу", "можем", "можно", "нужно", "должны", "хочу"
             }
 
             # If concept is a single word and it's in the filler words list
@@ -224,12 +291,22 @@ class ConceptDedupExtension:
 
             # Check specific problematic phrases from output
             problematic_phrases = [
-                "то обсуждений давайте это",
+                "то обсуждений давайте",
                 "эрмитово оператора",
                 "то состояние второго определённо такое",
                 "то состояние второго определённо такое это",
                 "вакуумное состояние оно",
-                "любое собственное состояние"
+                "любое собственное состояние",
+                "сейчас скажу",
+                "потом обсужу",
+                "некоторого некоторой",
+                "состоянии вверх",
+                "состояние едини на2",
+                "приравняют формуле",
+                "будем дальше",
+                "буду получать",
+                "давайте тогда",
+                "эта процедура"
             ]
 
             if normalized in problematic_phrases:
@@ -239,7 +316,7 @@ class ConceptDedupExtension:
 
     def calculate_concept_similarity(self, concept1: str, concept2: str, language: Optional[str] = None) -> float:
         """
-        Calculate similarity between two concept texts.
+        Calculate similarity between two concept texts with improved algorithm.
 
         Args:
             concept1: First concept text
@@ -266,7 +343,16 @@ class ConceptDedupExtension:
             # Calculate containment score based on length ratio
             shorter = min(len(norm1), len(norm2))
             longer = max(len(norm1), len(norm2))
-            return shorter / longer * 0.95  # Slightly penalize to prioritize exact matches
+
+            # Adjust substring match score based on the ratio of lengths
+            # Closer lengths = higher similarity
+            length_ratio = shorter / longer
+
+            # If one is a substantial substring of the other and the length difference isn't too large
+            if length_ratio > 0.7:
+                return 0.9 * length_ratio  # High similarity, but not quite 1.0 (exact match)
+            else:
+                return 0.8 * length_ratio  # Lower similarity for greater length difference
 
         # Calculate string similarity
         string_similarity = difflib.SequenceMatcher(None, norm1, norm2).ratio()
@@ -285,13 +371,35 @@ class ConceptDedupExtension:
 
         word_similarity = intersection / union if union > 0 else 0.0
 
+        # Check if key domain terms are shared
+        lang = language or self.language
+
+        # Get domain terms for this language
+        domain_terms = set()
+        for domain, terms_dict in self.domain_terms.items():
+            if lang in terms_dict:
+                domain_terms.update(terms_dict[lang])
+            elif 'en' in terms_dict:  # Fallback to English
+                domain_terms.update(terms_dict['en'])
+
+        # Check if any important domain terms are shared between concepts
+        words1_domain = words1.intersection(domain_terms)
+        words2_domain = words2.intersection(domain_terms)
+        shared_domain_terms = words1_domain.intersection(words2_domain)
+
+        # Boost similarity if they share domain terms
+        domain_term_bonus = 0.0
+        if shared_domain_terms:
+            # The more shared domain terms, the higher the bonus
+            domain_term_bonus = min(0.2, len(shared_domain_terms) * 0.1)  # Cap at 0.2 boost
+
         # Weight the two similarity measures based on concept length
         if len(words1) > 2 or len(words2) > 2:
             # For longer concepts, give more weight to word similarity
-            combined_similarity = (string_similarity * 0.6) + (word_similarity * 0.4)
+            combined_similarity = (string_similarity * 0.4) + (word_similarity * 0.6) + domain_term_bonus
         else:
             # For shorter concepts, rely more on string similarity
-            combined_similarity = (string_similarity * 0.8) + (word_similarity * 0.2)
+            combined_similarity = (string_similarity * 0.7) + (word_similarity * 0.3) + domain_term_bonus
 
         # Add a penalty for Russian concepts with different scientific terms
         # This prevents merging distinct quantum mechanics concepts
@@ -309,14 +417,19 @@ class ConceptDedupExtension:
 
             # If both have important terms but they're different, reduce similarity
             if words1_important and words2_important and not words1_important.intersection(words2_important):
-                combined_similarity *= 0.7  # Apply penalty
+                # Apply stronger penalty to prevent incorrect merging
+                combined_similarity *= 0.6  # Apply penalty
 
-        return combined_similarity
+        # Cap at 1.0
+        return min(combined_similarity, 1.0)
 
-    def find_similar_concepts(self, concept: Dict[str, Any], concept_list: List[Dict[str, Any]],
-                             threshold: float = 0.8, language: Optional[str] = None) -> List[Dict[str, Any]]:
+    def find_similar_concepts(self,
+                             concept: Dict[str, Any],
+                             concept_list: List[Dict[str, Any]],
+                             threshold: float = 0.8,
+                             language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Find similar concepts to a given concept.
+        Find similar concepts to a given concept with improved matching.
 
         Args:
             concept: Source concept dictionary
@@ -368,7 +481,7 @@ class ConceptDedupExtension:
 
     def deduplicate_concepts(self, concepts: List[Dict[str, Any]], language: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Deduplicate and merge similar concepts.
+        Deduplicate and merge similar concepts with improved algorithm.
 
         Args:
             concepts: List of concept dictionaries
@@ -400,47 +513,96 @@ class ConceptDedupExtension:
         if not valid_concepts:
             return []
 
-        # Group by normalized text to identify duplicates
-        normalized_groups = defaultdict(list)
-
+        # Use normalized text for grouping
+        normalized_to_concept = {}
         for concept in valid_concepts:
             normalized = self.normalize_concept_text(concept.get("text", ""), lang)
-            if normalized:  # Skip empty normalization results
-                normalized_groups[normalized].append(concept)
+            if normalized:
+                # If we've seen this normalized text before, keep the one with higher score/frequency
+                if normalized in normalized_to_concept:
+                    existing = normalized_to_concept[normalized]
+                    existing_score = existing.get("score", 0) + existing.get("frequency", 0) * 0.5
+                    new_score = concept.get("score", 0) + concept.get("frequency", 0) * 0.5
 
-        # Select the best concept from each group
-        deduplicated = []
+                    if new_score > existing_score:
+                        normalized_to_concept[normalized] = concept
+                else:
+                    normalized_to_concept[normalized] = concept
 
-        for normalized_text, group in normalized_groups.items():
+        # Initial deduplication by exact normalized text
+        deduplicated = list(normalized_to_concept.values())
+
+        # Now find similar concepts using our improved similarity measure
+        similar_groups = []
+        remaining = deduplicated.copy()
+
+        while remaining:
+            # Take the first concept as a seed
+            seed = remaining.pop(0)
+
+            # Find all concepts similar to this seed
+            similar_to_seed = self.find_similar_concepts(
+                seed, remaining, threshold=self.similarity_thresholds["medium_match"], language=lang
+            )
+
+            # Create a group with the seed and all similar concepts
+            group = [seed] + similar_to_seed
+
+            # Remove all similar concepts from the remaining list
+            remaining = [c for c in remaining if c not in similar_to_seed]
+
+            # Add this group to our groups
+            similar_groups.append(group)
+
+        # Merge each group into a single concept
+        merged_concepts = []
+
+        for group in similar_groups:
             if len(group) == 1:
-                # Only one concept with this normalized text
-                deduplicated.append(group[0])
+                # If only one concept in the group, just add it
+                merged_concepts.append(group[0])
             else:
-                # Multiple concepts with same normalized text, select the best one
-                # Sort by score or frequency
-                group.sort(key=lambda x: (
-                    x.get("score", 0),
-                    x.get("frequency", 0)
+                # Sort by score, frequency, and word count to find the best representative
+                group.sort(key=lambda c: (
+                    c.get("score", 0) * 2 +
+                    c.get("frequency", 0) * 3 +
+                    (0.5 * len(c.get("text", "").split()))  # Slightly favor multi-word concepts
                 ), reverse=True)
 
-                # Use the highest scoring concept
-                best_concept = group[0]
+                # Use the highest scoring concept as the base
+                best_concept = group[0].copy()
 
-                # Combine frequencies
-                total_frequency = sum(c.get("frequency", 1) for c in group)
+                # Track additional information from variants
+                total_frequency = best_concept.get("frequency", 1)
+                variant_texts = []
+
+                # Merge information from other concepts in the group
+                for variant in group[1:]:
+                    # Accumulate frequency
+                    total_frequency += variant.get("frequency", 1)
+
+                    # Collect variant texts
+                    variant_texts.append(variant.get("text", ""))
+
+                    # Use definition from variant if primary doesn't have one
+                    if variant.get("definition") and not best_concept.get("definition"):
+                        best_concept["definition"] = variant["definition"]
+
+                # Update the merged concept
                 best_concept["frequency"] = total_frequency
+                best_concept["variant_texts"] = variant_texts
+                best_concept["variants_count"] = len(variant_texts)
 
-                # Take definition from any concept if available
-                for concept in group:
-                    if concept.get("definition") and not best_concept.get("definition"):
-                        best_concept["definition"] = concept["definition"]
+                merged_concepts.append(best_concept)
 
-                deduplicated.append(best_concept)
+        # Final sort by frequency and score
+        merged_concepts.sort(key=lambda x: (
+            x.get("frequency", 1) * 2 +
+            x.get("score", 0) +
+            (x.get("domain_match", False) * 3)  # Boost domain-matched concepts
+        ), reverse=True)
 
-        # Sort by score and frequency
-        deduplicated.sort(key=lambda x: (x.get("score", 0), x.get("frequency", 0)), reverse=True)
-
-        return deduplicated
+        return merged_concepts
 
 def apply_concept_deduplication(processed_result: Dict[str, Any], language: str = None) -> Dict[str, Any]:
     """

@@ -10,6 +10,7 @@ import logging
 from typing import Dict, List, Set, Any
 from collections import Counter, defaultdict
 import string
+import hashlib
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class UnifiedConceptExtractor:
                     "observable", "measurement", "probability", "amplitude", "schrodinger",
                     "dirac", "bra", "ket", "hilbert", "space", "vector", "momentum", "energy",
                     "position", "uncertainty", "principle", "entanglement", "superposition",
-                    "degeneracy", "degeneracies", "symmetry", "invariant", "transformation",
+                    "degeneracy", "symmetry", "invariant", "transformation",
                     "spin", "angular", "potential", "barrier", "time-dependent", "time-independent"
                 },
                 "ru": {
@@ -73,23 +74,37 @@ class UnifiedConceptExtractor:
                     "мера", "возбуждение", "возбужденное", "основное",
                     "вакуумное", "операторы", "рождения", "уничтожения",
                     "фоковское", "номерной", "базис", "осциллятор", "туннелирование",
-                    "бозон", "фермион", "квант", "фаза", "спектр", "когерентное",
-                    "ввели", "ввести", "общих", "общие", "число", "волновая", "моё", "наша", "общих"
+                    "бозон", "фермион", "квант", "фаза", "спектр", "когерентное"
                 }
             },
             "mathematics": {
                 "en": {"function", "variable", "equation", "theorem", "proof", "integral",
                       "derivative", "limit", "series", "vector", "matrix", "algebra",
-                      "geometry", "calculus", "topology"},
+                      "geometry", "calculus", "topology", "group", "ring", "field",
+                      "manifold", "transformation", "linear", "differential", "algebraic",
+                      "number", "theory", "analysis", "sequence", "convergence", "divergence",
+                      "continuity", "differentiable", "integrable", "metric", "norm", "basis"},
                 "ru": {"функция", "переменная", "уравнение", "теорема", "доказательство",
                       "интеграл", "производная", "предел", "ряд", "вектор",
-                      "матрица", "алгебра", "геометрия", "анализ", "топология"}
+                      "матрица", "алгебра", "геометрия", "анализ", "топология",
+                      "группа", "кольцо", "поле", "многообразие", "преобразование",
+                      "линейный", "дифференциальный", "алгебраический", "число", "теория",
+                      "последовательность", "сходимость", "расходимость", "непрерывность",
+                      "дифференцируемый", "интегрируемый", "метрика", "норма", "базис"}
             },
             "programming": {
                 "en": {"algorithm", "function", "class", "object", "method", "variable",
-                      "array", "list", "loop", "recursion", "data", "structure"},
+                      "array", "list", "loop", "recursion", "data", "structure", "complexity",
+                      "runtime", "memory", "interface", "inheritance", "polymorphism", "encapsulation",
+                      "abstraction", "library", "framework", "dependency", "module", "package",
+                      "compiler", "interpreter", "runtime", "database", "query", "transaction",
+                      "concurrency", "thread", "process", "synchronization", "parallelism"},
                 "ru": {"алгоритм", "функция", "класс", "объект", "метод", "переменная",
-                      "массив", "список", "цикл", "рекурсия", "данные", "структура"}
+                      "массив", "список", "цикл", "рекурсия", "данные", "структура",
+                      "сложность", "время", "память", "интерфейс", "наследование", "полиморфизм",
+                      "инкапсуляция", "абстракция", "библиотека", "фреймворк", "зависимость",
+                      "модуль", "пакет", "компилятор", "интерпретатор", "база данных", "запрос",
+                      "транзакция", "параллелизм", "поток", "процесс", "синхронизация"}
             }
         }
 
@@ -124,7 +139,7 @@ class UnifiedConceptExtractor:
                 r'давайте', r'мы (можем|будем|должны|могли)', r'вы (можете|будете|должны|могли)',
                 r'например', r'в качестве примера', r'шаг за шагом', r'как сделать',
                 r'на практике', r'в этом примере', r'чтобы решить', r'для реализации',
-                r'для вычисления', r'позвольте показать', r'я продемонстрирую'
+                r'для вычисления', r'позвольте показать', r'я продемонстрирую', r'рассмотрим'
             ]
         }
 
@@ -152,7 +167,7 @@ class UnifiedConceptExtractor:
                 r'\s+have$', r'\s+has$', r'\s+had$'
             ],
             "ru": [
-                # Starting phrases
+                # Starting filler phrases
                 r'^это\s+', r'^вот\s+', r'^та\s+', r'^тот\s+', r'^те\s+', r'^та\s+',
                 r'^такая\s+', r'^такой\s+', r'^такое\s+', r'^такие\s+', r'^просто\s+',
                 r'^только\s+', r'^лишь\s+', r'^да\s+', r'^ну\s+', r'^и\s+',
@@ -165,10 +180,15 @@ class UnifiedConceptExtractor:
                 r'^почему\s+', r'^зачем\s+', r'^чтобы\s+', r'^если\s+', r'^поскольку\s+',
                 r'^наверное\s+', r'^наверно\s+', r'^может\s+быть\s+', r'^возможно\s+',
                 r'^сегодня\s+', r'^затем\s+', r'^пускай\s+', r'^наше\s+',
-                r'^вас\s+', r'^обсуждений\s+',
+                r'^вас\s+', r'^обсуждений\s+', r'^ещё\s+', r'^еще\s+',
+                r'^то\s+', r'^свою\s+', r'^этот\s+', r'^некоторого\s+', r'^некоторой\s+',
 
-                # Added new patterns for commonly occurring problematic phrases
+                # Problematic phrases explicitly identified
                 r'^то\s+обсуждений\s+', r'^то\s+состояние\s+второго\s+определённо\s+',
+                r'^состояние\s+едини\s+на2\s+', r'^гравитации\s+эйнштейна\s+',
+                r'^этом\s+источнике\s+', r'^были\s+помере\s+',
+                r'^ну\s+можно\s+убедиться\s+', r'^уже\s+содержится\s+',
+                r'^потом\s+обсужу\s+', r'^сейчас\s+скажу\s+',
 
                 # Ending phrases
                 r'\s+должна$', r'\s+должен$', r'\s+должно$', r'\s+должны$',
@@ -181,9 +201,12 @@ class UnifiedConceptExtractor:
                 r'\s+еще$', r'\s+ещё$', r'\s+уже$', r'\s+тоже$', r'\s+также$',
                 r'\s+так\s+далее$', r'\s+так\s+далее\s+тому\s+подобное$',
                 r'\s+да$', r'\s+нет$', r'\s+конечно$', r'\s+точно$', r'\s+именно$',
+                r'\s+вверх$', r'\s+убедиться$', r'\s+содержится$',
+                r'\s+обсужу$', r'\s+скажу$', r'\s+приравняют\s+формуле$',
 
-                # Added common endings seen in problematic concepts
-                r'\s+давайте\s+это$', r'\s+определённо\s+такое\s+это$'
+                # Known problematic endings
+                r'\s+давайте\s+это$', r'\s+определённо\s+такое\s+это$',
+                r'\s+едини\s+на2$', r'\s+убедиться$', r'\s+формуле$'
             ]
         }
 
@@ -211,20 +234,31 @@ class UnifiedConceptExtractor:
                 "что они", "если мы", "если вы", "здесь мы", "тут мы", "например мы",
                 "приведём пример", "введем обозначение", "рассмотрим пример",
                 "давайте рассмотрим", "давайте посмотрим", "то что",
+                "сейчас скажу", "потом обсужу", "некоторого некоторой",
+                "состоянии вверх", "состояние едини на2", "приравняют формуле",
+                "чем одно состояние", "гравитации эйнштейна", "этом источнике",
+                "были помере", "ну можно убедиться", "этому гильбертово пространству",
+                "уже содержится", "описываю волну", "этот кристалл",
+                "поляризацию можно", "случаев равно", "тета получается",
+                "пространство не", "излучать так",
 
-                # Added problematic phrases seen in the output
+                # Additional problematic phrases from the output
                 "то обсуждений давайте это",
-                "то состояние второго определённо такое", "то состояние второго определённо такое это"
+                "то состояние второго определённо такое",
+                "то состояние второго определённо такое это",
+                "будем дальше", "буду получать", "запутанность давайте",
+                "единицу поэтому", "давайте тогда", "является давайте",
+                "слов давайте", "возьмём тот"
             ]
         }
 
         # Simple conjunctions and prepositions to filter
         self.simple_terms = {
             "en": {"the", "a", "an", "and", "or", "but", "if", "of", "in", "on", "at", "by", "for", "with", "about"},
-            "ru": {"и", "или", "но", "если", "в", "на", "под", "над", "при", "у", "для", "о", "об", "к", "от", "из", "до", "с", "со", "то", "такое", "который", "которая", "которое", "которые"}
+            "ru": {"и", "или", "но", "если", "в", "на", "под", "над", "при", "у", "для", "о", "об", "к", "от", "из", "до", "с", "со", "то", "такое", "такой", "такая", "такие", "который", "которая", "которое", "которые"}
         }
 
-        # Domain-specific patterns for quantum mechanics
+        # Domain-specific patterns for academic subjects
         self.domain_specific_patterns = {
             "physics": {
                 "en": [
@@ -272,19 +306,33 @@ class UnifiedConceptExtractor:
                     r'(волнов[а-я]+) (пакет[а-я]*)',
                     r'(стационарн[а-я]+) (состояни[а-я]+)',
                     r'(спинов[а-я]+) (состояни[а-я]+)',
-                    r'(унитарн[а-я]+) (оператор[а-я]*|преобразовани[а-я]*)',
-                    r'(нормировк[а-я]+) (состояни[а-я]+|волнов[а-я]+)',
-                    r'(квантов[а-я]+) (осциллятор[а-я]*)',
-                    r'(гармоническ[а-я]+) (осциллятор[а-я]*)',
-                    # Additional patterns that might match key concepts
-                    r'(наша) (волновая функция)',
-                    r'(моё) (когерентное состояние)',
-                    r'(ввели) (собственное состояние)',
-                    r'(собственное) (состояние число)',
-                    r'(общих) (собственных функций)',
-                    r'(энергия) (частицы|системы|осциллятора)',
-                    r'(волновой) (пакет)',
-                    r'(уравнение) (шредингера)'
+                    r'(унитарн[а-я]+) (оператор[а-я]*|преобразовани[а-я]*)'
+                ]
+            },
+            "mathematics": {
+                "en": [
+                    r'(linear) (algebra|transformation|map|operator)',
+                    r'(differential) (equation|form|geometry|calculus)',
+                    r'(partial) (derivative|differential)',
+                    r'(vector) (space|field|bundle|calculus)',
+                    r'(matrix) (multiplication|algebra|theory|decomposition)',
+                    r'(function) (space|theory|analysis)',
+                    r'(group) (theory|action|representation)',
+                    r'(topology) (space|theory|analysis)',
+                    r'(metric) (space|tensor|connection)',
+                    r'(fourier) (transform|analysis|series)'
+                ],
+                "ru": [
+                    r'(линейн[а-я]+) (алгебр[а-я]+|преобразовани[а-я]+|отображени[а-я]+|оператор[а-я]+)',
+                    r'(дифференциальн[а-я]+) (уравнени[а-я]+|форм[а-я]+|геометри[а-я]+|исчислени[а-я]+)',
+                    r'(частн[а-я]+) (производн[а-я]+|дифференциал[а-я]+)',
+                    r'(вектор[а-я]+) (пространств[а-я]+|пол[а-я]+|расслоени[а-я]+|исчислени[а-я]+)',
+                    r'(матричн[а-я]+) (умножени[а-я]+|алгебр[а-я]+|теори[а-я]+|разложени[а-я]+)',
+                    r'(функциональн[а-я]+) (пространств[а-я]+|теори[а-я]+|анализ[а-я]+)',
+                    r'(групп[а-я]+) (теори[а-я]+|действи[а-я]+|представлени[а-я]+)',
+                    r'(топологи[а-я]+) (пространств[а-я]+|теори[а-я]+|анализ[а-я]+)',
+                    r'(метрическ[а-я]+) (пространств[а-я]+|тензор[а-я]+|связност[а-я]+)',
+                    r'(фурье) (преобразовани[а-я]+|анализ[а-я]+|ряд[а-я]+)'
                 ]
             }
         }
@@ -297,6 +345,38 @@ class UnifiedConceptExtractor:
                 self.compiled_domain_patterns[domain][lang] = [
                     re.compile(pattern, re.IGNORECASE) for pattern in patterns
                 ]
+
+        # Invalid concepts lookup (direct terms that shouldn't be considered valid concepts)
+        self.invalid_concepts = {
+            "ru": {
+                "то обсуждений давайте", "обсуждений давайте", "то обсуждений",
+                "состояние едини на2", "состоянии вверх", "гравитации эйнштейна",
+                "этом источнике", "были помере", "ну можно убедиться",
+                "некоторого некоторой", "то состояние второго определённо такое",
+                "то состояние второго", "состояние второго", "второго определённо",
+                "сейчас скажу", "потом обсужу", "чем одно состояние",
+                "приравняют формуле", "тета получается", "случаев равно",
+                "потом эти", "можно убедиться", "некоторой функцией",
+                "теперь рассмотрим", "рассмотрим теперь", "давайте вспомним",
+                "давайте рассмотрим", "давайте теперь", "давайте сначала",
+                "вспомним что", "возьмём тот", "можем заменить", "будем дальше",
+                "буду получать", "запутанность давайте", "единицу поэтому",
+                "давайте тогда", "эта процедура", "они отвечают", "должны тогда",
+                "является давайте", "быть пропорциональна", "давайте возьмём",
+                "слов давайте", "можно сказать", "теперь если", "стоит отметить",
+                "все равно", "нет смысла", "это да", "да нет", "теперь давайте",
+                "короче говоря", "общем говоря", "следует отметить"
+            },
+            "en": {
+                "we can see", "we can say", "this is", "that is", "it is", "it's",
+                "there is", "there are", "we know", "let's", "we will",
+                "as we know", "you can see", "you can find", "you know",
+                "now let's", "now we can", "now let us", "let us now",
+                "we can now", "we now", "we then", "first we", "then we",
+                "you may", "let's try", "let's say", "it may", "it might",
+                "remember that", "note that", "we note", "we recall", "recall that"
+            }
+        }
 
     def _load_english_stopwords(self) -> Set[str]:
         """Load and return enhanced English stopwords."""
@@ -333,7 +413,15 @@ class UnifiedConceptExtractor:
             "could", "can", "may", "might", "must", "although", "however",
             "actually", "generally", "specifically", "obviously", "clearly",
             "of course", "indeed", "certainly", "probably", "possibly",
-            "apparently", "evidently", "importantly", "notably", "surely"
+            "apparently", "evidently", "importantly", "notably", "surely",
+            "firstly", "secondly", "finally", "moreover", "furthermore",
+            "therefore", "thus", "hence", "consequently", "accordingly",
+            "nonetheless", "nevertheless", "meanwhile", "subsequently",
+            "usually", "typically", "often", "sometimes", "rarely", "seldom",
+            "always", "never", "today", "yesterday", "tomorrow", "now", "then",
+            "here", "there", "everywhere", "nowhere", "anywhere", "somewhere",
+            "please", "thank", "thanks", "sorry", "excuse", "pardon", "hello", "hi",
+            "bye", "goodbye", "welcome", "whatever", "whenever", "whoever", "however"
         }
 
         return nltk_stopwords.union(additional_stopwords)
@@ -375,19 +463,25 @@ class UnifiedConceptExtractor:
             "поэтому", "равно", "нужно", "получается", "означает", "должна", "вами",
             "можем", "какой-то", "что-то", "стоит", "хочу", "буду", "видим",
             "понятно", "сделать", "например", "должны", "какие-то", "сюда",
-            "плюс", "минус", "будем", "результат",
-
-            # Additional Russian stopwords found in problematic concepts
-            "обсуждений", "второго", "определённо", "это",
-            "то", "такая", "такие", "который", "которая", "которое", "которые",
-            "ему", "себе", "чего", "чему", "этого", "такого", "одного",
-            "каждого", "затем", "потом", "сначала", "сегодня", "вчера", "завтра", "теперь",
-            "рассмотрим", "посмотрим", "увидим", "имеем", "говорили", "говорим", "скажем",
-            "согласны", "пускай", "пусть", "вас", "нами", "ними", "кого", "где-то", "что-либо",
-            "а", "однако", "также", "причем", "притом", "именно", "будь", "ваш", "ваша", "ваше",
-            "ваши", "свой", "своя", "свое", "свои", "каждый", "каждая", "каждое", "хотя",
-            "прежде", "иначе", "никак", "зато", "поскольку", "почему-то", "почему", "отсюда",
-            "откуда", "туда", "сюда", "наверху", "внизу", "сверху", "снизу", "внутри", "снаружи"
+            "плюс", "минус", "будем", "результат", "давайте", "рассмотрим",
+            "некоторого", "некоторой", "примерно", "достаточно", "недостаточно",
+            "вообще", "обычно", "кстати", "собственно", "фактически", "практически",
+            "теоретически", "сравнительно", "приблизительно", "очевидно", "просто",
+            "скажем", "допустим", "предположим", "пусть", "возьмём", "возьмем",
+            "приведём", "приведем", "покажем", "представим", "определим", "заметим",
+            "подчеркнем", "подчеркнём", "отметим", "выделим", "опишем", "объясним",
+            "рассмотрим", "обсудим", "вспомним", "напомним", "повторим", "проверим",
+            "докажем", "сформулируем", "запишем", "начнем", "начнём", "продолжим",
+            "закончим", "перейдём", "перейдем", "вернёмся", "вернемся", "остановимся",
+            "сразу", "потому", "поскольку", "причём", "причем", "вместе", "именно",
+            "вплоть", "почти", "мало", "много", "действительно", "реально", "важно",
+            "возможно", "кажется", "вероятно", "наверное", "пожалуй", "впрочем",
+            "однако", "тогда", "затем", "потом", "дальше", "сначала", "сперва",
+            "сейчас", "теперь", "опять", "снова", "ещё", "еще", "уже", "пока",
+            "лишь", "только", "совсем", "вовсе", "вообще", "никак", "отнюдь",
+            "весьма", "довольно", "слишком", "немного", "вполне", "совершенно",
+            "будто", "вроде", "как-то", "где-то", "зачем-то", "почему-то", "когда-то",
+            "некогда", "некуда", "незачем", "нигде", "никуда"
         }
 
         return nltk_stopwords.union(additional_stopwords)
@@ -435,15 +529,26 @@ class UnifiedConceptExtractor:
             normalized = normalized.replace("то обсуждений давайте", "")
             normalized = normalized.replace("то состояние второго определённо такое", "")
             normalized = normalized.replace("вакуумное состояние оно", "вакуумное состояние")
-            normalized = normalized.replace("эрмитово оператора", "эрмитово операторов")
+            normalized = normalized.replace("эрмитово оператора", "эрмитов оператор")
             normalized = normalized.replace("любое собственное состояние оно", "собственное состояние")
             normalized = normalized.replace("любое состояние оно", "состояние")
             normalized = normalized.replace("состояние оно", "состояние")
             normalized = normalized.replace("второго определённо такое", "")
+            normalized = normalized.replace("обсуждений давайте", "")
+            normalized = normalized.replace("состояние едини на2", "")
+            normalized = normalized.replace("некоторого некоторой", "")
+            normalized = normalized.replace("приравняют формуле", "")
+            normalized = normalized.replace("можно убедиться", "")
+            normalized = normalized.replace("давайте тогда", "")
+            normalized = normalized.replace("сейчас скажу", "")
+            normalized = normalized.replace("потом обсужу", "")
+            normalized = normalized.replace("теперь рассмотрим", "")
+            normalized = normalized.replace("давайте возьмём", "")
+            normalized = normalized.replace("давайте вспомним", "")
 
             # Fix partial removal of phrases that might leave dangling words
-            normalized = re.sub(r'\s+(это|оно|вот|так|такое)$', '', normalized)
-            normalized = re.sub(r'^(это|оно|вот|так|такое)\s+', '', normalized)
+            normalized = re.sub(r'\s+(это|оно|вот|так|такое|такой|такая)$', '', normalized)
+            normalized = re.sub(r'^(это|оно|вот|так|такое|такой|такая)\s+', '', normalized)
 
         # Remove any remaining leading/trailing whitespace
         normalized = re.sub(r'\s+', ' ', normalized).strip()
@@ -457,7 +562,7 @@ class UnifiedConceptExtractor:
 
     def is_valid_concept(self, text: str, language: str = None) -> bool:
         """
-        Check if text represents a valid concept.
+        Check if text represents a valid concept with enhanced validation rules.
 
         Args:
             text: Concept text
@@ -479,44 +584,116 @@ class UnifiedConceptExtractor:
         if len(normalized) < 3:
             return False
 
+        # Check against invalid concepts list
+        invalid_concepts = self.invalid_concepts.get(lang, set())
+        if normalized in invalid_concepts:
+            return False
+
         # Check word count
         words = normalized.split()
         word_count = len(words)
 
-        # Valid concept has 1-6 words - increased from 5 to catch more concepts
-        if word_count < 1 or word_count > 6:
+        # Valid concept typically has 1-4 words (for physics domain)
+        if word_count < 1 or word_count > 5:
             return False
 
         # Check if it's mostly numbers
         if sum(c.isdigit() for c in normalized) / len(normalized) > 0.3:
             return False
 
-        # Less strict stopword check - only filter single-word concepts that are stopwords
-        stopwords_set = self.stopwords.get(lang, self.stopwords.get('en', set()))
-        if word_count == 1 and normalized in stopwords_set:
-            return False
+        # Check for domain keywords
+        domain_keywords = set()
+        for domain, lang_keywords in self.domain_keywords.items():
+            domain_keywords.update(lang_keywords.get(lang, set()))
 
-        # Additional check for invalid Russian concepts
-        if lang == 'ru':
-            # Less strict check for Russian
-            # Single words ending with common verb endings are often not valid concepts
-            if word_count == 1 and any(normalized.endswith(suffix) for suffix in
-                ['ают', 'еют', 'ят']) and len(normalized) < 5:
+        # If word count is 1, require it to be a domain keyword
+        if word_count == 1 and normalized not in domain_keywords:
+            # Single words must be domain keywords (physics, math terms)
+            stopwords_set = self.stopwords.get(lang, self.stopwords.get('en', set()))
+            if normalized in stopwords_set:
                 return False
 
-            # Check for common phrases that aren't valid concepts (only the most problematic ones)
-            invalid_phrases = [
-                'то обсуждений давайте', 'то обсуждений давайте это',
-                'то состояние второго определённо такое', 'то состояние второго определённо такое это'
-            ]
+            # For Russian single words, additional validation
+            if lang == 'ru':
+                # Common verb endings that aren't usually concepts
+                invalid_endings = ["ают", "еют", "ить", "ать", "еть", "уть", "еть", "ает", "ует"]
+                if any(normalized.endswith(suffix) for suffix in invalid_endings):
+                    return False
 
-            if normalized in invalid_phrases:
-                return False
+        # Domain-specific validation
+        # For quantum physics, concepts should typically contain domain keywords
+        if word_count >= 2:
+            # For multi-word concepts, check if at least one word is a domain keyword
+            # or the whole concept matches a domain pattern
+            has_domain_keyword = any(keyword in normalized for keyword in domain_keywords)
 
-        # Check for domain keywords - if contains a domain keyword, it's more likely to be valid
-        domain_keywords = self.domain_keywords.get("physics", {}).get(lang, set())
-        if any(kw in normalized for kw in domain_keywords):
-            return True
+            # For Russian, specific validation for problematic phrases
+            if lang == 'ru':
+                # Check for phrases with "давайте" (let's) which are often invalid concepts
+                if "давайте" in normalized:
+                    return False
+
+                # Check for phrases with "будем" (we will) which are often invalid concepts
+                if "будем" in normalized:
+                    return False
+
+                # Check for phrases with forms of "мочь" (can) which are often invalid
+                if any(word in normalized for word in ["можно", "можем", "могу", "могут", "могли"]):
+                    return False
+
+                # Check for relative pronouns which often indicate invalid concepts
+                if any(word in normalized for word in ["который", "которая", "которое", "которые"]):
+                    return False
+
+                # Additional checks for problematic phrases
+                problematic_patterns = [
+                    r'то\s+\w+\s+это',  # "то [word] это" pattern
+                    r'это\s+\w+\s+такое',  # "это [word] такое" pattern
+                    r'вот\s+\w+\s+оно',  # "вот [word] оно" pattern
+                    r'давайте\s+\w+',  # "давайте [word]" pattern
+                    r'то\s+обсуждений',  # "то обсуждений" pattern
+                    r'такое\s+это',  # "такое это" pattern
+                    r'оно\s+это',  # "оно это" pattern
+                    r'то\s+состояние',  # "то состояние" pattern
+                    r'второго\s+определённо',  # "второго определённо" pattern
+                    r'эрмитово\s+оператора', # "эрмитово оператора" pattern
+                    r'будем\s+\w+',  # "будем [word]" pattern
+                    r'буду\s+\w+',  # "буду [word]" pattern
+                    r'должны\s+\w+',  # "должны [word]" pattern
+                    r'должна\s+\w+',  # "должна [word]" pattern
+                    r'^можем\s+',  # "можем ..." pattern at beginning
+                    r'^можно\s+',  # "можно ..." pattern at beginning
+                    r'теперь\s+\w+',  # "теперь [word]" pattern
+                    r'сейчас\s+\w+',  # "сейчас [word]" pattern
+                    r'потом\s+\w+',  # "потом [word]" pattern
+                ]
+
+                for pattern in problematic_patterns:
+                    if re.search(pattern, normalized):
+                        return False
+
+            # For multi-word concepts where none of the words are domain keywords,
+            # check if it looks like a domain pattern
+            if not has_domain_keyword:
+                # Check if it matches any domain-specific pattern
+                matched_domain_pattern = False
+                for domain, lang_patterns in self.compiled_domain_patterns.items():
+                    if lang in lang_patterns:
+                        for pattern in lang_patterns[lang]:
+                            if pattern.search(normalized):
+                                matched_domain_pattern = True
+                                break
+
+                    if matched_domain_pattern:
+                        break
+
+                # If it doesn't match a domain pattern and has no domain keywords, be more skeptical
+                if not matched_domain_pattern:
+                    # For concepts without domain keywords or patterns, apply stricter validation
+                    # Especially for Russian, which has more problematic extractions
+                    if lang == 'ru':
+                        # Be more strict with Russian concepts without domain keywords
+                        return False
 
         return True
 
@@ -553,7 +730,7 @@ class UnifiedConceptExtractor:
             candidates[pattern] = {
                 "text": pattern,
                 "frequency": count,
-                "score": count * 2.0,  # Reduced from 3.0 to give other extraction methods more weight
+                "score": count * 2.5,  # Higher weight for domain patterns
                 "source": "domain_pattern",
                 "domain_match": True
             }
@@ -586,7 +763,7 @@ class UnifiedConceptExtractor:
         # 3. Extract definitional concepts
         definitions = self._extract_definitions(text, lang)
         for term, definition in definitions.items():
-            score = 3.0  # Reduced from 4.0 to balance with other methods
+            score = 3.0  # High score for definitional contexts
 
             if term in candidates:
                 candidates[term]["score"] += score
@@ -601,20 +778,13 @@ class UnifiedConceptExtractor:
                     "source": "definition"
                 }
 
-        # 4. Direct search for important quantum terms (for Russian physics specifically)
-        if domain == "physics" and lang == "ru":
-            important_terms = [
-                "гамильтониан", "волновая функция", "собственное состояние", "собственное значение",
-                "эрмитов оператор", "операторы рождения", "операторы уничтожения", "когерентное состояние",
-                "матрица плотности", "собственные функции", "общих собственных функций",
-                "квантовое состояние", "квантовая механика", "принцип неопределенности",
-                "волновой пакет", "энергетический уровень", "стационарное состояние",
-                "квантовый осциллятор", "вакуумное состояние", "квантовая система"
-            ]
+        # 4. Direct search for important quantum terms (for physics domain)
+        if domain == "physics":
+            important_terms = self.domain_keywords.get("physics", {}).get(lang, set())
 
             for term in important_terms:
                 if term.lower() in text.lower():
-                    term_score = 3.0  # High score for important quantum terms
+                    term_score = 3.0  # High score for important domain terms
                     if term in candidates:
                         candidates[term]["score"] += term_score
                     else:
@@ -622,19 +792,20 @@ class UnifiedConceptExtractor:
                             "text": term,
                             "frequency": 1,
                             "score": term_score,
-                            "source": "direct_match"
+                            "source": "direct_match",
+                            "domain_match": True
                         }
 
-        # 5. Filter and validate candidates with less stringent validation
+        # 5. Filter and validate candidates
         filtered_candidates = {}
 
         for term, data in candidates.items():
-            # Lower threshold for validity - now just checking if it's completely invalid
+            # Strict validation of concepts
             if not self.is_valid_concept(term, lang):
                 continue
 
-            # Lower score threshold to extract more concepts
-            if data["score"] < 0.5:  # Reduced from 1.0
+            # Apply higher score threshold for improved quality
+            if data["score"] < 1.0:  # Increased threshold for better quality
                 continue
 
             # Normalize concept text
@@ -655,10 +826,9 @@ class UnifiedConceptExtractor:
                     break
 
             # Generate a concept ID
-            import hashlib
             concept_id = hashlib.md5(f"{normalized_text}:{domain}:{lang}".encode()).hexdigest()
 
-            # Classify as theoretical or practical (physics concepts are mostly theoretical)
+            # Classify as theoretical or practical
             is_theoretical = self._is_theoretical_concept(term, text, domain, lang)
 
             # Create the concept entry
@@ -681,11 +851,11 @@ class UnifiedConceptExtractor:
         concepts = list(filtered_candidates.values())
         concepts.sort(key=lambda x: x["score"], reverse=True)
 
-        # 7. Post-process - deduplicate similar concepts with less stringent matching
+        # 7. Post-process - deduplicate similar concepts
         deduplicated_concepts = self._deduplicate_concepts(concepts)
 
-        # Limit to top concepts - increased to extract more
-        max_concepts = 100  # Increased from 50
+        # Limit to top concepts
+        max_concepts = 50  # Reduced from 100 to focus on highest quality
 
         return deduplicated_concepts[:max_concepts]
 
@@ -725,49 +895,33 @@ class UnifiedConceptExtractor:
                 match_text = ' '.join(match_text.split()).strip()
 
                 if match_text:
-                    # Use less strict validation - we want to catch more potential concepts
+                    # Validate before adding
                     normalized = self.normalize_concept_text(match_text, language)
                     if normalized and len(normalized) >= 3:
-                        matches[match_text] = matches.get(match_text, 0) + 1
+                        if self.is_valid_concept(normalized, language):
+                            matches[match_text] = matches.get(match_text, 0) + 1
 
-        # Special processing for Russian quantum mechanics terms - expanded
+        # Special processing for Russian physics terms - expanded
         if domain == "physics" and language == "ru":
-            # List of important quantum mechanics terms to search directly
-            quantum_terms = [
-                "гамильтониан", "эрмитов", "эрмитова", "эрмитово", "собственное", "состояние",
-                "значение", "оператор", "квантовая", "квантовый", "квантовое", "механика",
-                "принцип", "неопределенность", "матрица", "плотности", "волновая", "функция",
-                "осциллятор", "нормировка", "вектор", "спин", "запутанность", "суперпозиция",
-                "коммутатор", "унитарный", "унитарное", "преобразование", "фаза", "когерентное",
-                "вакуумное", "основное", "возбужденное", "чистое", "смешанное",
-                "бозон", "фермион", "операторы", "инвариант", "симметрия",
-                "наша", "моё", "ввели", "общих", "общие", "число", "этих", "одна"
-            ]
-
-            # And common quantum physics bigrams/trigrams
+            # List of important quantum physics bigrams/trigrams
             quantum_phrases = [
                 "волновая функция", "собственное состояние", "собственное значение",
                 "эрмитов оператор", "операторы рождения", "операторы уничтожения",
                 "квантовое состояние", "квантовая механика", "принцип неопределенности",
                 "волновой пакет", "энергетический уровень", "стационарное состояние",
                 "квантовый осциллятор", "вакуумное состояние", "квантовая система",
-                "гамильтониан системы", "наша волновая функция", "моё когерентное состояние",
-                "ввели собственное состояние", "собственное состояние число",
-                "эрмитово операторов", "общих собственных функций", "нормировка состояния",
-                "общие собственные функции", "скалярное произведение", "матрица плотности"
+                "гамильтониан системы", "скалярное произведение", "матрица плотности",
+                "спиновое состояние", "угловой момент", "оператор энергии",
+                "оператор импульса", "оператор координаты", "уравнение Шредингера",
+                "базис состояний", "дискретный спектр", "непрерывный спектр",
+                "коэффициент разложения", "нормировка функции", "гармонический осциллятор",
+                "полином Эрмита", "симметрия волновой функции"
             ]
-
-            # Search for these important terms directly
-            for term in quantum_terms:
-                # Simple search without regex for efficiency
-                count = text.lower().count(term)
-                if count > 0:
-                    matches[term] = matches.get(term, 0) + count
 
             # Search for phrases
             for phrase in quantum_phrases:
                 count = text.lower().count(phrase)
-                if count > 0:
+                if count > 0 and self.is_valid_concept(phrase, language):
                     matches[phrase] = matches.get(phrase, 0) + count * 2  # Higher weight for phrases
 
         return matches
@@ -789,10 +943,11 @@ class UnifiedConceptExtractor:
         # Tokenize text
         tokens = text.lower().split()
 
-        # Filter stopwords and short tokens - less strict to catch more potential concepts
+        # Filter stopwords and short tokens
         filtered_tokens = [token for token in tokens
-                          if token not in string.punctuation
-                          and len(token) > 1]  # Reduced from 3 to 2
+                          if token not in stopwords_set
+                          and token not in string.punctuation
+                          and len(token) > 2]
 
         # Skip if too few tokens
         if len(filtered_tokens) < 3:
@@ -831,10 +986,12 @@ class UnifiedConceptExtractor:
             # Boost score for domain-specific terms
             if language == "ru" and any(keyword in [word1, word2] for keyword in
                                       ["квантовый", "квантовая", "собственное", "эрмитов", "эрмитово",
-                                       "волновая", "функция", "состояние", "оператор"]):
+                                       "волновая", "функция", "состояние", "оператор", "гамильтониан"]):
                 score *= 1.5
 
-            bigram_scores[bigram_text] = score
+            # Validate bigram and only add if valid
+            if self.is_valid_concept(bigram_text, language):
+                bigram_scores[bigram_text] = score
 
         return bigram_scores
 
@@ -855,10 +1012,11 @@ class UnifiedConceptExtractor:
         # Tokenize text
         tokens = text.lower().split()
 
-        # Filter stopwords and short tokens - less strict to catch more potential concepts
+        # Filter stopwords and short tokens
         filtered_tokens = [token for token in tokens
-                          if token not in string.punctuation
-                          and len(token) > 1]  # Reduced from 3 to 2
+                          if token not in stopwords_set
+                          and token not in string.punctuation
+                          and len(token) > 2]
 
         # Skip if too few tokens
         if len(filtered_tokens) < 4:
@@ -868,7 +1026,7 @@ class UnifiedConceptExtractor:
         trigrams = []
         for i in range(len(filtered_tokens) - 2):
             # Only use trigrams with unique tokens
-            if len(set([filtered_tokens[i], filtered_tokens[i+1], filtered_tokens[i+2]])) >= 2:  # Changed from 3 to 2
+            if len(set([filtered_tokens[i], filtered_tokens[i+1], filtered_tokens[i+2]])) >= 2:
                 # Create the trigram
                 trigram = f"{filtered_tokens[i]} {filtered_tokens[i+1]} {filtered_tokens[i+2]}"
                 # Only add if it's long enough
@@ -897,16 +1055,18 @@ class UnifiedConceptExtractor:
             # Boost score for domain-specific terms
             if language == "ru" and any(keyword in [word1, word2, word3] for keyword in
                                       ["квантовый", "квантовая", "собственное", "эрмитов", "эрмитово",
-                                       "волновая", "функция", "состояние", "оператор"]):
+                                       "волновая", "функция", "состояние", "оператор", "гамильтониан"]):
                 score *= 1.5
 
-            trigram_scores[trigram_text] = score
+            # Validate trigram and only add if valid
+            if self.is_valid_concept(trigram_text, language):
+                trigram_scores[trigram_text] = score
 
         return trigram_scores
 
     def _extract_definitions(self, text: str, language: str) -> Dict[str, str]:
         """
-        Extract definitions from text.
+        Extract definitions from text with enhanced pattern recognition.
 
         Args:
             text: Input text
@@ -922,15 +1082,19 @@ class UnifiedConceptExtractor:
             'en': [
                 r'([\w\s]+) (?:is|are) defined as ([\w\s,]+)',
                 r'([\w\s]+) (?:refers to|means|is called) ([\w\s,]+)',
-                r'(?:the|a) (?:concept|definition) of ([\w\s]+) is ([\w\s,]+)'
+                r'(?:the|a) (?:concept|definition) of ([\w\s]+) is ([\w\s,]+)',
+                r'([\w\s]+) is (?:a|an) ([\w\s,]+)',  # Simple "is a" definition
+                r'([\w\s]+) (?:is|are) (?:understood as|characterized by|represented by) ([\w\s,]+)'
             ],
             'ru': [
                 r'([\w\s]+) (?:определяется как|это|является) ([\w\s,]+)',
                 r'([\w\s]+) (?:называется|обозначает) ([\w\s,]+)',
                 r'(?:понятие|определение) ([\w\s]+) (?:это|есть) ([\w\s,]+)',
-                # Added additional Russian definition patterns
+                # Added additional patterns
                 r'([\w\s]+) (?:означает|представляет собой|подразумевает) ([\w\s,]+)',
-                r'Под ([\w\s]+) (?:понимается|подразумевается) ([\w\s,]+)'
+                r'под (?:термином|понятием)? ([\w\s]+) (?:понимается|подразумевается) ([\w\s,]+)',
+                r'([\w\s]+) — это ([\w\s,]+)',  # Em dash definition
+                r'([\w\s]+) - это ([\w\s,]+)'   # Regular dash definition
             ]
         }
 
@@ -947,6 +1111,10 @@ class UnifiedConceptExtractor:
 
                     # Skip very short terms
                     if len(term) < 3:
+                        continue
+
+                    # Skip if term doesn't pass validation
+                    if not self.is_valid_concept(term, language):
                         continue
 
                     definitions[term] = definition
@@ -990,8 +1158,10 @@ class UnifiedConceptExtractor:
 
         # Domain-specific defaults
         if domain == "physics":
-            # Physics concepts are more likely theoretical by default
+            # Physics concepts are more likely theoretical by default,
+            # especially for more complex terms with multiple words
             if word_count >= 2:
+                # For quantum physics concepts, most multi-word terms are theoretical
                 return True
 
             # Check if concept contains domain-specific terms
@@ -1005,7 +1175,7 @@ class UnifiedConceptExtractor:
 
     def _deduplicate_concepts(self, concepts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Deduplicate and merge similar concepts with less stringent similarity threshold.
+        Deduplicate and merge similar concepts.
 
         Args:
             concepts: List of concept dictionaries
@@ -1060,7 +1230,7 @@ class UnifiedConceptExtractor:
         language: str = None
     ) -> List[Dict[str, Any]]:
         """
-        Extract concepts from transcript segments.
+        Extract concepts from transcript segments with improved validation.
 
         Args:
             segments: List of transcript segments
@@ -1083,7 +1253,7 @@ class UnifiedConceptExtractor:
         segment_concepts = []
         for segment in segments:
             segment_text = segment.get("text", "")
-            if len(segment_text) > 20:  # Reduced from 50 to process more segments
+            if len(segment_text) > 30:  # Only process substantial segments
                 segment_concepts.extend(self.extract_concepts(segment_text, domain, lang))
 
         # Merge concepts from combined text and individual segments
@@ -1146,9 +1316,12 @@ class UnifiedConceptExtractor:
             concept["occurrences"] = occurrences
 
         # Sort by frequency and score
-        merged_concepts.sort(key=lambda x: (x.get("frequency", 0), x.get("score", 0)), reverse=True)
+        merged_concepts.sort(key=lambda x: (x.get("frequency", 0) * 2 + x.get("score", 0)), reverse=True)
 
-        return merged_concepts
+        # Final validation
+        validated_concepts = [c for c in merged_concepts if self.is_valid_concept(c.get("text", ""), lang)]
+
+        return validated_concepts
 
     def is_domain_keyword(self, word: str, domain: str, language: str = None) -> bool:
         """

@@ -1,6 +1,7 @@
 """
 Enhanced YouTube data extractor for the Lecture Video Content Indexer.
 Handles extraction of video metadata and transcripts with improved multilingual support.
+Added support for playlist processing.
 """
 
 import re
@@ -19,12 +20,17 @@ from cache_manager import cache_get, cache_set
 from performance_utils import time_function
 
 # Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 class YouTubeExtractor:
     """
     Extracts video metadata and transcripts from YouTube videos.
     Enhanced version with improved multilingual support and language detection.
+    Added support for playlist processing.
     """
 
     def __init__(self, api_key: str):
@@ -40,7 +46,7 @@ class YouTubeExtractor:
         # Initialize language detection
         self._init_language_detection()
 
-        logger.info("YouTubeExtractor initialized with enhanced multilingual support")
+        logger.info("YouTubeExtractor initialized with enhanced multilingual support and playlist handling")
 
     def _init_language_detection(self):
         """Initialize language detection capabilities."""
@@ -86,6 +92,7 @@ class YouTubeExtractor:
         logger.warning("Creating mock YouTube client - API calls will not work")
         mock = type('MockYouTube', (), {})()
         mock_videos = type('MockVideos', (), {})()
+        mock_playlists = type('MockPlaylists', (), {})()
         mock_list = type('MockList', (), {})()
 
         def mock_execute():
@@ -93,7 +100,9 @@ class YouTubeExtractor:
 
         mock_list.execute = mock_execute
         mock_videos.list = lambda **kwargs: mock_list
+        mock_playlists.list = lambda **kwargs: mock_list
         mock.videos = lambda: mock_videos
+        mock.playlists = lambda: mock_playlists
         mock.playlistItems = lambda: mock_videos
         return mock
 
@@ -134,6 +143,47 @@ class YouTubeExtractor:
                 return result
 
         logger.warning(f"Invalid YouTube URL format: {url}")
+        result = (False, None)
+
+        # Cache the negative result too
+        cache_set("video", cache_key, result)
+
+        return result
+
+    def validate_playlist_url(self, url: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validates a YouTube playlist URL and extracts the playlist ID.
+
+        Args:
+            url: YouTube playlist URL
+
+        Returns:
+            Tuple of (is_valid, playlist_id)
+        """
+        # Check cache first
+        cache_key = f"playlist_validation_{url}"
+        cached_result = cache_get("video", cache_key)
+        if cached_result is not None:
+            return cached_result
+
+        # Regular expression patterns for different YouTube playlist URL formats
+        patterns = [
+            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/playlist\?list=([^&\s]+)',  # Standard playlist URL
+            r'(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=[^&\s]+&list=([^&\s]+)'  # Video with playlist
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                playlist_id = match.group(1)
+                result = (True, playlist_id)
+
+                # Cache the result
+                cache_set("video", cache_key, result)
+
+                return result
+
+        logger.warning(f"Invalid YouTube playlist URL format: {url}")
         result = (False, None)
 
         # Cache the negative result too
@@ -239,6 +289,207 @@ class YouTubeExtractor:
 
             if is_test_mode:
                 mock_data = self._get_mock_metadata(video_id)
+                return mock_data
+
+            raise ValueError(error_message)
+
+    def extract_playlist_videos(self, playlist_id: str, max_results: int = 50) -> List[Dict[str, Any]]:
+        """
+        Extract video IDs and basic metadata from a YouTube playlist.
+
+        Args:
+            playlist_id: YouTube playlist ID
+            max_results: Maximum number of results to return
+
+        Returns:
+            List of dictionaries containing video ID and basic metadata
+        """
+        logger.info(f"Extracting videos from playlist: {playlist_id}")
+
+        # Check cache first
+        cache_key = f"playlist_videos_{playlist_id}_{max_results}"
+        cached_result = cache_get("video", cache_key)
+        if cached_result:
+            logger.info(f"Using cached playlist data for playlist: {playlist_id}")
+            return cached_result
+
+        # For test mode, return mock data
+        is_test_mode = self.api_key == "test_api_key" or not self.api_key
+        if is_test_mode:
+            logger.warning("Using test mode with mock playlist data")
+            mock_data = self._get_mock_playlist_videos(playlist_id)
+            cache_set("video", cache_key, mock_data)
+            return mock_data
+
+        try:
+            # Get playlist details first
+            playlist_request = self.youtube.playlists().list(
+                part="snippet",
+                id=playlist_id
+            )
+            playlist_response = playlist_request.execute()
+
+            if not playlist_response.get('items'):
+                logger.warning(f"No playlist found with ID: {playlist_id}")
+                raise ValueError(f"No playlist found with ID: {playlist_id}")
+
+            playlist_title = playlist_response['items'][0]['snippet'].get('title', 'Unknown Playlist')
+            playlist_channel = playlist_response['items'][0]['snippet'].get('channelTitle', 'Unknown Channel')
+
+            # Request playlist items from YouTube API
+            videos = []
+            next_page_token = None
+
+            while len(videos) < max_results:
+                request = self.youtube.playlistItems().list(
+                    part="snippet,contentDetails",
+                    playlistId=playlist_id,
+                    maxResults=min(50, max_results - len(videos)),
+                    pageToken=next_page_token
+                )
+                response = request.execute()
+
+                if not response.get('items'):
+                    break
+
+                # Extract video data
+                for item in response.get('items', []):
+                    content_details = item.get('contentDetails', {})
+                    snippet = item.get('snippet', {})
+
+                    video_id = content_details.get('videoId')
+                    if not video_id:
+                        continue
+
+                    # Get basic video details
+                    video_data = {
+                        "video_id": video_id,
+                        "title": snippet.get('title', 'Unknown Title'),
+                        "position": snippet.get('position', 0),
+                        "thumbnail": snippet.get('thumbnails', {}).get('medium', {}).get('url', ''),
+                        "description": snippet.get('description', ''),
+                        "playlist_id": playlist_id,
+                        "playlist_title": playlist_title,
+                        "playlist_channel": playlist_channel
+                    }
+
+                    videos.append(video_data)
+
+                # Check for next page
+                next_page_token = response.get('nextPageToken')
+                if not next_page_token:
+                    break
+
+            # Store in cache
+            cache_set("video", cache_key, videos)
+
+            logger.info(f"Successfully extracted {len(videos)} videos from playlist: {playlist_id}")
+            return videos
+
+        except googleapiclient.errors.HttpError as e:
+            error_message = f"YouTube API error when extracting playlist videos: {e}"
+            logger.error(error_message)
+
+            if is_test_mode:
+                mock_data = self._get_mock_playlist_videos(playlist_id)
+                return mock_data
+
+            raise ValueError(error_message)
+
+        except Exception as e:
+            error_message = f"Unexpected error when extracting playlist videos: {e}"
+            logger.error(error_message)
+
+            if is_test_mode:
+                mock_data = self._get_mock_playlist_videos(playlist_id)
+                return mock_data
+
+            raise ValueError(error_message)
+
+    def extract_playlist_metadata(self, playlist_id: str) -> Dict[str, Any]:
+        """
+        Extract metadata for a YouTube playlist.
+
+        Args:
+            playlist_id: YouTube playlist ID
+
+        Returns:
+            Dictionary containing playlist metadata
+        """
+        logger.info(f"Extracting metadata for playlist: {playlist_id}")
+
+        # Check cache first
+        cache_key = f"playlist_metadata_{playlist_id}"
+        cached_result = cache_get("video", cache_key)
+        if cached_result:
+            logger.info(f"Using cached metadata for playlist: {playlist_id}")
+            return cached_result
+
+        # For test mode, return mock data
+        is_test_mode = self.api_key == "test_api_key" or not self.api_key
+        if is_test_mode:
+            logger.warning("Using test mode with mock playlist metadata")
+            mock_data = self._get_mock_playlist_metadata(playlist_id)
+            cache_set("video", cache_key, mock_data)
+            return mock_data
+
+        try:
+            # Request playlist details from YouTube API
+            request = self.youtube.playlists().list(
+                part="snippet,contentDetails,status",
+                id=playlist_id
+            )
+            response = request.execute()
+
+            if not response.get('items'):
+                logger.warning(f"No playlist found with ID: {playlist_id}")
+                raise ValueError(f"No playlist found with ID: {playlist_id}")
+
+            # Extract relevant information from response
+            playlist_data = response['items'][0]
+            snippet = playlist_data.get('snippet', {})
+            content_details = playlist_data.get('contentDetails', {})
+            status = playlist_data.get('status', {})
+
+            # Enhanced language detection from metadata
+            language = self._detect_language_from_metadata(snippet)
+
+            # Create metadata object
+            metadata = {
+                "playlist_id": playlist_id,
+                "title": snippet.get('title', ''),
+                "description": snippet.get('description', ''),
+                "channel": snippet.get('channelTitle', ''),
+                "channel_id": snippet.get('channelId', ''),
+                "publication_date": snippet.get('publishedAt', ''),
+                "item_count": content_details.get('itemCount', 0),
+                "privacy_status": status.get('privacyStatus', ''),
+                "thumbnails": snippet.get('thumbnails', {}),
+                "language": language
+            }
+
+            # Store in cache
+            cache_set("video", cache_key, metadata)
+
+            logger.info(f"Successfully extracted metadata for playlist: {playlist_id}")
+            return metadata
+
+        except googleapiclient.errors.HttpError as e:
+            error_message = f"YouTube API error when extracting playlist metadata: {e}"
+            logger.error(error_message)
+
+            if is_test_mode:
+                mock_data = self._get_mock_playlist_metadata(playlist_id)
+                return mock_data
+
+            raise ValueError(error_message)
+
+        except Exception as e:
+            error_message = f"Unexpected error when extracting playlist metadata: {e}"
+            logger.error(error_message)
+
+            if is_test_mode:
+                mock_data = self._get_mock_playlist_metadata(playlist_id)
                 return mock_data
 
             raise ValueError(error_message)
@@ -360,7 +611,7 @@ class YouTubeExtractor:
         logger.info(f"Generating mock metadata for video: {video_id}")
         return {
             "video_id": video_id,
-            "title": "Test Video Title",
+            "title": f"Test Video Title for {video_id}",
             "channel": "Test Channel",
             "publication_date": "2023-01-01T00:00:00Z",
             "duration_seconds": 630,  # 10m30s
@@ -371,6 +622,61 @@ class YouTubeExtractor:
             "view_count": 1000,
             "domain": "mathematics",
             "domain_confidence": 0.8
+        }
+
+    def _get_mock_playlist_videos(self, playlist_id: str) -> List[Dict[str, Any]]:
+        """
+        Generate mock playlist videos data for testing purposes.
+
+        Args:
+            playlist_id: YouTube playlist ID
+
+        Returns:
+            List of mock video dictionaries
+        """
+        logger.info(f"Generating mock playlist videos for playlist: {playlist_id}")
+
+        # Generate 5 mock videos
+        videos = []
+        for i in range(5):
+            video_id = f"mock_video_{i}_{playlist_id[-6:]}"
+            videos.append({
+                "video_id": video_id,
+                "title": f"Test Video {i+1} in Playlist {playlist_id}",
+                "position": i,
+                "thumbnail": f"https://img.youtube.com/vi/{video_id}/default.jpg",
+                "description": f"This is a test video {i+1} in the playlist about mathematics.",
+                "playlist_id": playlist_id,
+                "playlist_title": f"Test Playlist {playlist_id}",
+                "playlist_channel": "Test Channel"
+            })
+
+        return videos
+
+    def _get_mock_playlist_metadata(self, playlist_id: str) -> Dict[str, Any]:
+        """
+        Generate mock playlist metadata for testing purposes.
+
+        Args:
+            playlist_id: YouTube playlist ID
+
+        Returns:
+            Mock playlist metadata dictionary
+        """
+        logger.info(f"Generating mock metadata for playlist: {playlist_id}")
+        return {
+            "playlist_id": playlist_id,
+            "title": f"Test Playlist Title for {playlist_id}",
+            "description": "This is a test playlist about mathematics courses.",
+            "channel": "Test Channel",
+            "channel_id": "UC123456789",
+            "publication_date": "2023-01-01T00:00:00Z",
+            "item_count": 5,
+            "privacy_status": "public",
+            "thumbnails": {
+                "default": {"url": f"https://img.youtube.com/vi/{playlist_id}/default.jpg"}
+            },
+            "language": "en"
         }
 
     @time_function(3000)  # Log warning if takes more than 3 seconds
