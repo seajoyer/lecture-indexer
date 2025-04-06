@@ -866,18 +866,21 @@ class ConceptSignatureGenerator:
         language = processing_result.get("transcript", {}).get("language", "en")
         domain = processing_result.get("metadata", {}).get("domain", "unknown")
 
-        # Process concepts
-        key_concepts = domain_features.get("key_concepts", [])
+        # Process theoretical and practical concepts
+        theoretical_concepts = domain_features.get("theoretical_concepts", [])
+        practical_concepts = domain_features.get("practical_concepts", [])
 
-        if not key_concepts or not segments:
-            logger.warning(f"No concepts ({len(key_concepts)}) or segments ({len(segments)}) found for video {video_id}")
+        all_concepts = theoretical_concepts + practical_concepts
+
+        if not all_concepts or not segments:
+            logger.warning(f"No concepts ({len(all_concepts)}) or segments ({len(segments)}) found for video {video_id}")
             return processing_result
 
         # Set language for processors
         self.mlcs_processor.language = language
 
         # Ensure concepts have proper IDs
-        for concept in key_concepts:
+        for concept in all_concepts:
             if "concept_id" not in concept:
                 import hashlib
                 # Create deterministic ID based on text, domain and language
@@ -887,7 +890,7 @@ class ConceptSignatureGenerator:
                 logger.debug(f"Generated concept_id {concept_hash} for '{text_for_hash}'")
 
         # Generate concept signatures
-        signatures = self.generate_concept_signatures(key_concepts, segments, domain, language)
+        signatures = self.generate_concept_signatures(all_concepts, segments, domain, language)
 
         # Add to relationship graph
         for signature in signatures:
@@ -928,29 +931,53 @@ class ConceptSignatureGenerator:
         # Update hierarchy scores
         self.relationship_graph.calculate_all_hierarchy_scores()
 
-        # Enhance domain features with signature information
-        enhanced_key_concepts = []
+        # Enhance domain features with signature information - separate by concept class
+        enhanced_theoretical_concepts = []
+        enhanced_practical_concepts = []
 
-        for i, concept in enumerate(key_concepts):
-            if i < len(signatures):
-                # Add signature information to concept
+        # Process theoretical concepts
+        for concept in theoretical_concepts:
+            concept_id = concept.get("concept_id")
+            matching_signature = next((s for s in signatures if s.concept_id == concept_id), None)
+
+            if matching_signature:
                 enhanced_concept = concept.copy()
-                enhanced_concept["signature_pattern"] = signatures[i].signature_pattern
-                enhanced_concept["hierarchy_score"] = signatures[i].hierarchy_score
-                enhanced_concept["confidence"] = signatures[i].confidence
-                enhanced_concept["definition"] = signatures[i].definition
-                enhanced_concept["canonical_concept_id"] = signatures[i].canonical_concept_id
+                enhanced_concept["signature_pattern"] = matching_signature.signature_pattern
+                enhanced_concept["hierarchy_score"] = matching_signature.hierarchy_score
+                enhanced_concept["confidence"] = matching_signature.confidence
+                enhanced_concept["definition"] = matching_signature.definition
+                enhanced_concept["canonical_concept_id"] = matching_signature.canonical_concept_id
                 enhanced_concept["related_concepts"] = [
                     {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
-                    for rel_id, rel_data in signatures[i].related_concepts.items()
+                    for rel_id, rel_data in matching_signature.related_concepts.items()
                 ]
-
-                enhanced_key_concepts.append(enhanced_concept)
+                enhanced_theoretical_concepts.append(enhanced_concept)
             else:
-                enhanced_key_concepts.append(concept)
+                enhanced_theoretical_concepts.append(concept)
+
+        # Process practical concepts
+        for concept in practical_concepts:
+            concept_id = concept.get("concept_id")
+            matching_signature = next((s for s in signatures if s.concept_id == concept_id), None)
+
+            if matching_signature:
+                enhanced_concept = concept.copy()
+                enhanced_concept["signature_pattern"] = matching_signature.signature_pattern
+                enhanced_concept["hierarchy_score"] = matching_signature.hierarchy_score
+                enhanced_concept["confidence"] = matching_signature.confidence
+                enhanced_concept["definition"] = matching_signature.definition
+                enhanced_concept["canonical_concept_id"] = matching_signature.canonical_concept_id
+                enhanced_concept["related_concepts"] = [
+                    {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
+                    for rel_id, rel_data in matching_signature.related_concepts.items()
+                ]
+                enhanced_practical_concepts.append(enhanced_concept)
+            else:
+                enhanced_practical_concepts.append(concept)
 
         # Update domain features
-        domain_features["key_concepts"] = enhanced_key_concepts
+        domain_features["theoretical_concepts"] = enhanced_theoretical_concepts
+        domain_features["practical_concepts"] = enhanced_practical_concepts
         domain_features["concept_signatures"] = [signature.to_dict() for signature in signatures]
 
         # Save relationship graph
@@ -961,7 +988,7 @@ class ConceptSignatureGenerator:
 
         # Make sure concept IDs get saved to database
         if self.data_access:
-            for concept in domain_features["key_concepts"]:
+            for concept in enhanced_theoretical_concepts + enhanced_practical_concepts:
                 if "concept_id" in concept and concept.get("text"):
                     # Set basic concept data
                     concept_data = {

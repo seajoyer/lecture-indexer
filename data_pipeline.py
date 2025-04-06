@@ -123,11 +123,14 @@ class DataPipeline:
             # Record language for deduplication
             detected_language = processed_transcript.get("language", "en")
 
-            # Step 6: Extract key concepts using unified extractor
+            # Step 6: Extract concepts using unified extractor
             concept_start_time = time.time()
             domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
             concept_time = time.time() - concept_start_time
-            logger.info(f"Extracted {len(domain_features['key_concepts'])} key concepts in {concept_time:.2f}s")
+
+            # Log concept statistics
+            total_concepts = len(domain_features.get('theoretical_concepts', [])) + len(domain_features.get('practical_concepts', []))
+            logger.info(f"Extracted {total_concepts} concepts in {concept_time:.2f}s")
 
             # Prepare result
             result = {
@@ -149,21 +152,26 @@ class DataPipeline:
             dedup_time = time.time() - dedup_start_time
 
             # Log deduplication statistics
-            original_count = len(domain_features['key_concepts'])
-            deduped_count = len(deduplicated_result['domain_features']['key_concepts'])
-            logger.info(f"Deduplication complete: {original_count} → {deduped_count} concepts in {dedup_time:.2f}s")
+            theoretical_before = len(domain_features.get('theoretical_concepts', []))
+            practical_before = len(domain_features.get('practical_concepts', []))
+            theoretical_after = len(deduplicated_result['domain_features'].get('theoretical_concepts', []))
+            practical_after = len(deduplicated_result['domain_features'].get('practical_concepts', []))
+
+            logger.info(f"Deduplication complete: {theoretical_before + practical_before} → {theoretical_after + practical_after} concepts in {dedup_time:.2f}s")
 
             # Calculate processing time
             processing_time = timer.stop() / 1000  # Convert from ms to seconds
             deduplicated_result["processing_time"] = processing_time
 
             # Add deduplication stats to result
-            deduplicated_result["deduplication_stats"] = {
-                "original_concept_count": original_count,
-                "deduplicated_concept_count": deduped_count,
-                "reduction_percentage": round((original_count - deduped_count) / original_count * 100, 2) if original_count > 0 else 0,
-                "processing_time": dedup_time
-            }
+            if "deduplication_stats" not in deduplicated_result:
+                deduplicated_result["deduplication_stats"] = {
+                    "original_total": theoretical_before + practical_before,
+                    "deduplicated_total": theoretical_after + practical_after,
+                    "reduction_percentage": round(((theoretical_before + practical_before) - (theoretical_after + practical_after)) /
+                                            (theoretical_before + practical_before) * 100, 2) if (theoretical_before + practical_before) > 0 else 0,
+                    "processing_time": dedup_time
+                }
 
             # Cache the result
             cache_set("video", cache_key, deduplicated_result)
@@ -173,6 +181,29 @@ class DataPipeline:
 
             logger.info(f"Successfully processed video {video_id} in {processing_time:.2f} seconds")
             return deduplicated_result
+
+        except Exception as e:
+            logger.error(f"Error processing video {video_url}: {e}")
+            error_result = {
+                "job_id": job_id,
+                "status": "error",
+                "error": str(e),
+                "video_url": video_url,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # If we have a video_id, include it
+            if 'video_id' in locals() and video_id:
+                error_result["video_id"] = video_id
+
+            # If we have metadata, include it
+            if 'metadata' in locals() and metadata:
+                error_result["metadata"] = metadata
+
+            # Save error result
+            self._save_result(error_result)
+
+            return error_result
 
         except Exception as e:
             logger.error(f"Error processing video {video_url}: {e}")
@@ -307,6 +338,7 @@ class DataPipeline:
             }
         }
 
+    # Update the _extract_domain_features method:
     def _extract_domain_features(self, processed_transcript: Dict, domain: str) -> Dict[str, Any]:
         """
         Extract domain-specific features from processed transcript using the unified concept extractor.
@@ -322,18 +354,21 @@ class DataPipeline:
         language = processed_transcript.get("language", "en")
 
         # Use the unified concept extractor to extract concepts from segments
-        key_concepts = self.concept_extractor.extract_concepts_from_segments(segments, domain, language)
+        concept_results = self.concept_extractor.extract_concepts_from_segments(segments, domain, language)
 
-        # Organize concepts by theoretical/practical
-        theoretical_concepts = [c for c in key_concepts if c.get("concept_class") == "theoretical"]
-        practical_concepts = [c for c in key_concepts if c.get("concept_class") == "practical"]
+        # Get theoretical and practical concepts directly
+        theoretical_concepts = concept_results.get("theoretical_concepts", [])
+        practical_concepts = concept_results.get("practical_concepts", [])
 
-        # Find relationships between concepts (simplified)
-        concept_relationships = self._find_concept_relationships(key_concepts)
+        # Find relationships between concepts
+        concept_relationships = self._find_concept_relationships(theoretical_concepts + practical_concepts)
+
+        # Log the concept counts
+        total_concepts = len(theoretical_concepts) + len(practical_concepts)
+        logger.info(f"Extracted {total_concepts} concepts: {len(theoretical_concepts)} theoretical, {len(practical_concepts)} practical")
 
         return {
             "domain": domain,
-            "key_concepts": key_concepts,
             "theoretical_concepts": theoretical_concepts,
             "practical_concepts": practical_concepts,
             "concept_relationships": concept_relationships

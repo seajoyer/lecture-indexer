@@ -83,6 +83,83 @@ class Demo:
             logger.error(f"Error initializing demo: {e}")
             raise e
 
+    def print_concepts_by_category(self, theoretical_concepts: List[Dict[str, Any]], practical_concepts: List[Dict[str, Any]], limit: int = 25) -> None:
+        """
+        Print concepts organized by category.
+
+        Args:
+            theoretical_concepts: List of theoretical concepts
+            practical_concepts: List of practical concepts
+            limit: Maximum number of concepts to display per category
+        """
+        # Sort concepts by score and frequency
+        theoretical_concepts = sorted(theoretical_concepts, key=lambda x: (
+            x.get("score", 0) * 0.6 + x.get("frequency", 0) * 0.4
+        ), reverse=True)
+
+        practical_concepts = sorted(practical_concepts, key=lambda x: (
+            x.get("score", 0) * 0.6 + x.get("frequency", 0) * 0.4
+        ), reverse=True)
+
+        # Prepare and print theoretical concepts table
+        if theoretical_concepts:
+            headers = ["#", "Concept", "Score", "Frequency", "Definition"]
+            rows = []
+
+            for i, concept in enumerate(theoretical_concepts[:limit]):
+                # Truncate long definitions for display
+                definition = concept.get("definition", "")
+                if definition and len(definition) > 50:
+                    definition = definition[:47] + "..."
+
+                # Build the row
+                row = [
+                    i+1,
+                    concept.get("text", "N/A"),
+                    f"{concept.get('score', 0):.2f}",
+                    concept.get("frequency", 0),
+                    definition
+                ]
+                rows.append(row)
+
+            # Print table
+            print("\n=== Top Theoretical Concepts ===")
+            print(tabulate(rows, headers=headers, tablefmt="pretty"))
+
+            if len(theoretical_concepts) > limit:
+                print(f"...and {len(theoretical_concepts) - limit} more theoretical concepts")
+
+        # Prepare and print practical concepts table
+        if practical_concepts:
+            headers = ["#", "Concept", "Score", "Frequency", "Definition"]
+            rows = []
+
+            for i, concept in enumerate(practical_concepts[:limit]):
+                # Truncate long definitions for display
+                definition = concept.get("definition", "")
+                if definition and len(definition) > 50:
+                    definition = definition[:47] + "..."
+
+                # Build the row
+                row = [
+                    i+1,
+                    concept.get("text", "N/A"),
+                    f"{concept.get('score', 0):.2f}",
+                    concept.get("frequency", 0),
+                    definition
+                ]
+                rows.append(row)
+
+            # Print table
+            print("\n=== Top Practical Concepts ===")
+            print(tabulate(rows, headers=headers, tablefmt="pretty"))
+
+            if len(practical_concepts) > limit:
+                print(f"...and {len(practical_concepts) - limit} more practical concepts")
+
+        if not theoretical_concepts and not practical_concepts:
+            print("\nNo concepts found.")
+
     def process_video(self, url: str, language_preference: List[str] = None) -> None:
         """
         Process a YouTube video through the pipeline.
@@ -109,6 +186,11 @@ class Demo:
                 transcript = result.get("transcript", {})
                 domain_features = result.get("domain_features", {})
 
+                # Get concept counts directly from theoretical and practical lists
+                theoretical_concepts = domain_features.get("theoretical_concepts", [])
+                practical_concepts = domain_features.get("practical_concepts", [])
+                total_concepts = len(theoretical_concepts) + len(practical_concepts)
+
                 print("\n=== Video Processed Successfully ===")
                 print(f"Video ID: {result.get('video_id')}")
                 print(f"Title: {metadata.get('title', 'N/A')}")
@@ -116,13 +198,13 @@ class Demo:
                 print(f"Domain: {metadata.get('domain', 'unknown')}")
                 print(f"Language: {transcript.get('language', 'unknown')}")
                 print(f"Segments: {len(transcript.get('segments', []))}")
-                print(f"Key Concepts: {len(domain_features.get('key_concepts', []))}")
-                print(f"Theoretical Concepts: {len(domain_features.get('theoretical_concepts', []))}")
-                print(f"Practical Concepts: {len(domain_features.get('practical_concepts', []))}")
+                print(f"Total Concepts: {total_concepts}")
+                print(f"Theoretical Concepts: {len(theoretical_concepts)}")
+                print(f"Practical Concepts: {len(practical_concepts)}")
                 print(f"Processing Time: {processing_time:.2f} seconds")
 
-                # Print key concepts
-                self.print_concepts(domain_features.get("key_concepts", []), limit=50)
+                # Print concepts by category
+                self.print_concepts_by_category(theoretical_concepts, practical_concepts)
 
                 return result
             else:
@@ -336,8 +418,10 @@ class Demo:
             theoretical = [c for c in concepts if c.get("concept_class") == "theoretical"]
             practical = [c for c in concepts if c.get("concept_class") == "practical"]
 
+            total_count = len(theoretical) + len(practical)
+
             print("\n=== Concepts Summary ===")
-            print(f"Total Concepts: {len(concepts)}")
+            print(f"Total Concepts: {total_count}")
             print(f"Theoretical Concepts: {len(theoretical)}")
             print(f"Practical Concepts: {len(practical)}")
 

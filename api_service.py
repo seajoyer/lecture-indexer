@@ -346,7 +346,9 @@ async def process_video(url: str, language: str):
         if result.get("status") == "completed":
             success = search_engine.index_content(result)
             if success:
-                logger.info(f"Successfully processed and indexed video: {result.get('video_id')}")
+                theoretical_count = len(result.get("domain_features", {}).get("theoretical_concepts", []))
+                practical_count = len(result.get("domain_features", {}).get("practical_concepts", []))
+                logger.info(f"Successfully processed and indexed video {result.get('video_id')}: {theoretical_count} theoretical and {practical_count} practical concepts")
             else:
                 logger.error(f"Failed to index video: {result.get('video_id')}")
         else:

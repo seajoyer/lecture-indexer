@@ -957,12 +957,13 @@ class UnifiedConceptExtractor:
         # For single words, depend on domain
         return True  # Default to theoretical for academic content
 
+    # Key changes in extract_concepts_from_segments method:
     def extract_concepts_from_segments(
         self,
         segments: List[Dict[str, Any]],
         domain: str = "physics",
         language: str = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Extract concepts from transcript segments with improved validation.
 
@@ -972,7 +973,7 @@ class UnifiedConceptExtractor:
             language: Language code
 
         Returns:
-            List of extracted concepts
+            Dictionary containing theoretical and practical concepts
         """
         # Use specified language or default
         lang = language or self.language
@@ -1066,10 +1067,19 @@ class UnifiedConceptExtractor:
         result_concepts = list(concept_map.values())
         result_concepts.sort(key=lambda x: (x.get("frequency", 0) * 2 + x.get("score", 0)), reverse=True)
 
+        # Separate concepts into theoretical and practical
+        theoretical_concepts = [c for c in result_concepts if c.get("concept_class") == "theoretical"]
+        practical_concepts = [c for c in result_concepts if c.get("concept_class") == "practical"]
+
         processing_time = time.time() - start_time
         logger.info(f"Concept extraction completed in {processing_time:.2f} seconds, found {len(result_concepts)} unique concepts")
+        logger.info(f"Theoretical concepts: {len(theoretical_concepts)}, Practical concepts: {len(practical_concepts)}")
 
-        return result_concepts
+        # Return dictionary with theoretical and practical concepts
+        return {
+            "theoretical_concepts": theoretical_concepts,
+            "practical_concepts": practical_concepts
+        }
 
     def is_domain_keyword(self, word: str, domain: str, language: str = None) -> bool:
         """

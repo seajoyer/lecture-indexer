@@ -317,8 +317,8 @@ class DataAccess:
             # First get concepts matching filters without requiring occurrences
             query = """
             SELECT c.*,
-                   COUNT(DISTINCT o.video_id) as video_count,
-                   COUNT(DISTINCT o.occurrence_id) as occurrence_count
+                COUNT(DISTINCT o.video_id) as video_count,
+                COUNT(DISTINCT o.occurrence_id) as occurrence_count
             FROM concepts c
             LEFT JOIN occurrences o ON c.concept_id = o.concept_id
             """
@@ -1519,41 +1519,83 @@ class DataAccess:
 
         return results
 
-    def get_video_concepts(self, video_id: str) -> Optional[Dict[str, Any]]:
+    def get_video_concepts(
+        self,
+        video_id: str,
+        context_type: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Get all concept and pattern information for a video.
-        Only returns canonical concepts (not duplicates/variants).
+        Get concepts extracted from a video with separate theoretical and practical lists.
 
         Args:
             video_id: YouTube video ID
+            context_type: Optional context type filter
 
         Returns:
-            Dictionary with video concepts and patterns
+            Dictionary with video concepts or None if not found
         """
-        # Check cache
-        cache_key = self._get_cache_key("video_concept_data", (video_id,))
-        cached_result = self._get_from_cache(cache_key)
-        if cached_result is not None:
-            return cached_result
+        try:
+            # Check cache first
+            cache_key = self._get_cache_key("video_concepts", (video_id, context_type))
+            cached_result = self._get_from_cache(cache_key)
+            if cached_result is not None:
+                return cached_result
 
-        video = self.get_video(video_id)
-        if not video:
+            # First check if there are any concepts in the database
+            count_query = "SELECT COUNT(*) as count FROM concepts"
+            count_result = self.execute_query(count_query)
+            if count_result and count_result[0]["count"] == 0:
+                logger.warning("No concepts found in database")
+                return []
+
+            # Check if there are any occurrences for this video
+            occurrence_count_query = "SELECT COUNT(*) as count FROM occurrences WHERE video_id = ?"
+            occurrence_count = self.execute_query(occurrence_count_query, (video_id,))
+            if occurrence_count and occurrence_count[0]["count"] == 0:
+                logger.warning(f"No concept occurrences found for video {video_id}")
+                return []
+
+            # Query for concepts in this video
+            query = """
+            SELECT c.*, COUNT(o.occurrence_id) as occurrence_count,
+                MAX(o.start_time) as last_occurrence_time
+            FROM concepts c
+            JOIN occurrences o ON c.concept_id = o.concept_id
+            WHERE o.video_id = ?
+            AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '') -- Only include canonical concepts
+            """
+            params = [video_id]
+
+            if context_type:
+                query += " AND c.concept_class = ?"
+                params.append(context_type)
+
+            query += " GROUP BY c.concept_id ORDER BY occurrence_count DESC, last_occurrence_time"
+
+            all_concepts = self.execute_query(query, tuple(params))
+
+            # Separate into theoretical and practical concepts
+            theoretical_concepts = [c for c in all_concepts if c.get("concept_class") == "theoretical"]
+            practical_concepts = [c for c in all_concepts if c.get("concept_class") == "practical"]
+
+            video = self.get_video(video_id)
+
+            result = {
+                "video": video,
+                "concepts": all_concepts,
+                "theoretical_concepts": theoretical_concepts,
+                "practical_concepts": practical_concepts,
+                "theory_practice_ratio": video.get("theory_practice_ratio", 0.5)
+            }
+
+            # Cache the result
+            self._set_in_cache(cache_key, result)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting video concepts: {e}")
             return None
-
-        concepts = self.get_concepts_for_video(video_id)
-
-        result = {
-            "video": video,
-            "concepts": concepts,
-            "theory_practice_ratio": video.get("theory_practice_ratio", 0.5)
-        }
-
-        # Cache the result
-        self._set_in_cache(cache_key, result)
-
-        return result
-
-    # SEARCH OPERATIONS
 
     def build_enhanced_search_query(self, query_text: str, domain: Optional[str] = None, language: Optional[str] = None) -> str:
         """

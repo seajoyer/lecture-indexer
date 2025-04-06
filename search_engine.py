@@ -1024,15 +1024,15 @@ class SearchEngine:
 
             # Extract video and concept information
             video = video_data.get("video", {})
-            concepts = video_data.get("concepts", [])
+            all_concepts = video_data.get("concepts", [])
 
             # Filter concepts by context_type if specified
             if context_type:
-                concepts = [c for c in concepts if c.get("concept_class") == context_type]
+                all_concepts = [c for c in all_concepts if c.get("concept_class") == context_type]
 
             # Group concepts by class (theoretical vs practical)
-            theoretical_concepts = [c for c in concepts if c.get("concept_class") == "theoretical"]
-            practical_concepts = [c for c in concepts if c.get("concept_class") == "practical"]
+            theoretical_concepts = [c for c in all_concepts if c.get("concept_class") == "theoretical"]
+            practical_concepts = [c for c in all_concepts if c.get("concept_class") == "practical"]
 
             # Get segments for the video
             segments_query = """
@@ -1065,12 +1065,12 @@ class SearchEngine:
             # Build enhanced result
             result = {
                 "video": video,
-                "concepts": concepts,
+                "concepts": all_concepts,
                 "theoretical_concepts": theoretical_concepts,
                 "practical_concepts": practical_concepts,
                 "timeline": timeline,
                 "theory_practice_ratio": video.get("theory_practice_ratio", 0.5),
-                "total_concepts": len(concepts),
+                "total_concepts": len(all_concepts),
                 "theoretical_count": len(theoretical_concepts),
                 "practical_count": len(practical_concepts)
             }
@@ -1861,15 +1861,19 @@ class SearchEngine:
                 logger.error(f"Failed to save segments for {video_id}")
                 return False
 
-            # Save concepts in batches
-            key_concepts = domain_features.get("key_concepts", [])
-            if not key_concepts:
+            # Save concepts in batches - process theoretical and practical concepts separately
+            theoretical_concepts = domain_features.get("theoretical_concepts", [])
+            practical_concepts = domain_features.get("practical_concepts", [])
+
+            all_concepts = theoretical_concepts + practical_concepts
+
+            if not all_concepts:
                 logger.warning(f"No concepts found for video {video_id}")
                 # We still want to return True as the segments were saved successfully
                 return True
 
             # Make sure all concepts have domain and language
-            for concept in key_concepts:
+            for concept in all_concepts:
                 if "domain" not in concept:
                     concept["domain"] = domain
                 if "language" not in concept:
@@ -1884,8 +1888,8 @@ class SearchEngine:
             successful_concepts = 0
             concept_ids = []
 
-            for i in range(0, len(key_concepts), batch_size):
-                batch = key_concepts[i:i + batch_size]
+            for i in range(0, len(all_concepts), batch_size):
+                batch = all_concepts[i:i + batch_size]
                 for concept in batch:
                     concept_data = concept.copy()
                     concept_data["video_id"] = video_id
@@ -1910,30 +1914,8 @@ class SearchEngine:
                             # Save occurrences
                             self.data_access.save_occurrences(concept_id, occurrences)
 
-            # Save theoretical and practical concepts
-            theoretical_concepts = domain_features.get("theoretical_concepts", [])
-            practical_concepts = domain_features.get("practical_concepts", [])
-
-            # Save theoretical concepts
-            for concept in theoretical_concepts:
-                concept_data = concept.copy()
-                concept_data["video_id"] = video_id
-                concept_data["domain"] = domain
-                concept_data["language"] = language
-                concept_data["concept_class"] = "theoretical"
-                self.data_access.save_concept(concept_data)
-
-            # Save practical concepts
-            for concept in practical_concepts:
-                concept_data = concept.copy()
-                concept_data["video_id"] = video_id
-                concept_data["domain"] = domain
-                concept_data["language"] = language
-                concept_data["concept_class"] = "practical"
-                self.data_access.save_concept(concept_data)
-
             # Log success and clear related caches
-            logger.info(f"Successfully indexed {successful_concepts}/{len(key_concepts)} concepts for video {video_id}")
+            logger.info(f"Successfully indexed {successful_concepts}/{len(all_concepts)} concepts for video {video_id}")
 
             # Clear caches related to this video
             self.data_access.clear_cache(f"video_{video_id}")

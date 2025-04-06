@@ -413,7 +413,7 @@ class ConceptDedupExtension:
 
 def apply_concept_deduplication(processed_result: Dict[str, Any], language: str = None) -> Dict[str, Any]:
     """
-    Apply unified concept deduplication across all concept categories.
+    Apply unified concept deduplication across theoretical and practical concepts.
 
     Args:
         processed_result: Video processing result dictionary
@@ -430,12 +430,11 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
     video_language = processed_result.get("transcript", {}).get("language", "en")
     language = language or video_language
 
-    # Extract concepts from all categories
-    key_concepts = domain_features.get("key_concepts", [])
+    # Extract concepts by category
     theoretical_concepts = domain_features.get("theoretical_concepts", [])
     practical_concepts = domain_features.get("practical_concepts", [])
 
-    total_concepts = len(key_concepts) + len(theoretical_concepts) + len(practical_concepts)
+    total_concepts = len(theoretical_concepts) + len(practical_concepts)
     if total_concepts == 0:
         logger.info("No concepts to deduplicate")
         return processed_result  # Nothing to deduplicate
@@ -446,15 +445,6 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
     # Track original category for each concept
     all_concepts = []
     concept_origins = {}  # concept_id -> original category
-
-    # Add key concepts with category tracking
-    for concept in key_concepts:
-        concept_copy = concept.copy()
-        concept_copy["category"] = "key_concepts"
-        concept_id = concept_copy.get("concept_id")
-        if concept_id:
-            concept_origins[concept_id] = "key_concepts"
-        all_concepts.append(concept_copy)
 
     # Add theoretical concepts with category tracking
     for concept in theoretical_concepts:
@@ -484,7 +474,6 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
     logger.info(f"Deduplicated from {len(all_concepts)} to {len(deduplicated_concepts)} concepts in {dedup_time:.2f}s")
 
     # Now we need to reconstruct the category-specific lists
-    new_key_concepts = []
     new_theoretical_concepts = []
     new_practical_concepts = []
 
@@ -514,10 +503,6 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
         if "original_categories" in clean_concept:
             del clean_concept["original_categories"]
 
-        # Place in appropriate lists based on original categorization
-        if belongs_to_category(concept, "key_concepts"):
-            new_key_concepts.append(clean_concept)
-
         # Check if it belongs in theoretical list
         if belongs_to_category(concept, "theoretical_concepts") or concept.get("concept_class") == "theoretical":
             new_theoretical_concepts.append(clean_concept)
@@ -527,12 +512,10 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
             new_practical_concepts.append(clean_concept)
 
     # Update domain features with deduplicated concept lists
-    domain_features["key_concepts"] = new_key_concepts
     domain_features["theoretical_concepts"] = new_theoretical_concepts
     domain_features["practical_concepts"] = new_practical_concepts
 
     # Log deduplication results for each category
-    logger.info(f"Key concepts: {len(key_concepts)} → {len(new_key_concepts)}")
     logger.info(f"Theoretical concepts: {len(theoretical_concepts)} → {len(new_theoretical_concepts)}")
     logger.info(f"Practical concepts: {len(practical_concepts)} → {len(new_practical_concepts)}")
 
@@ -545,8 +528,6 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
         "deduplicated_total": len(deduplicated_concepts),
         "reduction_percentage": round((len(all_concepts) - len(deduplicated_concepts)) / len(all_concepts) * 100, 2) if all_concepts else 0,
         "processing_time_seconds": dedup_time,
-        "key_concepts_original": len(key_concepts),
-        "key_concepts_deduplicated": len(new_key_concepts),
         "theoretical_concepts_original": len(theoretical_concepts),
         "theoretical_concepts_deduplicated": len(new_theoretical_concepts),
         "practical_concepts_original": len(practical_concepts),
