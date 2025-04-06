@@ -81,6 +81,10 @@ class SearchEngine:
             "high_confidence": 1.2,  # High classification confidence
             "medium_confidence": 1.0, # Medium classification confidence
             "low_confidence": 0.8,   # Low classification confidence
+
+            # NEW: Educational content weights
+            "educational": 2.0,      # Strong boost for educational content (vs passing mention)
+            "educational_weight": 0.4 # Multiplier for educational weight score
         }
 
     @time_function(2000)  # Log warning if takes more than 2 seconds
@@ -462,6 +466,7 @@ class SearchEngine:
     ) -> Dict[str, Any]:
         """
         Enhance search results with improved ranking and organization.
+        Prioritizes educational content over passing mentions.
 
         Args:
             base_results: Base search results from data access layer
@@ -475,7 +480,7 @@ class SearchEngine:
         """
         results = base_results.get("results", [])
 
-        # Apply advanced ranking to results
+        # Apply advanced ranking to results with educational content boost
         ranked_results = self._rank_results(results, query_text, theory_practice_ratio, language)
 
         # Calculate result type statistics
@@ -495,11 +500,17 @@ class SearchEngine:
         concepts = {}
         domain_counts = Counter()
         language_counts = Counter()  # Track languages
+        educational_counts = Counter() # Track educational vs passing mention counts
 
         for result in ranked_results:
             if result.get("result_type") == "concept":
                 concept_id = result.get("concept_id")
                 concepts[concept_id] = result
+
+                # Track if this is an educational concept or passing mention
+                is_educational = result.get("is_educational", False)
+                educational_type = "educational" if is_educational else "passing_mention"
+                educational_counts[educational_type] += 1
 
             result_domain = result.get("domain")
             if result_domain:
@@ -525,6 +536,10 @@ class SearchEngine:
             "languageDistribution": [
                 {"language": lang, "count": count}
                 for lang, count in language_counts.most_common()
+            ],
+            "educationalDistribution": [
+                {"type": edu_type, "count": count}
+                for edu_type, count in educational_counts.most_common()
             ]
         }
 
@@ -543,7 +558,7 @@ class SearchEngine:
         language: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Apply advanced ranking algorithm to search results with language support.
+        Apply advanced ranking algorithm to search results with educational content boost.
 
         Args:
             results: List of search results
@@ -613,6 +628,17 @@ class SearchEngine:
             result_language = result.get("language")
             if language and result_language and language == result_language:
                 score += 0.5  # Boost score for language match
+
+            # Factor 5: Educational content boost (NEW)
+            # Prioritize educational content over passing mentions
+            is_educational = result.get("is_educational", False)
+            educational_weight = result.get("educational_weight", 0.0)
+
+            if is_educational:
+                score += 2.0  # Significant boost for educational content
+
+            # Add weighted educational score
+            score += min(educational_weight, 5.0) * 0.4
 
             # Store score and add to results
             result["relevance_score"] = round(score, 2)
@@ -702,10 +728,31 @@ class SearchEngine:
                 "language": language
             })
 
+        # NEW: Suggest focusing on educational content
+        # Check if we have a mix of educational and passing mentions
+        educational_concepts = [r for r in results if r.get("result_type") == "concept" and r.get("is_educational", False)]
+        passing_mentions = [r for r in results if r.get("result_type") == "concept" and not r.get("is_educational", False)]
+
+        if educational_concepts and passing_mentions and len(educational_concepts) < len(passing_mentions):
+            suggestions.append({
+                "type": "educational_focus",
+                "text": f"Focus on educational explanations of {query_text}",
+                "filter": "educational",
+                "query": query_text,
+                "language": language
+            })
+
         # Suggest learning path for complex subjects
         if len(results) > 5 and any(r.get("result_type") == "concept" for r in results):
+            # Prioritize educational concepts for learning paths
             concept_ids = [r.get("concept_id") for r in results
-                        if r.get("result_type") == "concept" and r.get("concept_id")]
+                        if r.get("result_type") == "concept" and r.get("concept_id") and r.get("is_educational", False)]
+
+            # Fall back to all concepts if no educational ones found
+            if not concept_ids:
+                concept_ids = [r.get("concept_id") for r in results
+                            if r.get("result_type") == "concept" and r.get("concept_id")]
+
             if concept_ids:
                 suggestions.append({
                     "type": "learning_path",
@@ -731,6 +778,7 @@ class SearchEngine:
             })
 
         return suggestions[:3]  # Limit to top 3 suggestions
+
 
     def _apply_cross_video_dedup(self, processed_result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1618,6 +1666,7 @@ class SearchEngine:
         Apply canonical concept filtering to search results with improved text-based deduplication.
         Ensures that only canonical concepts are included in results, with variants merged.
         Also ensures concepts with the same text are properly deduplicated.
+        Preserves educational content metrics in the results.
 
         Args:
             search_results: Original search results
@@ -1650,7 +1699,8 @@ class SearchEngine:
             # First get all canonical relationships
             placeholders = ", ".join(["?"] * len(concept_ids))
             query = f"""
-            SELECT concept_id, canonical_concept_id, text, normalized_text, language
+            SELECT concept_id, canonical_concept_id, text, normalized_text, language,
+                educational_weight, is_educational
             FROM concepts
             WHERE concept_id IN ({placeholders})
             """
@@ -1759,7 +1809,10 @@ class SearchEngine:
                         "language": canonical_concept.get("language", result.get("language")),
                         "relevance_score": relevance_score,
                         "is_canonical": True,
-                        "variant_matches": [result.get("text")]
+                        "variant_matches": [result.get("text")],
+                        # Include educational content metrics
+                        "educational_weight": canonical_concept.get("educational_weight", 0.0),
+                        "is_educational": bool(canonical_concept.get("is_educational", 0))
                     }
 
                     # Copy over other fields if available
@@ -1793,6 +1846,7 @@ class SearchEngine:
     def index_content(self, processed_result: Dict[str, Any]) -> bool:
         """
         Index processed content for search with improved error handling and batching.
+        Adds educational content metrics to search index.
 
         Args:
             processed_result: Processing result dictionary
@@ -1894,9 +1948,10 @@ class SearchEngine:
                     concept_data = concept.copy()
                     concept_data["video_id"] = video_id
 
-                    # If concept has score but no confidence, use score as confidence
-                    if "score" in concept_data and "confidence" not in concept_data:
-                        concept_data["confidence"] = concept_data["score"]
+                    # Get educational metrics if available
+                    concept_data["educational_weight"] = concept.get("educational_weight", 0.0)
+                    concept_data["is_educational"] = concept.get("is_educational",
+                                                            concept.get("educational_weight", 0) > 2.5)
 
                     concept_id = self.data_access.save_concept(concept_data)
                     if concept_id:

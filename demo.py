@@ -103,22 +103,16 @@ class Demo:
 
         # Prepare and print theoretical concepts table
         if theoretical_concepts:
-            headers = ["#", "Concept", "Score", "Frequency", "Definition"]
+            headers = ["#", "Concept", "Score", "Frequency"]
             rows = []
 
             for i, concept in enumerate(theoretical_concepts[:limit]):
-                # Truncate long definitions for display
-                definition = concept.get("definition", "")
-                if definition and len(definition) > 50:
-                    definition = definition[:47] + "..."
-
                 # Build the row
                 row = [
                     i+1,
                     concept.get("text", "N/A"),
                     f"{concept.get('score', 0):.2f}",
                     concept.get("frequency", 0),
-                    definition
                 ]
                 rows.append(row)
 
@@ -131,22 +125,16 @@ class Demo:
 
         # Prepare and print practical concepts table
         if practical_concepts:
-            headers = ["#", "Concept", "Score", "Frequency", "Definition"]
+            headers = ["#", "Concept", "Score", "Frequency"]
             rows = []
 
             for i, concept in enumerate(practical_concepts[:limit]):
-                # Truncate long definitions for display
-                definition = concept.get("definition", "")
-                if definition and len(definition) > 50:
-                    definition = definition[:47] + "..."
-
                 # Build the row
                 row = [
                     i+1,
                     concept.get("text", "N/A"),
                     f"{concept.get('score', 0):.2f}",
                     concept.get("frequency", 0),
-                    definition
                 ]
                 rows.append(row)
 
@@ -528,15 +516,10 @@ class Demo:
         display_concepts = concepts[:limit]
 
         # Prepare table data
-        headers = ["#", "Concept", "Class", "Score", "Frequency", "Definition"]
+        headers = ["#", "Concept", "Class", "Score", "Frequency"]
         rows = []
 
         for i, concept in enumerate(display_concepts):
-            # Truncate long definitions for display
-            definition = concept.get("definition", "")
-            if definition and len(definition) > 50:
-                definition = definition[:47] + "..."
-
             # Build the row
             row = [
                 i+1,
@@ -544,7 +527,6 @@ class Demo:
                 concept.get("concept_class", "N/A"),
                 f"{concept.get('score', 0):.2f}",
                 concept.get("frequency", 0),
-                definition
             ]
             rows.append(row)
 
@@ -775,10 +757,6 @@ class Demo:
                 print(f"   Signature Pattern: {signature.get('signature_pattern', [])}")
                 print(f"   Hierarchy Score: {signature.get('hierarchy_score', 0):.3f}")
                 print(f"   Confidence: {signature.get('confidence', 0):.3f}")
-
-                # Print definition if available
-                if "definition" in signature and signature["definition"]:
-                    print(f"   Definition: {signature['definition']}")
 
                 # Print related concepts
                 related = signature.get("related_concepts", {})

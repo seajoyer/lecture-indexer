@@ -19,6 +19,7 @@ class ConceptDedupExtension:
     """
     Enhanced concept deduplication that uses character-level MLCS algorithm
     to identify and merge similar concepts across academic lectures.
+    Includes support for educational content metrics.
     """
 
     def __init__(self, data_access=None, language="en"):
@@ -179,6 +180,7 @@ class ConceptDedupExtension:
     ) -> List[Dict[str, Any]]:
         """
         Find similar concepts using character-level MLCS comparison.
+        Uses educational weight metrics instead of definitions.
 
         Args:
             concept: Source concept dictionary
@@ -221,6 +223,11 @@ class ConceptDedupExtension:
             if similarity >= threshold:
                 result = other_concept.copy()
                 result["similarity"] = similarity
+
+                # Add any educational metadata available
+                result["educational_weight"] = other_concept.get("educational_weight", 0.0)
+                result["is_educational"] = other_concept.get("is_educational", False)
+
                 similar_concepts.append(result)
 
         # Sort by similarity (highest first)
@@ -318,6 +325,7 @@ class ConceptDedupExtension:
     def _select_canonical_concepts(self, clusters: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """
         Select the best concept from each cluster as the canonical concept.
+        Incorporates educational content metrics in selection.
 
         Args:
             clusters: List of concept clusters
@@ -331,11 +339,12 @@ class ConceptDedupExtension:
             if not cluster:
                 continue
 
-            # Sort by quality metrics - balancing frequency, score and word count
+            # Sort by quality metrics - balancing frequency, score, educational weight, and word count
             cluster.sort(key=lambda c: (
-                c.get("frequency", 1) * 0.5 +  # Frequency is most important
-                c.get("score", 0) * 0.3 +      # Score is next
-                len(c.get("text", "").split()) * 0.2  # Slightly favor multi-word concepts
+                c.get("frequency", 1) * 0.4 +  # Frequency is important
+                c.get("score", 0) * 0.2 +      # Score is considered
+                c.get("educational_weight", 0) * 0.3 +  # Educational weight is highly valued
+                len(c.get("text", "").split()) * 0.1  # Word count has some influence
             ), reverse=True)
 
             # Use the highest scoring concept as canonical
@@ -350,6 +359,10 @@ class ConceptDedupExtension:
             if "category" in best_concept:
                 original_categories.add(best_concept["category"])
 
+            # Calculate maximum educational weight across all variants
+            max_educational_weight = best_concept.get("educational_weight", 0.0)
+            is_educational = best_concept.get("is_educational", False)
+
             for variant in cluster[1:]:
                 # Add variant text
                 variant_texts.append(variant.get("text", ""))
@@ -361,12 +374,19 @@ class ConceptDedupExtension:
                 if "category" in variant:
                     original_categories.add(variant["category"])
 
-                # Use definition from variant if primary doesn't have one
-                if variant.get("definition") and not best_concept.get("definition"):
-                    best_concept["definition"] = variant["definition"]
+                # Update educational metrics based on all variants
+                current_edu_weight = variant.get("educational_weight", 0.0)
+                if current_edu_weight > max_educational_weight:
+                    max_educational_weight = current_edu_weight
+
+                # If any variant is marked as educational, consider the whole concept educational
+                if variant.get("is_educational", False):
+                    is_educational = True
 
             # Update the canonical concept
             best_concept["frequency"] = total_frequency
+            best_concept["educational_weight"] = max_educational_weight
+            best_concept["is_educational"] = is_educational
 
             if variant_texts:
                 best_concept["variant_texts"] = variant_texts
@@ -414,6 +434,7 @@ class ConceptDedupExtension:
 def apply_concept_deduplication(processed_result: Dict[str, Any], language: str = None) -> Dict[str, Any]:
     """
     Apply unified concept deduplication across theoretical and practical concepts.
+    Preserves educational content metrics during deduplication.
 
     Args:
         processed_result: Video processing result dictionary

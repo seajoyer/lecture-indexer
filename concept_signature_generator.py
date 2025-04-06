@@ -79,7 +79,7 @@ class ConceptSignature:
         self.specificity_score = 0.0  # Higher values indicate more specific concepts
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
-        self.definition = ""  # Store concept definition if found
+        self.educational_weight = 0.0  # Measure of educational significance (vs passing mention)
 
         # New fields for improved concept matching
         self.normalized_text = self._normalize_text(text, language)
@@ -224,15 +224,16 @@ class ConceptSignature:
         relationship_score = min(relationship_count / 10.0, 1.0)
 
         # More occurrences may indicate more fundamental concept
-        occurrence_score = min(len(self.occurrences) / 20.0, 1.0)
+        occurrence_count = len(self.occurrences)
+        occurrence_score = min(occurrence_count / 20.0, 1.0)
 
         # Concepts that are referenced by many others are more fundamental
         reference_count = sum(1 for c in all_concepts.values()
                             if self.concept_id in c.related_concepts)
         reference_score = min(reference_count / 5.0, 1.0)
 
-        # Concepts with definitions are likely more fundamental
-        definition_score = 0.3 if self.definition else 0.0
+        # Concepts with higher educational weight are likely more fundamental
+        educational_score = min(self.educational_weight / 5.0, 0.4)
 
         # Combine scores with weights
         self.hierarchy_score = (
@@ -240,7 +241,7 @@ class ConceptSignature:
             relationship_score * 0.25 +
             occurrence_score * 0.15 +
             reference_score * 0.25 +
-            definition_score * 0.15
+            educational_score * 0.15
         )
 
         return self.hierarchy_score
@@ -290,7 +291,7 @@ class ConceptSignature:
             "specificity_score": self.specificity_score,
             "related_concepts": self.related_concepts,
             "occurrences_count": len(self.occurrences),
-            "definition": self.definition,
+            "educational_weight": self.educational_weight,
             "canonical_concept_id": self.canonical_concept_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at
@@ -321,7 +322,7 @@ class ConceptSignature:
         signature.generality_score = data.get("generality_score", 0.0)
         signature.specificity_score = data.get("specificity_score", 0.0)
         signature.related_concepts = data.get("related_concepts", {})
-        signature.definition = data.get("definition", "")
+        signature.educational_weight = data.get("educational_weight", 0.0)
         signature.created_at = data.get("created_at", signature.created_at)
         signature.updated_at = data.get("updated_at", signature.updated_at)
         signature.canonical_concept_id = data.get("canonical_concept_id")
@@ -920,7 +921,7 @@ class ConceptSignatureGenerator:
                     "signature_pattern": signature.signature_pattern,
                     "hierarchy_score": signature.hierarchy_score,
                     "confidence": signature.confidence,
-                    "definition": signature.definition
+                    "educational_weight": signature.educational_weight
                 }
 
                 self.data_access.save_concept(concept_data)
@@ -945,7 +946,7 @@ class ConceptSignatureGenerator:
                 enhanced_concept["signature_pattern"] = matching_signature.signature_pattern
                 enhanced_concept["hierarchy_score"] = matching_signature.hierarchy_score
                 enhanced_concept["confidence"] = matching_signature.confidence
-                enhanced_concept["definition"] = matching_signature.definition
+                enhanced_concept["educational_weight"] = matching_signature.educational_weight
                 enhanced_concept["canonical_concept_id"] = matching_signature.canonical_concept_id
                 enhanced_concept["related_concepts"] = [
                     {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
@@ -965,7 +966,7 @@ class ConceptSignatureGenerator:
                 enhanced_concept["signature_pattern"] = matching_signature.signature_pattern
                 enhanced_concept["hierarchy_score"] = matching_signature.hierarchy_score
                 enhanced_concept["confidence"] = matching_signature.confidence
-                enhanced_concept["definition"] = matching_signature.definition
+                enhanced_concept["educational_weight"] = matching_signature.educational_weight
                 enhanced_concept["canonical_concept_id"] = matching_signature.canonical_concept_id
                 enhanced_concept["related_concepts"] = [
                     {"id": rel_id, "strength": rel_data["strength"], "type": rel_data["type"]}
@@ -1072,10 +1073,8 @@ class ConceptSignatureGenerator:
                     signature.signature_pattern = signature_pattern
                     signature.confidence = confidence
 
-                # Look for definition in contexts
-                definition = self._extract_definition(concept_text, contexts, language)
-                if definition:
-                    signature.definition = definition
+                # Calculate educational significance
+                self._calculate_educational_significance(signature, concept, contexts)
 
             # Check for similar existing concepts before adding
             similar_concepts = []
@@ -1103,43 +1102,112 @@ class ConceptSignatureGenerator:
 
         return signatures
 
-    def _extract_definition(self, concept_text: str, contexts: List[str], language: str) -> str:
+    def _calculate_educational_significance(
+        self,
+        signature: ConceptSignature,
+        concept: Dict[str, Any],
+        contexts: List[str]
+    ) -> None:
         """
-        Extract a definition for the concept from its contexts.
+        Calculate educational significance of a concept (vs. passing mention)
 
         Args:
-            concept_text: Concept text
-            contexts: List of context texts
-            language: Language code
-
-        Returns:
-            Definition text or empty string
+            signature: Concept signature object to update
+            concept: Original concept dictionary
+            contexts: List of context texts where concept appears
         """
-        # Definition patterns based on language
-        definition_patterns = {
-            'en': [
-                r'(?:' + re.escape(concept_text) + r')\s+(?:is|are|refers to|means)\s+([^\.]+)',
-                r'(?:' + re.escape(concept_text) + r')\s+(?:is defined as|is called)\s+([^\.]+)',
-                r'(?:the|a)\s+(?:definition|meaning) of\s+(?:' + re.escape(concept_text) + r')\s+is\s+([^\.]+)'
+        # Base educational weight
+        educational_weight = 0.0
+
+        # Factor 1: Frequency of occurrences
+        occurrences_count = len(signature.occurrences)
+        frequency_factor = min(occurrences_count, 5) * 0.5
+        educational_weight += frequency_factor
+
+        # Factor 2: Context diversity - appears in multiple segments
+        segments = set(occ.get("segment_id") for occ in signature.occurrences if occ.get("segment_id"))
+        segment_factor = min(len(segments), 3) * 0.7
+        educational_weight += segment_factor
+
+        # Factor 3: Duration of coverage
+        total_duration = sum(
+            (occ.get("end_time", 0) - occ.get("start_time", 0))
+            for occ in signature.occurrences
+        )
+        duration_factor = min(total_duration / 10.0, 3.0)
+        educational_weight += duration_factor
+
+        # Factor 4: Context analysis - check for educational markers
+        edu_markers = {
+            "en": [
+                r'important concept',
+                r'key principle',
+                r'fundamental idea',
+                r'essential to understand',
+                r'core concept',
+                r'critical to',
+                r'central idea',
+                r'primarily concerned with',
+                r'focuses on',
+                r'the main',
+                r'in depth',
+                r'thoroughly',
+                r'explain in detail',
+                r'explore the',
+                r'analyze',
+                r'examine',
+                r'investigate',
+                r'detailed',
+                r'significant',
+                r'important'
             ],
-            'ru': [
-                r'(?:' + re.escape(concept_text) + r')\s+(?:это|является|называется)\s+([^\.]+)',
-                r'(?:' + re.escape(concept_text) + r')\s+(?:определяется как)\s+([^\.]+)',
-                r'(?:определение|смысл)\s+(?:' + re.escape(concept_text) + r')\s+(?:это|состоит в том, что)\s+([^\.]+)'
+            "ru": [
+                r'важная концепция',
+                r'ключевой принцип',
+                r'фундаментальная идея',
+                r'необходимо понять',
+                r'основная концепция',
+                r'критически важно',
+                r'центральная идея',
+                r'в первую очередь',
+                r'фокусируется на',
+                r'главный',
+                r'подробно',
+                r'тщательно',
+                r'объяснить детально',
+                r'исследовать',
+                r'анализировать',
+                r'изучить',
+                r'исследовать',
+                r'детальный',
+                r'значительный',
+                r'важный'
             ]
         }
 
-        # Use patterns for the current language
-        patterns = definition_patterns.get(language, definition_patterns['en'])
+        lang = signature.language if signature.language in edu_markers else 'en'
+        markers = edu_markers[lang]
 
-        # Check each context for a definition
+        marker_count = 0
         for context in contexts:
-            for pattern in patterns:
-                matches = re.search(pattern, context.lower())
-                if matches:
-                    return matches.group(1).strip()
+            context_lower = context.lower()
+            for marker in markers:
+                if re.search(r'\b' + marker + r'\b', context_lower):
+                    marker_count += 1
+                    break  # Count at most one marker per context
 
-        return ""
+        marker_factor = min(marker_count, 3) * 0.8
+        educational_weight += marker_factor
+
+        # Set educational weight on signature
+        signature.educational_weight = educational_weight
+
+        # Also indicate is_educational if the weight is high enough
+        if educational_weight > 2.5:
+            # Add as a property on the concept object if it comes from concept extraction
+            if "educational_weight" in concept:
+                concept["educational_weight"] = educational_weight
+                concept["is_educational"] = True
 
     def _identify_concept_relationships(
         self,
@@ -1214,7 +1282,7 @@ class ConceptSignatureGenerator:
 
                 # If concept1 consistently appears before concept2, it might be a prerequisite
                 if concept1_earliest < concept2_earliest - 3:  # At least 3 segments earlier
-                    # Check if concept1 is mentioned in definition of concept2
+                    # Check if concept1 is mentioned in context of concept2
                     text_relationship = False
                     for occurrence in concept2.occurrences:
                         if concept1.text.lower() in occurrence.get("context_text", "").lower():
@@ -1291,7 +1359,7 @@ class ConceptSignatureGenerator:
                         rel_id for rel_id, _ in
                         self.relationship_graph.get_related_concepts(concept_id, min_strength=0.3)
                     ],
-                    "definition": concept.definition,
+                    "educational_weight": concept.educational_weight,
                     "canonical_concept_id": concept.canonical_concept_id
                 })
 
@@ -1368,7 +1436,7 @@ def enhance_search_engine(search_engine):
                         "signature_pattern": concept.get("signature_pattern", []),
                         "prerequisites": concept.get("prerequisites", []),
                         "related_concepts": concept.get("related_concepts", []),
-                        "definition": concept.get("definition", ""),
+                        "educational_weight": concept.get("educational_weight", 0.0),
                         "canonical_concept_id": concept.get("canonical_concept_id")
                     })
                 else:

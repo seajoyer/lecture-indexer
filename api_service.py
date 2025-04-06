@@ -117,6 +117,7 @@ class SearchQuery(BaseModel):
     filters: FilterOptions = Field(default_factory=FilterOptions, description="Filter options")
     theory_practice_ratio: Optional[float] = Field(None, ge=0, le=1,
                                                   description="Desired theory/practice ratio (0=practical, 1=theoretical)")
+    educational_only: Optional[bool] = Field(None, description="Filter to only show educational content (not passing mentions)")
     pagination: Pagination = Field(default_factory=Pagination, description="Pagination options")
 
 class LearningPathRequest(BaseModel):
@@ -357,6 +358,74 @@ async def process_video(url: str, language: str):
     except Exception as e:
         logger.error(f"Error processing video {url}: {e}")
 
+@app.get("/api/v1/educational-concepts", response_model=Dict[str, Any])
+async def get_educational_concepts(
+    domain: Optional[str] = Query(None, description="Domain filter"),
+    video_id: Optional[str] = Query(None, description="Filter by video ID"),
+    min_educational_weight: float = Query(2.5, description="Minimum educational weight score"),
+    api_key: str = Depends(get_api_key)
+):
+    """
+    Get concepts that represent substantive educational content (not passing mentions).
+
+    - **domain**: Optional domain filter
+    - **video_id**: Optional video ID filter
+    - **min_educational_weight**: Minimum educational weight score to qualify as educational
+    """
+    try:
+        # Build query to get educational concepts
+        query = """
+        SELECT c.*, COUNT(DISTINCT o.video_id) as video_count,
+               COUNT(o.occurrence_id) as occurrence_count
+        FROM concepts c
+        JOIN occurrences o ON c.concept_id = o.concept_id
+        WHERE c.educational_weight >= ?
+        """
+
+        params = [min_educational_weight]
+
+        # Add optional filters
+        if domain:
+            query += " AND c.domain = ?"
+            params.append(domain)
+
+        if video_id:
+            query += " AND o.video_id = ?"
+            params.append(video_id)
+
+        # Only include canonical concepts
+        query += " AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')"
+
+        # Group and order
+        query += """
+        GROUP BY c.concept_id
+        ORDER BY c.educational_weight DESC, occurrence_count DESC
+        LIMIT 100
+        """
+
+        # Execute query
+        concepts = data_access.execute_query(query, tuple(params))
+
+        if not concepts:
+            return {
+                "concepts": [],
+                "total": 0,
+                "message": "No educational concepts found"
+            }
+
+        # Return results
+        return {
+            "concepts": concepts,
+            "total": len(concepts),
+            "domain": domain,
+            "video_id": video_id,
+            "min_educational_weight": min_educational_weight
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching educational concepts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/videos/{video_id}", response_model=Dict[str, Any])
 async def get_video_status(
     video_id: str,
@@ -405,6 +474,7 @@ async def search_content(
     - **query**: Search query text
     - **filters**: Filter criteria
     - **theory_practice_ratio**: Ratio of theoretical to practical content
+    - **educational_only**: Filter to only show educational content
     - **pagination**: Pagination options
     """
     try:
@@ -414,6 +484,7 @@ async def search_content(
             "filters": query.filters.dict(exclude_none=True),
             "theory_practice_ratio": query.theory_practice_ratio,
             "domain": query.filters.domain,
+            "educational_only": query.educational_only,
             "pagination": {
                 "page": query.pagination.page,
                 "limit": query.pagination.limit,
@@ -426,7 +497,7 @@ async def search_content(
 
         # Add pagination metadata
         total_results = results.get("totalResults", 0)
-        total_pages = (total_results + query.pagination.limit - 1) // query.pagination.limit
+        total_pages = (total_results + query.pagination.limit - 1) // query.pagination.limit if query.pagination.limit > 0 else 1
 
         results["pagination"] = {
             "page": query.pagination.page,
@@ -441,7 +512,8 @@ async def search_content(
         results["query_info"] = {
             "original_text": query.query,
             "theory_practice_ratio": query.theory_practice_ratio,
-            "domain": query.filters.domain
+            "domain": query.filters.domain,
+            "educational_only": query.educational_only
         }
 
         return results

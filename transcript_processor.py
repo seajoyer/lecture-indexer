@@ -32,8 +32,8 @@ class TranscriptProcessor:
     """
 
     def __init__(self):
-        """Initialize the transcript processor with NLP components."""
-        # Download necessary NLTK data if not already available
+        """Initialize the transcript processor with NLP components and educational content markers."""
+        # Download necessary NLTK resources if not already available
         self._ensure_nltk_resources()
 
         # Initialize NLP components
@@ -54,7 +54,99 @@ class TranscriptProcessor:
         # Initialize domain classification models
         self._init_classification_models()
 
-        logger.info("TranscriptProcessor initialized with multilingual NLP components")
+        # Initialize educational markers for identifying substantive explanations
+        self.educational_markers = {
+            "en": [
+                r'important concept',
+                r'key principle',
+                r'fundamental idea',
+                r'essential to understand',
+                r'core concept',
+                r'critical to',
+                r'central idea',
+                r'primarily concerned with',
+                r'focuses on',
+                r'the main',
+                r'in depth',
+                r'thoroughly',
+                r'explain in detail',
+                r'explore the',
+                r'analyze',
+                r'examine',
+                r'investigate',
+                r'detailed',
+                r'significant',
+                r'important',
+                r'crucial',
+                r'vital',
+                r'key',
+                r'central',
+                r'underlying',
+                r'foundation',
+                r'basis',
+                r'fundamental',
+                r'primary',
+                r'comprehensive',
+                r'thorough',
+                r'elaborate',
+                r'rigorous',
+                r'systematic',
+                r'precise',
+                r'specific',
+                r'in-depth',
+                r'detailed analysis',
+                r'extensive discussion'
+            ],
+            "ru": [
+                r'важная концепция',
+                r'ключевой принцип',
+                r'фундаментальная идея',
+                r'необходимо понять',
+                r'основная концепция',
+                r'критически важно',
+                r'центральная идея',
+                r'в первую очередь',
+                r'фокусируется на',
+                r'главный',
+                r'подробно',
+                r'тщательно',
+                r'объяснить детально',
+                r'исследовать',
+                r'анализировать',
+                r'изучить',
+                r'исследовать',
+                r'детальный',
+                r'значительный',
+                r'важный',
+                r'существенный',
+                r'жизненно важный',
+                r'ключевой',
+                r'центральный',
+                r'лежащий в основе',
+                r'фундамент',
+                r'основа',
+                r'фундаментальный',
+                r'главный',
+                r'всесторонний',
+                r'тщательный',
+                r'подробный',
+                r'строгий',
+                r'систематический',
+                r'точный',
+                r'специфический',
+                r'углубленный',
+                r'детальный анализ',
+                r'обширное обсуждение'
+            ]
+        }
+
+        # Compile educational markers patterns
+        self.educational_markers_regex = {
+            lang: re.compile('|'.join(patterns), re.IGNORECASE)
+            for lang, patterns in self.educational_markers.items()
+        }
+
+        logger.info("TranscriptProcessor initialized with educational content detection")
 
     def _ensure_nltk_resources(self):
         """Ensure all required NLTK resources are available."""
@@ -788,7 +880,7 @@ class TranscriptProcessor:
 
     def _classify_segments(self, segments: List[Dict], domain: str, language: str = 'en') -> List[Dict]:
         """
-        Classify segments as theoretical or practical with improved multilingual support.
+        Classify segments as theoretical or practical with enhanced educational content detection.
 
         Args:
             segments: List of transcript segments
@@ -796,7 +888,7 @@ class TranscriptProcessor:
             language: Language code ('en' or 'ru')
 
         Returns:
-            List of classified segments
+            List of classified segments with educational content scores
         """
         classified_segments = []
 
@@ -813,6 +905,7 @@ class TranscriptProcessor:
             elif 'en' in self.domain_features[domain]:
                 domain_features = self.domain_features[domain]['en']
 
+        # First pass: analyze segments individually
         for segment in segments:
             text = segment.get("text", "")
 
@@ -820,14 +913,198 @@ class TranscriptProcessor:
             features = self._extract_features(text, language)
             content_type, confidence = self._classify_with_features(features, domain_features, text, domain, language)
 
+            # Determine if this segment contains educational content
+            educational_score = self._calculate_educational_score(text, features, domain_features, language)
+
             # Create classified segment
             classified_segment = segment.copy()
             classified_segment["content_type"] = content_type
             classified_segment["classification_confidence"] = confidence
+            classified_segment["educational_score"] = educational_score
+            classified_segment["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
 
             classified_segments.append(classified_segment)
 
-        return classified_segments
+        # Second pass: improve classification with context from adjacent segments
+        enhanced_segments = self._enhance_with_context(classified_segments)
+
+        return enhanced_segments
+
+    def _enhance_with_context(self, segments: List[Dict]) -> List[Dict]:
+        """
+        Enhance segment classification by considering context from adjacent segments.
+
+        Args:
+            segments: List of initially classified segments
+
+        Returns:
+            Enhanced segments with improved classification
+        """
+        if len(segments) <= 1:
+            return segments
+
+        enhanced_segments = []
+
+        # Use a sliding window approach to consider context
+        for i, segment in enumerate(segments):
+            # Get original values
+            content_type = segment.get("content_type", "mixed")
+            confidence = segment.get("classification_confidence", 0.5)
+            educational_score = segment.get("educational_score", 0.0)
+
+            # Get preceding and following segments when available
+            preceding = segments[i-1] if i > 0 else None
+            following = segments[i+1] if i < len(segments)-1 else None
+
+            # Enhance confidence based on adjacent segments with same classification
+            if preceding and following:
+                # If both adjacent segments have same classification, boost confidence
+                if (preceding.get("content_type") == content_type and
+                    following.get("content_type") == content_type):
+                    confidence = min(confidence + 0.15, 0.95)
+
+                # If part of a continuous educational section, boost educational score
+                if (preceding.get("is_educational", False) and
+                    following.get("is_educational", False)):
+                    educational_score += 0.5
+            elif preceding:
+                # If only preceding segment matches, small boost
+                if preceding.get("content_type") == content_type:
+                    confidence = min(confidence + 0.05, 0.95)
+
+                # Educational content boost if preceded by educational content
+                if preceding.get("is_educational", False):
+                    educational_score += 0.2
+            elif following:
+                # If only following segment matches, small boost
+                if following.get("content_type") == content_type:
+                    confidence = min(confidence + 0.05, 0.95)
+
+                # Educational content boost if followed by educational content
+                if following.get("is_educational", False):
+                    educational_score += 0.2
+
+            # Update segment with enhanced values
+            enhanced_segment = segment.copy()
+            enhanced_segment["classification_confidence"] = confidence
+            enhanced_segment["educational_score"] = educational_score
+            enhanced_segment["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
+
+            enhanced_segments.append(enhanced_segment)
+
+        return enhanced_segments
+
+    def _calculate_educational_score(
+        self,
+        text: str,
+        features: Dict,
+        domain_features: Dict,
+        language: str
+    ) -> float:
+        """
+        Calculate educational significance score for a segment.
+
+        Args:
+            text: Segment text
+            features: Extracted text features
+            domain_features: Domain-specific features
+            language: Language code
+
+        Returns:
+            Educational score (higher = more educational content)
+        """
+        # Base score starts at zero
+        educational_score = 0.0
+
+        # Get correct language for matching patterns
+        lang = language if language in self.educational_markers_regex else 'en'
+
+        # Factor 1: Length of content - longer segments tend to be more educational
+        # but with diminishing returns after a certain point
+        word_count = len(features.get("tokens", []))
+        if word_count > 0:
+            length_score = min(word_count / 50.0, 3.0)  # Cap at 3.0 for very long segments
+            educational_score += length_score
+
+        # Factor 2: Educational markers presence
+        if self.educational_markers_regex[lang].search(text.lower()):
+            educational_score += 2.0  # Strong indicator of educational content
+
+        # Factor 3: Domain-specific term density
+        word_counts = features.get("word_counts", {})
+        total_words = sum(word_counts.values())
+
+        if total_words > 0:
+            domain_term_count = 0
+            domain_term_weight = 0.0
+
+            for word, count in word_counts.items():
+                if word in domain_features:
+                    domain_term_count += count
+                    domain_term_weight += domain_features[word] * count
+
+            # Calculate domain term density with weighted importance
+            if domain_term_count > 0:
+                # Both absolute count and relative density matter
+                domain_density = domain_term_count / total_words
+                domain_score = min(domain_term_weight * 0.7 + (domain_density * 5.0), 3.0)
+                educational_score += domain_score
+
+        # Factor 4: Check for structured explanations using patterns
+        explanation_patterns = {
+            'en': [
+                r'first[,\.].*then', r'begin by.*next', r'starts with.*followed by',
+                r'step \d+', r'example[s]? of', r'consider the',
+                r'this means that', r'is defined as', r'can be understood as',
+                r'represents', r'characterized by', r'illustrated by',
+                r'described as', r'known as', r'referred to as',
+                r'in other words', r'to be precise', r'specifically',
+                r'for instance', r'in particular'
+            ],
+            'ru': [
+                r'сначала.*затем', r'начнем с.*далее', r'начинается с.*затем',
+                r'шаг \d+', r'примеры?', r'рассмотрим',
+                r'это означает', r'определяется как', r'можно понять как',
+                r'представляет', r'характеризуется', r'иллюстрируется',
+                r'описывается как', r'известен как', r'называется',
+                r'другими словами', r'если точнее', r'конкретно',
+                r'например', r'в частности'
+            ]
+        }
+
+        explanation_patterns_lang = explanation_patterns.get(lang, explanation_patterns['en'])
+        explanation_pattern_count = 0
+
+        for pattern in explanation_patterns_lang:
+            if re.search(pattern, text.lower()):
+                explanation_pattern_count += 1
+
+        # Add score based on structured explanation markers
+        explanation_score = min(explanation_pattern_count * 0.5, 1.5)
+        educational_score += explanation_score
+
+        # Factor 5: Check for comparison language that typically indicates substantive explanations
+        comparison_patterns = {
+            'en': [
+                r'(different|difference) (from|between)', r'(similar|similarly) to',
+                r'(unlike|like)', r'(compared|comparing) to', r'(contrasted|contrast) with',
+                r'on the other hand', r'alternatively', r'conversely',
+                r'analogous to', r'equivalent to', r'corresponds to'
+            ],
+            'ru': [
+                r'(отличается|отличие) (от|между)', r'(похож|похожий|схожий) (на|с)',
+                r'(в отличие от|как)', r'(по сравнению с|сравнивая с)',
+                r'(в противоположность|противопоставляя)',
+                r'с другой стороны', r'в качестве альтернативы', r'наоборот',
+                r'аналогично', r'эквивалентно', r'соответствует'
+            ]
+        }
+
+        comparison_patterns_lang = comparison_patterns.get(lang, comparison_patterns['en'])
+        if any(re.search(pattern, text.lower()) for pattern in comparison_patterns_lang):
+            educational_score += 1.0  # Comparison language suggests substantive explanation
+
+        return educational_score
 
     def _extract_features(self, text: str, language: str = 'en') -> Dict:
         """

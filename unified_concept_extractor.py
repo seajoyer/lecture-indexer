@@ -206,6 +206,60 @@ class UnifiedConceptExtractor:
             }
         }
 
+        # Educational content markers - phrases that indicate substantial explanation
+        self.educational_markers = {
+            "en": [
+                r'important concept',
+                r'key principle',
+                r'fundamental idea',
+                r'essential to understand',
+                r'core concept',
+                r'critical to',
+                r'central idea',
+                r'primarily concerned with',
+                r'focuses on',
+                r'the main',
+                r'in depth',
+                r'thoroughly',
+                r'explain in detail',
+                r'explore the',
+                r'analyze',
+                r'examine',
+                r'investigate',
+                r'detailed',
+                r'significant',
+                r'important'
+            ],
+            "ru": [
+                r'важная концепция',
+                r'ключевой принцип',
+                r'фундаментальная идея',
+                r'необходимо понять',
+                r'основная концепция',
+                r'критически важно',
+                r'центральная идея',
+                r'в первую очередь',
+                r'фокусируется на',
+                r'главный',
+                r'подробно',
+                r'тщательно',
+                r'объяснить детально',
+                r'исследовать',
+                r'анализировать',
+                r'изучить',
+                r'исследовать',
+                r'детальный',
+                r'значительный',
+                r'важный'
+            ]
+        }
+
+        # Compile educational markers patterns
+        self.educational_markers_regex = {
+            lang: re.compile('|'.join(patterns), re.IGNORECASE)
+            for lang, patterns in self.educational_markers.items()
+        }
+
     def _load_english_stopwords(self) -> Set[str]:
         """Load and return enhanced English stopwords."""
         try:
@@ -496,25 +550,7 @@ class UnifiedConceptExtractor:
                     "source": "trigram"
                 }
 
-        # 3. Extract definitional concepts
-        definitions = self._extract_definitions(text, lang)
-        for term, definition in definitions.items():
-            score = 3.0  # High score for definitional contexts
-
-            if term in candidates:
-                candidates[term]["score"] += score
-                candidates[term]["definition"] = definition
-                candidates[term]["source"] = "definition"
-            else:
-                candidates[term] = {
-                    "text": term,
-                    "frequency": 1,
-                    "score": score,
-                    "definition": definition,
-                    "source": "definition"
-                }
-
-        # 4. Direct search for important domain terms
+        # 3. Direct search for important domain terms
         if domain == "physics":
             important_terms = self.domain_keywords.get("physics", {}).get(lang, set())
 
@@ -531,6 +567,9 @@ class UnifiedConceptExtractor:
                             "source": "direct_match",
                             "domain_match": True
                         }
+
+        # 4. Check for educational content markers
+        self._score_educational_content(candidates, text, lang)
 
         # 5. Filter and validate candidates
         filtered_candidates = {}
@@ -563,11 +602,11 @@ class UnifiedConceptExtractor:
                 "frequency": data.get("frequency", 1),
                 "score": data.get("score", 0),
                 "source": data.get("source", ""),
-                "definition": data.get("definition", ""),
                 "domain": domain,
                 "language": lang,
                 "theoretical": is_theoretical,
-                "concept_class": "theoretical" if is_theoretical else "practical"
+                "concept_class": "theoretical" if is_theoretical else "practical",
+                "educational_weight": data.get("educational_weight", 0)
             }
 
         # 6. Convert to list and sort by score
@@ -578,6 +617,48 @@ class UnifiedConceptExtractor:
         max_concepts = 50  # Reduced from 100 to focus on highest quality
 
         return concepts[:max_concepts]
+
+    def _score_educational_content(self, candidates: Dict[str, Dict[str, Any]], text: str, language: str):
+        """
+        Score candidate concepts based on educational content markers.
+
+        Args:
+            candidates: Dictionary of candidate concepts
+            text: Source text
+            language: Language code
+        """
+        # Get appropriate language or fallback to English
+        lang = language if language in self.educational_markers_regex else 'en'
+
+        # Check for educational content markers in the text
+        has_educational_markers = bool(self.educational_markers_regex[lang].search(text))
+
+        # Add educational weight to concepts
+        for term, data in candidates.items():
+            # Base educational weight - higher for all concepts in educational contexts
+            educational_weight = 2.0 if has_educational_markers else 0.0
+
+            # Check frequency/repetition - concepts repeated multiple times are more likely educational
+            if data["frequency"] > 1:
+                educational_weight += min(data["frequency"], 5) * 0.5
+
+            # Check for concept appearing in proximity to educational markers
+            text_lower = text.lower()
+            term_lower = term.lower()
+
+            # See if term is near educational markers (within ~100 chars)
+            markers = self.educational_markers[lang]
+            for marker in markers:
+                marker_pos = text_lower.find(marker)
+                if marker_pos >= 0:
+                    term_pos = text_lower.find(term_lower)
+                    if term_pos >= 0 and abs(term_pos - marker_pos) < 100:
+                        educational_weight += 1.5
+                        break
+
+            # Add educational weight to the concept's score
+            data["educational_weight"] = educational_weight
+            data["score"] += educational_weight
 
     def _extract_domain_patterns(
         self,
@@ -848,63 +929,6 @@ class UnifiedConceptExtractor:
 
         return trigram_scores
 
-    def _extract_definitions(self, text: str, language: str) -> Dict[str, str]:
-        """
-        Extract definitions from text with enhanced pattern recognition.
-
-        Args:
-            text: Input text
-            language: Language code
-
-        Returns:
-            Dictionary mapping terms to their definitions
-        """
-        definitions = {}
-
-        # Definition patterns by language
-        patterns = {
-            'en': [
-                r'([\w\s]+) (?:is|are) defined as ([\w\s,]+)',
-                r'([\w\s]+) (?:refers to|means|is called) ([\w\s,]+)',
-                r'(?:the|a) (?:concept|definition) of ([\w\s]+) is ([\w\s,]+)',
-                r'([\w\s]+) is (?:a|an) ([\w\s,]+)',  # Simple "is a" definition
-                r'([\w\s]+) (?:is|are) (?:understood as|characterized by|represented by) ([\w\s,]+)'
-            ],
-            'ru': [
-                r'([\w\s]+) (?:определяется как|это|является) ([\w\s,]+)',
-                r'([\w\s]+) (?:называется|обозначает) ([\w\s,]+)',
-                r'(?:понятие|определение) ([\w\s]+) (?:это|есть) ([\w\s,]+)',
-                # Added additional patterns
-                r'([\w\s]+) (?:означает|представляет собой|подразумевает) ([\w\s,]+)',
-                r'под (?:термином|понятием)? ([\w\s]+) (?:понимается|подразумевается) ([\w\s,]+)',
-                r'([\w\s]+) — это ([\w\s,]+)',  # Em dash definition
-                r'([\w\s]+) - это ([\w\s,]+)'   # Regular dash definition
-            ]
-        }
-
-        # Use patterns for this language or fall back to English
-        lang_patterns = patterns.get(language, patterns['en'])
-
-        # Find definitions
-        for pattern in lang_patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
-                if len(match.groups()) >= 2:
-                    term = match.group(1).strip().lower()
-                    definition = match.group(2).strip()
-
-                    # Skip very short terms
-                    if len(term) < 3:
-                        continue
-
-                    # Skip if term doesn't pass validation
-                    if not self.is_valid_concept(term, language):
-                        continue
-
-                    definitions[term] = definition
-
-        return definitions
-
     def _is_theoretical_concept(
         self,
         concept: str,
@@ -957,7 +981,6 @@ class UnifiedConceptExtractor:
         # For single words, depend on domain
         return True  # Default to theoretical for academic content
 
-    # Key changes in extract_concepts_from_segments method:
     def extract_concepts_from_segments(
         self,
         segments: List[Dict[str, Any]],
@@ -1046,6 +1069,12 @@ class UnifiedConceptExtractor:
                     # Add to concept's occurrences
                     concept["occurrences"].append(occurrence)
 
+        # Update concept scores based on educational content metrics:
+        # 1. Frequency of occurrences (concepts that appear multiple times are more likely educational)
+        # 2. Distribution across segments (concepts that appear in multiple segments get higher weight)
+        # 3. Duration of segments where concept appears (longer segments = more extensive explanation)
+        self._score_educational_occurrences(concept_map)
+
         # Update concept frequency based on actual occurrences
         for concept in concept_map.values():
             concept["frequency"] = len(concept.get("occurrences", []))
@@ -1080,6 +1109,47 @@ class UnifiedConceptExtractor:
             "theoretical_concepts": theoretical_concepts,
             "practical_concepts": practical_concepts
         }
+
+    def _score_educational_occurrences(self, concept_map: Dict[str, Dict[str, Any]]):
+        """
+        Score concepts based on their occurrences to distinguish educational content from passing mentions.
+
+        Args:
+            concept_map: Dictionary mapping concept_id to concept data
+        """
+        for concept_id, concept in concept_map.items():
+            occurrences = concept.get("occurrences", [])
+
+            if not occurrences:
+                continue
+
+            # Calculate educational metrics
+            frequency = len(occurrences)
+            unique_segments = len(set(occ.get("segment_id") for occ in occurrences))
+            total_duration = sum(occ.get("end_time", 0) - occ.get("start_time", 0) for occ in occurrences)
+
+            # Metrics for educational vs passing mention:
+            # 1. Frequency bonus - concepts mentioned multiple times
+            frequency_factor = min(frequency, 5) * 0.5
+
+            # 2. Segment distribution - concepts in multiple segments
+            segment_factor = min(unique_segments, 3) * 0.7
+
+            # 3. Duration bonus - longer total discussion time
+            duration_factor = min(total_duration / 10.0, 3.0)
+
+            # Calculate educational score
+            educational_score = frequency_factor + segment_factor + duration_factor
+
+            # Add educational weight to concept score
+            concept["educational_weight"] = educational_score
+            concept["score"] += educational_score
+
+            # Mark concepts with high educational weight
+            if educational_score > 2.5:
+                concept["is_educational"] = True
+            else:
+                concept["is_educational"] = False
 
     def is_domain_keyword(self, word: str, domain: str, language: str = None) -> bool:
         """

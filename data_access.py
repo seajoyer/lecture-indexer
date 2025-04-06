@@ -190,7 +190,9 @@ class DataAccess:
             concept_class TEXT,
             language TEXT,  -- Store concept language
             total_occurrences INTEGER DEFAULT 0,
-            canonical_concept_id TEXT -- Reference to canonical concept if this is a variant
+            canonical_concept_id TEXT, -- Reference to canonical concept if this is a variant
+            educational_weight REAL DEFAULT 0, -- NEW: Measure of educational significance
+            is_educational INTEGER DEFAULT 0   -- NEW: Flag for educational vs passing mention
         );
 
         -- Create indexes for concept filtering
@@ -199,6 +201,7 @@ class DataAccess:
         CREATE INDEX IF NOT EXISTS idx_concepts_text ON concepts(text);
         CREATE INDEX IF NOT EXISTS idx_concepts_language ON concepts(language);
         CREATE INDEX IF NOT EXISTS idx_concepts_normalized_text ON concepts(normalized_text);
+        CREATE INDEX IF NOT EXISTS idx_concepts_educational ON concepts(is_educational);
 
         -- Occurrences table for concept-segment associations
         CREATE TABLE IF NOT EXISTS occurrences (
@@ -256,7 +259,7 @@ class DataAccess:
             updated_at TEXT
         );
 
-        -- Add normalized_text column to concepts table if it doesn't exist
+        -- Check if educational metrics columns exist and add them if needed
         PRAGMA table_info(concepts);
         """
 
@@ -264,7 +267,7 @@ class DataAccess:
             with self.get_connection() as conn:
                 conn.executescript(schema_script)
 
-                # Check if normalized_text column exists, add if it doesn't
+                # Check if educational metrics columns exist, add if they don't
                 cursor = conn.cursor()
                 columns = cursor.execute("PRAGMA table_info(concepts)").fetchall()
                 column_names = [col[1] for col in columns]
@@ -277,8 +280,17 @@ class DataAccess:
                     conn.execute("ALTER TABLE concepts ADD COLUMN canonical_concept_id TEXT")
                     logger.info("Added canonical_concept_id column to concepts table")
 
+                if "educational_weight" not in column_names:
+                    conn.execute("ALTER TABLE concepts ADD COLUMN educational_weight REAL DEFAULT 0")
+                    logger.info("Added educational_weight column to concepts table")
+
+                if "is_educational" not in column_names:
+                    conn.execute("ALTER TABLE concepts ADD COLUMN is_educational INTEGER DEFAULT 0")
+                    logger.info("Added is_educational column to concepts table")
+
                 conn.commit()
-            logger.info("Database schema initialized with optimizations")
+
+            logger.info("Database schema initialized with optimizations and educational metrics")
         except Exception as e:
             logger.error(f"Error initializing database schema: {e}")
             raise
@@ -1138,7 +1150,7 @@ class DataAccess:
 
     def save_concept(self, concept_data: Dict[str, Any]) -> Optional[str]:
         """
-        Save or update a concept with improved validation and language support.
+        Save or update a concept with enhanced educational content tracking.
         Checks for similar existing concepts to avoid duplication.
 
         Args:
@@ -1199,6 +1211,10 @@ class DataAccess:
                 # Try to get from frequency or occurrence_count
                 total_occurrences = concept_data.get("frequency", concept_data.get("occurrence_count", 1))
 
+            # Get educational content metrics
+            educational_weight = concept_data.get("educational_weight", 0.0)
+            is_educational = concept_data.get("is_educational", educational_weight > 2.5)
+
             # STEP 2: Check if concept exists
             existing = self.get_concept(concept_id)
 
@@ -1212,7 +1228,9 @@ class DataAccess:
                     concept_class = ?,
                     language = ?,
                     total_occurrences = ?,
-                    canonical_concept_id = ?
+                    canonical_concept_id = ?,
+                    educational_weight = ?,
+                    is_educational = ?
                 WHERE concept_id = ?
                 """
                 self.execute_update(query, (
@@ -1223,6 +1241,8 @@ class DataAccess:
                     language,
                     total_occurrences,
                     canonical_concept_id,
+                    educational_weight,
+                    1 if is_educational else 0,
                     concept_id
                 ))
                 logger.debug(f"Updated existing concept: {concept_id} - {concept_text}")
@@ -1231,8 +1251,8 @@ class DataAccess:
                 query = """
                 INSERT INTO concepts (
                     concept_id, text, normalized_text, domain, concept_class, language,
-                    total_occurrences, canonical_concept_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    total_occurrences, canonical_concept_id, educational_weight, is_educational
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     concept_id,
@@ -1242,7 +1262,9 @@ class DataAccess:
                     concept_class,
                     language,
                     total_occurrences,
-                    canonical_concept_id
+                    canonical_concept_id,
+                    educational_weight,
+                    1 if is_educational else 0
                 ))
                 logger.debug(f"Inserted new concept: {concept_id} - {concept_text}")
 
@@ -1260,11 +1282,8 @@ class DataAccess:
                 (concept_id, concept_text, domain, concept_class, "concept", None, language)
             )
 
-            # STEP 4: Save metadata from the concept_data
-            metadata = concept_data.get("metadata", {})
-            if metadata:
-                # Store metadata in a separate table if needed
-                pass
+            # STEP 4: Store educational content metrics
+            # This replaces the previous definition metadata storage
 
             # STEP 5: Clear cache for this concept
             self.clear_cache(f"concept_{concept_id}")
