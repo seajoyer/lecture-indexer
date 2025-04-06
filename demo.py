@@ -122,7 +122,7 @@ class Demo:
                 print(f"Processing Time: {processing_time:.2f} seconds")
 
                 # Print key concepts
-                self.print_concepts(domain_features.get("key_concepts", []), limit=10)
+                self.print_concepts(domain_features.get("key_concepts", []), limit=50)
 
                 return result
             else:

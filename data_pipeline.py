@@ -1,17 +1,16 @@
 """
 Enhanced data pipeline for the Lecture Video Content Indexer.
 Coordinates the end-to-end process of video extraction, transcript processing,
-and concept extraction with a unified approach.
+and concept extraction with a unified approach and improved concept deduplication.
 """
 
 import os
 import logging
 import uuid
-import re
-from typing import Dict, List, Set, Any, Optional, Tuple
-from collections import Counter, defaultdict
+from typing import Dict, List, Any
 from datetime import datetime
 import json
+import time
 
 # Import project modules
 from youtube_extractor import YouTubeExtractor
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DataPipeline:
     """
     Coordinates the end-to-end process of video data acquisition and analysis
-    with a unified concept extraction approach.
+    with a unified concept extraction approach and enhanced deduplication.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -46,7 +45,7 @@ class DataPipeline:
         # Initialize components
         self._init_components()
 
-        logger.info("DataPipeline initialized with unified concept extraction")
+        logger.info("DataPipeline initialized with unified concept extraction and enhanced deduplication")
 
     def _init_components(self):
         """Initialize pipeline components."""
@@ -121,12 +120,14 @@ class DataPipeline:
             theory_practice_results = self._calculate_theory_practice_ratio(processed_transcript['segments'])
             logger.info(f"Calculated theory/practice ratio: {theory_practice_results['theory_practice_ratio']:.2f}")
 
-            # Step 6: Extract key concepts using unified extractor
-            domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
-            logger.info(f"Extracted {len(domain_features['key_concepts'])} key concepts")
-
-            # Step 7: Apply concept deduplication to eliminate bad concepts and duplicates
+            # Record language for deduplication
             detected_language = processed_transcript.get("language", "en")
+
+            # Step 6: Extract key concepts using unified extractor
+            concept_start_time = time.time()
+            domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
+            concept_time = time.time() - concept_start_time
+            logger.info(f"Extracted {len(domain_features['key_concepts'])} key concepts in {concept_time:.2f}s")
 
             # Prepare result
             result = {
@@ -141,12 +142,28 @@ class DataPipeline:
                 "theory_practice_results": theory_practice_results
             }
 
-            # Apply the concept deduplication
+            # Step 7: Apply concept deduplication with enhanced algorithm
+            dedup_start_time = time.time()
+            logger.info(f"Applying enhanced concept deduplication for language: {detected_language}")
             deduplicated_result = apply_concept_deduplication(result, detected_language)
+            dedup_time = time.time() - dedup_start_time
+
+            # Log deduplication statistics
+            original_count = len(domain_features['key_concepts'])
+            deduped_count = len(deduplicated_result['domain_features']['key_concepts'])
+            logger.info(f"Deduplication complete: {original_count} → {deduped_count} concepts in {dedup_time:.2f}s")
 
             # Calculate processing time
             processing_time = timer.stop() / 1000  # Convert from ms to seconds
             deduplicated_result["processing_time"] = processing_time
+
+            # Add deduplication stats to result
+            deduplicated_result["deduplication_stats"] = {
+                "original_concept_count": original_count,
+                "deduplicated_concept_count": deduped_count,
+                "reduction_percentage": round((original_count - deduped_count) / original_count * 100, 2) if original_count > 0 else 0,
+                "processing_time": dedup_time
+            }
 
             # Cache the result
             cache_set("video", cache_key, deduplicated_result)

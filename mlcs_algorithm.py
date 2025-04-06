@@ -1,14 +1,12 @@
 """
-Linear Multiple Longest Common Subsequence (MLCS) algorithm implementation.
-Used by the concept_signature_generator to identify common patterns across
-educational content for generating more meaningful concept signatures.
+Enhanced Linear Multiple Longest Common Subsequence (MLCS) algorithm implementation.
+Optimized for both character-level and token-level comparison, efficiently handling
+both concept similarity detection and concept signature generation.
 """
 
 import re
 import logging
-from typing import List, Dict, Set, Tuple, Any, Optional
-from collections import Counter, defaultdict
-import difflib
+from typing import List, Tuple, Optional
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -17,8 +15,9 @@ class MLCSAlgorithm:
     """
     Efficient Linear Multiple Longest Common Subsequence algorithm implementation.
 
-    This implementation focuses on identifying common patterns across multiple
-    educational content segments to extract meaningful concept signatures.
+    This implementation provides both character-level and token-level MLCS algorithms
+    for different use cases - character-level for concept deduplication and
+    token-level for concept signature extraction.
     """
 
     def __init__(self, language: str = "en"):
@@ -93,18 +92,8 @@ class MLCSAlgorithm:
                 ]
             },
             "mathematics": {
-                "en": [
-                    "function", "derivative", "integral", "differential", "equation",
-                    "theorem", "proof", "lemma", "corollary", "hypothesis", "vector",
-                    "matrix", "determinant", "linear", "algebra", "calculus", "geometry",
-                    "topology", "analysis", "transform", "series", "sequence", "limit"
-                ],
-                "ru": [
-                    "функция", "производная", "интеграл", "дифференциал", "уравнение",
-                    "теорема", "доказательство", "лемма", "следствие", "гипотеза", "вектор",
-                    "матрица", "определитель", "линейный", "алгебра", "анализ", "геометрия",
-                    "топология", "преобразование", "ряд", "последовательность", "предел"
-                ]
+                "en": ["function", "derivative", "integral", "differential", "equation"],
+                "ru": ["функция", "производная", "интеграл", "дифференциал", "уравнение"]
             }
         }
 
@@ -133,6 +122,7 @@ class MLCSAlgorithm:
     def preprocess_text(self, text: str, language: Optional[str] = None) -> List[str]:
         """
         Preprocess text by tokenizing, removing stopwords, and normalizing tokens.
+        Used for token-level MLCS in concept signature extraction.
 
         Args:
             text: Input text
@@ -199,13 +189,14 @@ class MLCSAlgorithm:
     def find_mlcs(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
         """
         Find the Multiple Longest Common Subsequence across sequences.
+        Works with both character and token sequences.
 
         Args:
-            sequences: List of token sequences
+            sequences: List of token/character sequences
             min_length: Minimum length of common subsequence
 
         Returns:
-            MLCS as a list of tokens
+            MLCS as a list of tokens/characters
         """
         if not sequences:
             return []
@@ -218,21 +209,31 @@ class MLCSAlgorithm:
             lcs = self._lcs(sequences[0], sequences[1])
             return lcs if len(lcs) >= min_length else []
 
-        # For more than two sequences, use a more efficient approach
+        # For more than two sequences, use optimized approach
         return self._find_mlcs_linear(sequences, min_length)
 
     def _lcs(self, seq1: List[str], seq2: List[str]) -> List[str]:
         """
         Find the Longest Common Subsequence between two sequences.
+        Optimized implementation for both character and token sequences.
 
         Args:
             seq1: First sequence
             seq2: Second sequence
 
         Returns:
-            LCS as a list of tokens
+            LCS as a list of tokens/characters
         """
-        # Create DP table for LCS
+        # Optimization: Empty sequence check
+        if not seq1 or not seq2:
+            return []
+
+        # Optimization: If sequences are very long (e.g., character sequences)
+        # use more memory-efficient dynamic programming approach
+        if len(seq1) > 200 or len(seq2) > 200:
+            return self._lcs_efficient(seq1, seq2)
+
+        # Standard LCS dynamic programming for moderate-sized sequences
         m, n = len(seq1), len(seq2)
         dp = [[0] * (n + 1) for _ in range(m + 1)]
 
@@ -263,10 +264,120 @@ class MLCSAlgorithm:
 
         return lcs
 
+    def _lcs_efficient(self, seq1: List[str], seq2: List[str]) -> List[str]:
+        """
+        Memory-efficient LCS implementation for very long sequences.
+        Uses space optimization to reduce memory consumption.
+
+        Args:
+            seq1: First sequence
+            seq2: Second sequence
+
+        Returns:
+            LCS as a list of tokens/characters
+        """
+        # Ensure seq1 is the shorter sequence for efficiency
+        if len(seq1) > len(seq2):
+            seq1, seq2 = seq2, seq1
+
+        m, n = len(seq1), len(seq2)
+
+        # Use two rows instead of full matrix
+        current = [0] * (n + 1)
+        previous = [0] * (n + 1)
+
+        # Track the choices made for reconstruction
+        choices = {}  # (i, j) -> direction (diagonal, up, left)
+
+        # Fill the dp table with just two rows
+        for i in range(1, m + 1):
+            previous, current = current, [0] * (n + 1)
+
+            for j in range(1, n + 1):
+                if seq1[i-1] == seq2[j-1]:
+                    current[j] = previous[j-1] + 1
+                    choices[(i, j)] = 'diagonal'
+                elif previous[j] >= current[j-1]:
+                    current[j] = previous[j]
+                    choices[(i, j)] = 'up'
+                else:
+                    current[j] = current[j-1]
+                    choices[(i, j)] = 'left'
+
+        # Reconstruct the LCS
+        lcs = []
+        i, j = m, n
+
+        while i > 0 and j > 0:
+            direction = choices.get((i, j))
+
+            if direction == 'diagonal':
+                lcs.append(seq1[i-1])
+                i -= 1
+                j -= 1
+            elif direction == 'up':
+                i -= 1
+            else:
+                j -= 1
+
+        # Reverse the LCS
+        lcs.reverse()
+
+        return lcs
+
     def _find_mlcs_linear(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
         """
-        Find MLCS using a linear approach with n-gram matching.
-        This is optimized for identifying common patterns in educational content.
+        Find MLCS using a linear approach optimized for academic terms.
+        Works with both character and token sequences.
+
+        Args:
+            sequences: List of token/character sequences
+            min_length: Minimum length of common subsequence
+
+        Returns:
+            MLCS as a list of tokens/characters
+        """
+        # Optimization for character-level sequences
+        is_char_level = all(isinstance(seq[0], str) and len(seq[0]) == 1 for seq in sequences if seq)
+
+        # For character-level comparison (typical in concept deduplication)
+        if is_char_level:
+            return self._find_mlcs_character(sequences, min_length)
+
+        # For token-level comparison (typical in concept signature extraction)
+        return self._find_mlcs_token(sequences, min_length)
+
+    def _find_mlcs_character(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
+        """
+        Optimized MLCS for character-level sequences.
+        Used primarily for concept deduplication.
+
+        Args:
+            sequences: List of character sequences
+            min_length: Minimum length of common subsequence
+
+        Returns:
+            MLCS as a list of characters
+        """
+        if not sequences:
+            return []
+
+        # Progressively find common subsequence
+        current_lcs = sequences[0]
+
+        for i in range(1, len(sequences)):
+            current_lcs = self._lcs(current_lcs, sequences[i])
+
+            # Early termination if LCS becomes too short
+            if len(current_lcs) < min_length:
+                return []
+
+        return current_lcs if len(current_lcs) >= min_length else []
+
+    def _find_mlcs_token(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
+        """
+        Optimized MLCS for token-level sequences with more sophisticated matching.
+        Used primarily for concept signature extraction.
 
         Args:
             sequences: List of token sequences
@@ -327,6 +438,62 @@ class MLCSAlgorithm:
 
         # Return the highest scoring n-gram if any
         return list(common_ngrams[0][0]) if common_ngrams else []
+
+    def extract_concept_signature(
+        self,
+        concept_text: str,
+        contexts: List[str],
+        language: Optional[str] = None
+    ) -> Tuple[List[str], float]:
+        """
+        Extract a concept signature from its context occurrences.
+
+        Args:
+            concept_text: Concept text
+            contexts: List of context texts where the concept appears
+            language: Optional language code
+
+        Returns:
+            Tuple of (signature_pattern, confidence)
+        """
+        # Use provided language or default
+        lang = language or self.language
+
+        # If no contexts, use the concept text itself
+        if not contexts:
+            preprocessed = self.preprocess_text(concept_text, lang)
+            return preprocessed, 0.5
+
+        # Extract significant sequences from contexts
+        significant_sequences = self.find_significant_patterns(
+            contexts, min_length=2, min_frequency=max(2, len(contexts) // 3), language=lang
+        )
+
+        # If we found significant sequences
+        if significant_sequences:
+            # Use the highest scoring sequence as the signature pattern
+            signature_pattern, score = significant_sequences[0]
+
+            # Ensure the extracted signature actually relates to the concept
+            concept_tokens = self.preprocess_text(concept_text, lang)
+
+            # Check if there's overlap between signature pattern and concept tokens
+            overlap = set(signature_pattern).intersection(set(concept_tokens))
+
+            if overlap or len(signature_pattern) <= 2:
+                # Calculate confidence based on score
+                confidence = min(score / 10.0, 0.95)  # Normalize confidence
+                return signature_pattern, confidence
+
+            # If no overlap, try the next highest scoring sequence
+            if len(significant_sequences) > 1:
+                signature_pattern, score = significant_sequences[1]
+                confidence = min(score / 10.0, 0.9)  # Slightly lower confidence
+                return signature_pattern, confidence
+
+        # If no significant sequences found or no good match, use the preprocessed concept text
+        preprocessed = self.preprocess_text(concept_text, lang)
+        return preprocessed, 0.5
 
     def find_significant_patterns(
         self,
@@ -402,90 +569,3 @@ class MLCSAlgorithm:
         significant_ngrams.sort(key=lambda x: x[1], reverse=True)
 
         return significant_ngrams
-
-    def extract_concept_signature(
-        self,
-        concept_text: str,
-        contexts: List[str],
-        language: Optional[str] = None
-    ) -> Tuple[List[str], float]:
-        """
-        Extract a concept signature from its context occurrences.
-
-        Args:
-            concept_text: Concept text
-            contexts: List of context texts where the concept appears
-            language: Optional language code
-
-        Returns:
-            Tuple of (signature_pattern, confidence)
-        """
-        # Use provided language or default
-        lang = language or self.language
-
-        # If no contexts, use the concept text itself
-        if not contexts:
-            preprocessed = self.preprocess_text(concept_text, lang)
-            return preprocessed, 0.5
-
-        # Extract significant sequences from contexts
-        significant_sequences = self.find_significant_patterns(
-            contexts, min_length=2, min_frequency=max(2, len(contexts) // 3), language=lang
-        )
-
-        # If we found significant sequences
-        if significant_sequences:
-            # Use the highest scoring sequence as the signature pattern
-            signature_pattern, score = significant_sequences[0]
-
-            # Ensure the extracted signature actually relates to the concept
-            concept_tokens = self.preprocess_text(concept_text, lang)
-
-            # Check if there's overlap between signature pattern and concept tokens
-            overlap = set(signature_pattern).intersection(set(concept_tokens))
-
-            if overlap or len(signature_pattern) <= 2:
-                # Calculate confidence based on score
-                confidence = min(score / 10.0, 0.95)  # Normalize confidence
-                return signature_pattern, confidence
-
-            # If no overlap, try the next highest scoring sequence
-            if len(significant_sequences) > 1:
-                signature_pattern, score = significant_sequences[1]
-                confidence = min(score / 10.0, 0.9)  # Slightly lower confidence
-                return signature_pattern, confidence
-
-        # If no significant sequences found or no good match, use the preprocessed concept text
-        preprocessed = self.preprocess_text(concept_text, lang)
-        return preprocessed, 0.5
-
-    def find_common_segments(self, texts: List[str], language: Optional[str] = None) -> List[str]:
-        """
-        Find common text segments across multiple texts.
-
-        Args:
-            texts: List of text strings
-            language: Optional language code
-
-        Returns:
-            List of common segments
-        """
-        if not texts:
-            return []
-
-        # Use provided language or default
-        lang = language or self.language
-
-        # Preprocess texts
-        preprocessed_texts = [self.preprocess_text(text, lang) for text in texts]
-
-        # Filter out empty texts
-        preprocessed_texts = [tokens for tokens in preprocessed_texts if tokens]
-
-        if not preprocessed_texts:
-            return []
-
-        # Find the MLCS
-        mlcs = self.find_mlcs(preprocessed_texts)
-
-        return mlcs

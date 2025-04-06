@@ -721,7 +721,7 @@ async def link_concepts(
 async def deduplicate_concepts(
     domain: Optional[str] = Query(None, description="Optional domain to limit deduplication"),
     language: Optional[str] = Query(None, description="Optional language to limit deduplication"),
-    threshold: float = Query(0.85, description="Similarity threshold (0.0-1.0)"),
+    threshold: float = Query(0.80, description="Similarity threshold (0.0-1.0)"),
     api_key: str = Depends(get_api_key)
 ):
     """
