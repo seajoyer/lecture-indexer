@@ -2,12 +2,14 @@
 Enhanced concept deduplication module for the Lecture Video Content Indexer.
 Implements unified character-level MLCS algorithm for robust concept similarity detection,
 handling variations and duplicates across all concept categories.
+Preserves educational significance metrics during deduplication.
 """
 
 import re
 import logging
 import time
-from typing import Dict, List, Any, Optional
+import difflib
+from typing import Dict, List, Any, Optional, Set, Tuple
 
 # Import MLCS algorithm
 from mlcs_algorithm import MLCSAlgorithm
@@ -90,6 +92,19 @@ class ConceptDedupExtension:
         if lang in self.filler_phrases:
             for pattern in self.filler_phrases[lang]:
                 normalized = re.sub(pattern, '', normalized)
+
+        # Russian-specific handling
+        if lang == "ru":
+            # Common problematic phrases in Russian transcripts
+            normalized = normalized.replace("то обсуждений давайте", "")
+            normalized = normalized.replace("то состояние второго определённо такое", "")
+            normalized = normalized.replace("вакуумное состояние оно", "вакуумное состояние")
+            normalized = normalized.replace("эрмитово оператора", "эрмитов оператор")
+            normalized = normalized.replace("любое собственное состояние оно", "собственное состояние")
+
+            # Fix partial removal of phrases that might leave dangling words
+            normalized = re.sub(r'\s+(это|оно|вот|так|такое|такой|такая)$', '', normalized)
+            normalized = re.sub(r'^(это|оно|вот|так|такое|такой|такая)\s+', '', normalized)
 
         return normalized.strip()
 
@@ -354,10 +369,10 @@ class ConceptDedupExtension:
             variant_texts = []
             total_frequency = best_concept.get("frequency", 1)
 
-            # Track original categories
+            # Track original concept categories
             original_categories = set()
-            if "category" in best_concept:
-                original_categories.add(best_concept["category"])
+            if "concept_class" in best_concept:
+                original_categories.add(best_concept["concept_class"])
 
             # Calculate maximum educational weight across all variants
             max_educational_weight = best_concept.get("educational_weight", 0.0)
@@ -371,8 +386,14 @@ class ConceptDedupExtension:
                 total_frequency += variant.get("frequency", 1)
 
                 # Track original categories
-                if "category" in variant:
-                    original_categories.add(variant["category"])
+                if "concept_class" in variant:
+                    original_categories.add(variant["concept_class"])
+
+                # Combine occurrences if available
+                if "occurrences" in variant and "occurrences" in best_concept:
+                    best_concept["occurrences"].extend(variant["occurrences"])
+                elif "occurrences" in variant:
+                    best_concept["occurrences"] = variant["occurrences"]
 
                 # Update educational metrics based on all variants
                 current_edu_weight = variant.get("educational_weight", 0.0)
@@ -400,36 +421,6 @@ class ConceptDedupExtension:
 
         return canonical_concepts
 
-    def batch_process_concepts(self, concepts: List[Dict[str, Any]], batch_size: int = 500,
-                              language: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Process concepts in batches for better performance with large datasets.
-
-        Args:
-            concepts: List of concept dictionaries
-            batch_size: Maximum concepts per batch
-            language: Language code
-
-        Returns:
-            Deduplicated list of concepts
-        """
-        if len(concepts) <= batch_size:
-            return self.deduplicate_concepts(concepts, language)
-
-        # Process in batches
-        all_deduplicated = []
-
-        for i in range(0, len(concepts), batch_size):
-            batch = concepts[i:min(i+batch_size, len(concepts))]
-            logger.info(f"Processing batch {i//batch_size + 1} ({len(batch)} concepts)")
-
-            batch_results = self.deduplicate_concepts(batch, language)
-            all_deduplicated.extend(batch_results)
-
-        # Final deduplication across batches to consolidate results
-        logger.info(f"Performing final deduplication across {len(all_deduplicated)} concepts")
-        return self.deduplicate_concepts(all_deduplicated, language)
-
 
 def apply_concept_deduplication(processed_result: Dict[str, Any], language: str = None) -> Dict[str, Any]:
     """
@@ -455,10 +446,16 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
     theoretical_concepts = domain_features.get("theoretical_concepts", [])
     practical_concepts = domain_features.get("practical_concepts", [])
 
-    total_concepts = len(theoretical_concepts) + len(practical_concepts)
+    # Collect key concepts from unified format if available
+    key_concepts = domain_features.get("key_concepts", [])
+
+    total_concepts = len(theoretical_concepts) + len(practical_concepts) + len(key_concepts)
     if total_concepts == 0:
         logger.info("No concepts to deduplicate")
         return processed_result  # Nothing to deduplicate
+
+    # Create timer for performance tracking
+    start_time = time.time()
 
     # Initialize deduplicator
     deduplicator = ConceptDedupExtension(language=language)
@@ -485,18 +482,58 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
             concept_origins[concept_id] = "practical_concepts"
         all_concepts.append(concept_copy)
 
+    # Add key concepts if available (for unified format)
+    for concept in key_concepts:
+        concept_copy = concept.copy()
+        concept_class = concept_copy.get("concept_class", "")
+        if concept_class == "theoretical":
+            concept_copy["category"] = "theoretical_concepts"
+        elif concept_class == "practical":
+            concept_copy["category"] = "practical_concepts"
+        else:
+            concept_copy["category"] = "key_concepts"
+
+        concept_id = concept_copy.get("concept_id")
+        if concept_id:
+            concept_origins[concept_id] = concept_copy["category"]
+        all_concepts.append(concept_copy)
+
     logger.info(f"Deduplicating {len(all_concepts)} concepts across all categories")
 
     # Deduplicate all concepts together
-    start_time = time.time()
-    deduplicated_concepts = deduplicator.batch_process_concepts(all_concepts, language=language)
+    deduplicated_concepts = deduplicator.deduplicate_concepts(all_concepts, language=language)
     dedup_time = time.time() - start_time
 
     logger.info(f"Deduplicated from {len(all_concepts)} to {len(deduplicated_concepts)} concepts in {dedup_time:.2f}s")
 
+    # Track concepts by original ID for canonical mapping
+    concept_id_map = {}
+    for concept in deduplicated_concepts:
+        concept_id = concept.get("concept_id")
+        if concept_id:
+            # Store mapping from original to canonical
+            original_ids = []
+
+            # Main concept ID
+            original_ids.append(concept_id)
+
+            # Add variant IDs if available
+            if "variant_texts" in concept:
+                for variant_text in concept.get("variant_texts", []):
+                    for orig_concept in all_concepts:
+                        if orig_concept.get("text") == variant_text:
+                            variant_id = orig_concept.get("concept_id")
+                            if variant_id and variant_id != concept_id:
+                                original_ids.append(variant_id)
+
+            # Map all original IDs to this canonical concept
+            for orig_id in original_ids:
+                concept_id_map[orig_id] = concept
+
     # Now we need to reconstruct the category-specific lists
     new_theoretical_concepts = []
     new_practical_concepts = []
+    new_key_concepts = []
 
     # Helper function to check if a concept belongs to a category
     def belongs_to_category(concept, category):
@@ -513,6 +550,12 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
         if concept_id and concept_id in concept_origins and concept_origins[concept_id] == category:
             return True
 
+        # For theoretical/practical concepts, also check concept_class
+        if category == "theoretical_concepts" and concept.get("concept_class") == "theoretical":
+            return True
+        if category == "practical_concepts" and concept.get("concept_class") == "practical":
+            return True
+
         return False
 
     # Re-categorize concepts based on original category
@@ -525,20 +568,49 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
             del clean_concept["original_categories"]
 
         # Check if it belongs in theoretical list
-        if belongs_to_category(concept, "theoretical_concepts") or concept.get("concept_class") == "theoretical":
-            new_theoretical_concepts.append(clean_concept)
+        if belongs_to_category(concept, "theoretical_concepts"):
+            theoretical_copy = clean_concept.copy()
+            theoretical_copy["concept_class"] = "theoretical"
+            theoretical_copy["theoretical"] = True
+            new_theoretical_concepts.append(theoretical_copy)
 
         # Check if it belongs in practical list
-        if belongs_to_category(concept, "practical_concepts") or concept.get("concept_class") == "practical":
-            new_practical_concepts.append(clean_concept)
+        if belongs_to_category(concept, "practical_concepts"):
+            practical_copy = clean_concept.copy()
+            practical_copy["concept_class"] = "practical"
+            practical_copy["theoretical"] = False
+            new_practical_concepts.append(practical_copy)
+
+        # Check if it belongs in key concepts list
+        if belongs_to_category(concept, "key_concepts"):
+            new_key_concepts.append(clean_concept)
 
     # Update domain features with deduplicated concept lists
     domain_features["theoretical_concepts"] = new_theoretical_concepts
     domain_features["practical_concepts"] = new_practical_concepts
 
+    # Update key_concepts if we had any
+    if key_concepts:
+        domain_features["key_concepts"] = new_key_concepts
+
+    # Update the canonical concept mappings
+    canonical_mapping = {}
+    for concept in all_concepts:
+        original_id = concept.get("concept_id")
+        if original_id in concept_id_map:
+            canonical = concept_id_map[original_id]
+            canonical_id = canonical.get("concept_id")
+            if canonical_id != original_id:
+                canonical_mapping[original_id] = canonical_id
+
+    # Add canonical mapping to result
+    domain_features["canonical_concept_mapping"] = canonical_mapping
+
     # Log deduplication results for each category
     logger.info(f"Theoretical concepts: {len(theoretical_concepts)} → {len(new_theoretical_concepts)}")
     logger.info(f"Practical concepts: {len(practical_concepts)} → {len(new_practical_concepts)}")
+    if key_concepts:
+        logger.info(f"Key concepts: {len(key_concepts)} → {len(new_key_concepts)}")
 
     # Update processed result
     processed_result["domain_features"] = domain_features
@@ -547,7 +619,7 @@ def apply_concept_deduplication(processed_result: Dict[str, Any], language: str 
     processed_result["deduplication_stats"] = {
         "original_total": len(all_concepts),
         "deduplicated_total": len(deduplicated_concepts),
-        "reduction_percentage": round((len(all_concepts) - len(deduplicated_concepts)) / len(all_concepts) * 100, 2) if all_concepts else 0,
+        "reduction_percentage": round((len(all_concepts) - len(deduplicated_concepts)) / max(len(all_concepts), 1) * 100, 2),
         "processing_time_seconds": dedup_time,
         "theoretical_concepts_original": len(theoretical_concepts),
         "theoretical_concepts_deduplicated": len(new_theoretical_concepts),

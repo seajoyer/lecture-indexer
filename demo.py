@@ -2,7 +2,7 @@
 """
 Enhanced demo script for the Lecture Video Content Indexer.
 Provides various commands to demonstrate and test the system.
-Added support for processing video playlists.
+Added support for processing video playlists with automatic URL detection.
 """
 
 import argparse
@@ -148,13 +148,14 @@ class Demo:
         if not theoretical_concepts and not practical_concepts:
             print("\nNo concepts found.")
 
-    def process_video(self, url: str, language_preference: List[str] = None) -> None:
+    def process_video(self, url: str, language_preference: List[str] = None, auto_index: bool = True) -> None:
         """
         Process a YouTube video through the pipeline.
 
         Args:
             url: YouTube video URL
             language_preference: List of language preferences
+            auto_index: Whether to automatically index after processing
         """
         if language_preference is None:
             language_preference = ['en', 'ru']
@@ -191,6 +192,18 @@ class Demo:
                 print(f"Practical Concepts: {len(practical_concepts)}")
                 print(f"Processing Time: {processing_time:.2f} seconds")
 
+                # Automatically index content if requested
+                if auto_index:
+                    index_start_time = time.time()
+                    print(f"\nIndexing content for video: {result.get('video_id')}")
+                    index_success = self.search_engine.index_content(result)
+                    index_time = time.time() - index_start_time
+
+                    if index_success:
+                        print(f"Successfully indexed content in {index_time:.2f} seconds")
+                    else:
+                        print(f"Failed to index content")
+
                 # Print concepts by category
                 self.print_concepts_by_category(theoretical_concepts, practical_concepts)
 
@@ -206,9 +219,38 @@ class Demo:
             print(f"Error: {e}")
             return {"status": "error", "error": str(e), "video_url": url}
 
-    def process_playlist(self, url: str, language_preference: List[str] = None,
-                        max_videos: int = 10,
-                        parallel: bool = False) -> None:
+    def process_content(self, url: str, language_preference: List[str] = None,
+                      max_videos: int = 10, parallel: bool = False) -> None:
+        """
+        Process YouTube content (video or playlist) through the pipeline.
+        Automatically detects whether the URL is for a single video or a playlist.
+
+        Args:
+            url: YouTube URL (video or playlist)
+            language_preference: List of language preferences
+            max_videos: Maximum number of videos to process (for playlists)
+            parallel: Whether to process videos in parallel (for playlists)
+        """
+        if language_preference is None:
+            language_preference = ['en', 'ru']
+
+        # First determine if this is a video or playlist URL
+        is_video, video_id = self.youtube_extractor.validate_video_url(url)
+        is_playlist, playlist_id = self.youtube_extractor.validate_playlist_url(url)
+
+        if is_video:
+            print(f"Detected single video URL: {url}")
+            self.process_video(url, language_preference)
+        elif is_playlist:
+            print(f"Detected playlist URL: {url}")
+            self._process_playlist(url, language_preference, max_videos, parallel)
+        else:
+            print(f"Invalid YouTube URL: {url}")
+            print("Please provide a valid YouTube video or playlist URL.")
+            return
+
+    def _process_playlist(self, url: str, language_preference: List[str] = None,
+                        max_videos: int = 10, parallel: bool = False) -> None:
         """
         Process a YouTube playlist through the pipeline.
 
@@ -351,44 +393,6 @@ class Demo:
             logger.error(f"Error processing playlist: {e}")
             print(f"Error: {e}")
             return []
-
-    def index_content(self, video_id: str) -> None:
-        """
-        Index video content for search.
-
-        Args:
-            video_id: YouTube video ID
-        """
-        try:
-            # First load the processed content
-            filepath = None
-
-            # Look for the processed file
-            for filename in os.listdir(self.config["output_dir"]):
-                if filename.startswith(f"{video_id}_"):
-                    filepath = os.path.join(self.config["output_dir"], filename)
-                    break
-
-            if not filepath:
-                print(f"No processed file found for video ID: {video_id}")
-                return
-
-            # Load the processed content
-            with open(filepath, 'r', encoding='utf-8') as f:
-                processed_result = json.load(f)
-
-            # Index the content
-            print(f"Indexing content for video: {video_id}")
-            success = self.search_engine.index_content(processed_result)
-
-            if success:
-                print(f"Successfully indexed content for video: {video_id}")
-            else:
-                print(f"Failed to index content for video: {video_id}")
-
-        except Exception as e:
-            logger.error(f"Error indexing content: {e}")
-            print(f"Error: {e}")
 
     def list_concepts(self, domain: str = None, limit: int = 20) -> None:
         """
@@ -782,30 +786,20 @@ def main():
     # Commands
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
-    # Process video command
-    process_parser = subparsers.add_parser("process", help="Process a YouTube video")
-    process_parser.add_argument("url", help="YouTube video URL")
+    # Combined process command for both videos and playlists
+    process_parser = subparsers.add_parser("process", help="Process YouTube content (video or playlist)")
+    process_parser.add_argument("url", help="YouTube URL (video or playlist)")
     process_parser.add_argument("--language", "-l", nargs="+", default=["en", "ru"],
                                help="Language preference (e.g., en ru)")
-
-    # Process playlist command
-    playlist_parser = subparsers.add_parser("process-playlist", help="Process a YouTube playlist")
-    playlist_parser.add_argument("url", help="YouTube playlist URL")
-    playlist_parser.add_argument("--language", "-l", nargs="+", default=["en", "ru"],
-                               help="Language preference (e.g., en ru)")
-    playlist_parser.add_argument("--max-videos", "-m", type=int, default=10,
-                               help="Maximum number of videos to process")
-    playlist_parser.add_argument("--parallel", "-p", action="store_true",
-                               help="Process videos in parallel")
+    process_parser.add_argument("--max-videos", "-m", type=int, default=10,
+                               help="Maximum number of videos to process (for playlists)")
+    process_parser.add_argument("--parallel", "-p", action="store_true",
+                               help="Process videos in parallel (for playlists)")
 
     # List playlists command
     list_playlists_parser = subparsers.add_parser("list-playlists", help="List processed playlists")
     list_playlists_parser.add_argument("--limit", "-l", type=int, default=10,
                                      help="Maximum number of playlists to display")
-
-    # Index content command
-    index_parser = subparsers.add_parser("index", help="Index video content for search")
-    index_parser.add_argument("video_id", help="YouTube video ID")
 
     # List concepts command
     list_parser = subparsers.add_parser("list-concepts", help="List concepts in the database")
@@ -853,13 +847,9 @@ def main():
     # Execute command
     try:
         if args.command == "process":
-            demo.process_video(args.url, args.language)
-        elif args.command == "process-playlist":
-            demo.process_playlist(args.url, args.language, args.max_videos, args.parallel)
+            demo.process_content(args.url, args.language, args.max_videos, args.parallel)
         elif args.command == "list-playlists":
             demo.list_playlists(args.limit)
-        elif args.command == "index":
-            demo.index_content(args.video_id)
         elif args.command == "list-concepts":
             demo.list_concepts(args.domain, args.limit)
         elif args.command == "search":

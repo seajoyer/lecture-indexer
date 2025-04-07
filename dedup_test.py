@@ -1,13 +1,15 @@
 """
-Test script for the unified concept deduplication approach.
-Demonstrates how the system handles duplicates across concept categories.
+Test script for enhanced concept extraction with multilingual support.
+Tests the improved concept extraction on both English and Russian quantum physics content.
 """
 
 import logging
-import time
 import json
-import hashlib
-from typing import Dict, List, Any
+from typing import List, Dict, Any
+
+# Import our enhanced modules
+from unified_concept_extractor import UnifiedConceptExtractor
+from transcript_processor import TranscriptProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -16,230 +18,135 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import the deduplication module
-from concept_dedup import ConceptDedupExtension, apply_concept_deduplication
+def test_concept_extraction(text: str, language: str, domain: str = "physics") -> Dict[str, Any]:
+    """
+    Test concept extraction from text with detailed evaluation.
 
-def create_test_data():
-    """Create test data with cross-category duplicates."""
-    # Russian physics concepts
-    concepts = {
-        # Key concepts with some duplicates
-        "key_concepts": [
-            {
-                "text": "уравнение шредингера",
-                "concept_id": hashlib.md5("уравнение шредингера:physics:ru".encode()).hexdigest(),
-                "frequency": 7,
-                "score": 5.2,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "волновая функция",
-                "concept_id": hashlib.md5("волновая функция:physics:ru".encode()).hexdigest(),
-                "frequency": 8,
-                "score": 6.1,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "собственное значение",
-                "concept_id": hashlib.md5("собственное значение:physics:ru".encode()).hexdigest(),
-                "frequency": 6,
-                "score": 5.5,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "квантовая механика",
-                "concept_id": hashlib.md5("квантовая механика:physics:ru".encode()).hexdigest(),
-                "frequency": 5,
-                "score": 5.3,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            }
-        ],
+    Args:
+        text: Source text
+        language: Language code ('en' or 'ru')
+        domain: Content domain
 
-        # Theoretical concepts with duplicates from key_concepts
-        "theoretical_concepts": [
-            {
-                "text": "уравнения шредингера",  # Variant of "уравнение шредингера"
-                "concept_id": hashlib.md5("уравнения шредингера:physics:ru".encode()).hexdigest(),
-                "frequency": 4,
-                "score": 4.8,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "волновую функцию",  # Variant of "волновая функция"
-                "concept_id": hashlib.md5("волновую функцию:physics:ru".encode()).hexdigest(),
-                "frequency": 3,
-                "score": 4.2,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "гамильтониан",  # Unique to theoretical concepts
-                "concept_id": hashlib.md5("гамильтониан:physics:ru".encode()).hexdigest(),
-                "frequency": 5,
-                "score": 5.0,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            },
-            {
-                "text": "собственные значения",  # Variant of "собственное значение"
-                "concept_id": hashlib.md5("собственные значения:physics:ru".encode()).hexdigest(),
-                "frequency": 4,
-                "score": 4.9,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "theoretical"
-            }
-        ],
+    Returns:
+        Dictionary with test results
+    """
+    logger.info(f"Testing concept extraction for language: {language}")
 
-        # Practical concepts with some duplicates
-        "practical_concepts": [
-            {
-                "text": "уравнение Шредингер",  # Another variant of "уравнение шредингера"
-                "concept_id": hashlib.md5("уравнение Шредингер:physics:ru".encode()).hexdigest(),
-                "frequency": 2,
-                "score": 3.5,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "practical"  # Note: Different class for testing
-            },
-            {
-                "text": "эксперимент",  # Unique to practical concepts
-                "concept_id": hashlib.md5("эксперимент:physics:ru".encode()).hexdigest(),
-                "frequency": 6,
-                "score": 5.2,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "practical"
-            },
-            {
-                "text": "квантовый механика",  # Variant of "квантовая механика"
-                "concept_id": hashlib.md5("квантовый механика:physics:ru".encode()).hexdigest(),
-                "frequency": 3,
-                "score": 4.1,
-                "domain": "physics",
-                "language": "ru",
-                "concept_class": "practical"
-            }
-        ]
-    }
+    # Split text into simulated segments
+    segments = []
 
-    return concepts
+    # Create simple segments from paragraphs
+    paragraphs = text.split('\n\n')
+    for i, p in enumerate(paragraphs):
+        if p.strip():
+            segments.append({
+                "id": f"segment_{i}",
+                "start_time": i * 10.0,
+                "end_time": (i + 1) * 10.0,
+                "text": p,
+                "language": language
+            })
 
-def test_unified_deduplication():
-    """Test the unified deduplication approach."""
-    # Create test data
-    concept_categories = create_test_data()
+    # Create transcript processor and unified concept extractor
+    transcript_processor = TranscriptProcessor()
+    concept_extractor = UnifiedConceptExtractor(language=language)
 
-    # Count concepts in each category
-    key_count = len(concept_categories["key_concepts"])
-    theoretical_count = len(concept_categories["theoretical_concepts"])
-    practical_count = len(concept_categories["practical_concepts"])
-    total_count = key_count + theoretical_count + practical_count
-
-    logger.info(f"Created test data with {total_count} concepts across categories:")
-    logger.info(f"  Key concepts: {key_count}")
-    logger.info(f"  Theoretical concepts: {theoretical_count}")
-    logger.info(f"  Practical concepts: {practical_count}")
-
-    # Create mock processing result with test data
-    mock_result = {
-        "job_id": "test_job",
-        "status": "completed",
+    # Create metadata
+    metadata = {
         "video_id": "test_video",
-        "transcript": {
-            "language": "ru",
-            "segments": []
-        },
-        "domain_features": {
-            "domain": "physics",
-            "key_concepts": concept_categories["key_concepts"],
-            "theoretical_concepts": concept_categories["theoretical_concepts"],
-            "practical_concepts": concept_categories["practical_concepts"]
-        }
+        "domain": domain,
+        "title": "Test Video",
+        "language": language
     }
 
-    # Apply unified deduplication
-    logger.info("Applying unified concept deduplication...")
-    start_time = time.time()
+    # Process transcript
+    processed_transcript = transcript_processor.process_transcript(segments, metadata)
 
-    deduplicated_result = apply_concept_deduplication(mock_result, "ru")
+    # Extract concepts
+    domain_features = concept_extractor.extract_concepts_from_transcript(processed_transcript)
 
-    dedup_time = time.time() - start_time
+    # Evaluate results
+    return {
+        "language": language,
+        "domain": domain,
+        "segment_count": len(segments),
+        "processed_segment_count": len(processed_transcript.get("segments", [])),
+        "theoretical_concepts": domain_features.get("theoretical_concepts", []),
+        "practical_concepts": domain_features.get("practical_concepts", []),
+        "theoretical_count": len(domain_features.get("theoretical_concepts", [])),
+        "practical_count": len(domain_features.get("practical_concepts", [])),
+        "total_concepts": len(domain_features.get("theoretical_concepts", [])) + len(domain_features.get("practical_concepts", []))
+    }
 
-    # Extract deduplicated concept lists
-    deduplicated_key = deduplicated_result["domain_features"]["key_concepts"]
-    deduplicated_theoretical = deduplicated_result["domain_features"]["theoretical_concepts"]
-    deduplicated_practical = deduplicated_result["domain_features"]["practical_concepts"]
+def print_concept_summary(results: Dict[str, Any]) -> None:
+    """
+    Print a summary of the extracted concepts.
 
-    # Check deduplication results
-    logger.info(f"Deduplication completed in {dedup_time:.4f} seconds")
-    logger.info(f"Deduplication stats:")
+    Args:
+        results: Results dictionary from test_concept_extraction
+    """
+    print(f"\n===== Concept Extraction Results ({results['language']}) =====")
+    print(f"Domain: {results['domain']}")
+    print(f"Total Concepts: {results['total_concepts']}")
+    print(f"  - Theoretical: {results['theoretical_count']}")
+    print(f"  - Practical: {results['practical_count']}")
 
-    if "deduplication_stats" in deduplicated_result:
-        stats = deduplicated_result["deduplication_stats"]
-        logger.info(f"  Original total: {stats['original_total']} concepts")
-        logger.info(f"  Deduplicated total: {stats['deduplicated_total']} concepts")
-        logger.info(f"  Reduction: {stats['reduction_percentage']}%")
+    # Display top concepts of each type
+    max_display = 10
 
-        logger.info(f"\nCategory-specific results:")
-        logger.info(f"  Key concepts: {stats['key_concepts_original']} → {stats['key_concepts_deduplicated']}")
-        logger.info(f"  Theoretical concepts: {stats['theoretical_concepts_original']} → {stats['theoretical_concepts_deduplicated']}")
-        logger.info(f"  Practical concepts: {stats['practical_concepts_original']} → {stats['practical_concepts_deduplicated']}")
-    else:
-        logger.info(f"  Key concepts: {key_count} → {len(deduplicated_key)}")
-        logger.info(f"  Theoretical concepts: {theoretical_count} → {len(deduplicated_theoretical)}")
-        logger.info(f"  Practical concepts: {practical_count} → {len(deduplicated_practical)}")
+    print("\nTheoretical Concepts:")
+    for i, concept in enumerate(results['theoretical_concepts'][:max_display]):
+        confidence = concept.get("classification_confidence", 0.0)
+        is_educational = concept.get("is_educational", False)
+        educational_marker = "✓" if is_educational else "✗"
+        print(f"  {i+1}. {concept['text']} (ID: {concept['concept_id'][:8]}) [Educational: {educational_marker}]")
 
-    # Analyze deduplicated concepts
-    logger.info("\nDeduplicated key concepts:")
-    for i, concept in enumerate(deduplicated_key):
-        variants = concept.get("variant_texts", [])
-        variant_str = f" (variants: {', '.join(variants)})" if variants else ""
-        logger.info(f"  {i+1}. {concept['text']}{variant_str}")
+    print("\nPractical Concepts:")
+    for i, concept in enumerate(results['practical_concepts'][:max_display]):
+        confidence = concept.get("classification_confidence", 0.0)
+        is_educational = concept.get("is_educational", False)
+        educational_marker = "✓" if is_educational else "✗"
+        print(f"  {i+1}. {concept['text']} (ID: {concept['concept_id'][:8]}) [Educational: {educational_marker}]")
 
-    logger.info("\nDeduplicated theoretical concepts:")
-    for i, concept in enumerate(deduplicated_theoretical):
-        variants = concept.get("variant_texts", [])
-        variant_str = f" (variants: {', '.join(variants)})" if variants else ""
-        logger.info(f"  {i+1}. {concept['text']}{variant_str}")
+def main():
+    """Run concept extraction tests."""
+    # Test with English quantum physics text
+    english_test_text = """
+Quantum mechanics is a fundamental theory in physics that provides a description of the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all quantum physics including quantum chemistry, quantum field theory, quantum technology, and quantum information science.
 
-    logger.info("\nDeduplicated practical concepts:")
-    for i, concept in enumerate(deduplicated_practical):
-        variants = concept.get("variant_texts", [])
-        variant_str = f" (variants: {', '.join(variants)})" if variants else ""
-        logger.info(f"  {i+1}. {concept['text']}{variant_str}")
+Classical physics, the collection of theories that existed before the advent of quantum mechanics, describes many aspects of nature at an ordinary (macroscopic) scale, but it is not sufficient for describing them at small (atomic and subatomic) scales. Most theories in classical physics can be derived from quantum mechanics as an approximation valid at large (macroscopic) scale.
 
-    # Verify no duplicates across categories
-    all_canonical_texts = set()
-    duplicates_found = []
+Quantum mechanics differs from classical physics in that energy, momentum, angular momentum, and other quantities of a bound system are restricted to discrete values (quantization); objects have characteristics of both particles and waves (wave–particle duality); and there are limits to how accurately the value of a physical quantity can be predicted prior to its measurement, given a complete set of initial conditions (the uncertainty principle).
 
-    for concept in deduplicated_key + deduplicated_theoretical + deduplicated_practical:
-        text = concept.get("text", "").lower()
-        if text in all_canonical_texts:
-            duplicates_found.append(text)
-        else:
-            all_canonical_texts.add(text)
+Let's explore the concept of wave functions in quantum mechanics. The wave function is a mathematical function used in quantum mechanics to describe the quantum state of a system. It is a complex-valued probability amplitude, and the probabilities for the possible results of measurements made on the system can be derived from it.
 
-    if duplicates_found:
-        logger.warning(f"Found {len(duplicates_found)} duplicates across categories: {duplicates_found}")
-    else:
-        logger.info("\nSuccess: No duplicates found across categories!")
+For example, if we consider a single non-relativistic particle in one dimension, the wave function is a function of position and time: Ψ(x, t). The square of the absolute value of the wave function, |Ψ(x, t)|², gives the probability density of finding the particle at position x at time t.
+    """
 
-    return deduplicated_result
+    # Test with Russian quantum physics text
+    russian_test_text = """
+Квантовая механика — это фундаментальная теория в физике, которая описывает физические свойства природы на масштабе атомов и субатомных частиц. Она является основой всей квантовой физики, включая квантовую химию, квантовую теорию поля, квантовые технологии и квантовую информатику.
+
+Классическая физика, совокупность теорий, существовавших до появления квантовой механики, описывает многие аспекты природы в обычном (макроскопическом) масштабе, но она недостаточна для их описания в малых (атомных и субатомных) масштабах. Большинство теорий в классической физике могут быть выведены из квантовой механики как приближение, справедливое в большом (макроскопическом) масштабе.
+
+Квантовая механика отличается от классической физики тем, что энергия, импульс, момент импульса и другие величины связанной системы ограничены дискретными значениями (квантование); объекты имеют характеристики как частиц, так и волн (волново-корпускулярный дуализм); и существуют пределы того, насколько точно можно предсказать значение физической величины до ее измерения, при заданном полном наборе начальных условий (принцип неопределенности).
+
+Давайте рассмотрим понятие волновой функции в квантовой механике. Волновая функция — это математическая функция, используемая в квантовой механике для описания квантового состояния системы. Это комплекснозначная амплитуда вероятности, и вероятности для возможных результатов измерений, проводимых на системе, могут быть получены из нее.
+
+Например, если мы рассматриваем одну нерелятивистскую частицу в одном измерении, волновая функция является функцией положения и времени: Ψ(x, t). Квадрат модуля волновой функции, |Ψ(x, t)|², дает плотность вероятности найти частицу в положении x в момент времени t.
+    """
+
+    # Run tests
+    english_results = test_concept_extraction(english_test_text, "en", "physics")
+    print_concept_summary(english_results)
+
+    russian_results = test_concept_extraction(russian_test_text, "ru", "physics")
+    print_concept_summary(russian_results)
+
+    # Compare results
+    print("\n===== Comparison =====")
+    print(f"English concepts: {english_results['total_concepts']}")
+    print(f"Russian concepts: {russian_results['total_concepts']}")
 
 if __name__ == "__main__":
-    logger.info("Running unified deduplication test")
-    test_unified_deduplication()
-    logger.info("Test completed")
+    main()

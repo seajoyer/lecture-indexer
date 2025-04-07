@@ -1,12 +1,13 @@
 """
 Enhanced Linear Multiple Longest Common Subsequence (MLCS) algorithm implementation.
 Optimized for both character-level and token-level comparison, efficiently handling
-both concept similarity detection and concept signature generation.
+both concept similarity detection and concept signature generation with improved
+language-specific processing, especially for Russian content.
 """
 
 import re
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Set
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -16,13 +17,12 @@ class MLCSAlgorithm:
     Efficient Linear Multiple Longest Common Subsequence algorithm implementation.
 
     This implementation provides both character-level and token-level MLCS algorithms
-    for different use cases - character-level for concept deduplication and
-    token-level for concept signature extraction.
+    with enhanced language-specific processing for concept detection and signature extraction.
     """
 
     def __init__(self, language: str = "en"):
         """
-        Initialize the MLCS algorithm.
+        Initialize the MLCS algorithm with language-specific resources.
 
         Args:
             language: Language code ('en' or 'ru')
@@ -31,8 +31,8 @@ class MLCSAlgorithm:
         self._load_language_resources()
 
     def _load_language_resources(self):
-        """Load language-specific resources for preprocessing."""
-        # Stopwords by language - words to filter out
+        """Load enhanced language-specific resources for preprocessing."""
+        # Enhanced stopwords by language - words to filter out
         self.stopwords = {
             'en': {
                 'the', 'a', 'an', 'and', 'or', 'but', 'if', 'because', 'as', 'what',
@@ -46,9 +46,19 @@ class MLCSAlgorithm:
                 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself',
                 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them',
                 'their', 'theirs', 'themselves', 'am', 'is', 'are', 'was', 'were', 'be',
-                'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing'
+                'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing',
+                'also', 'actually', 'like', 'basically', 'obviously', 'simply', 'certainly',
+                'definitely', 'really', 'probably', 'possibly', 'perhaps', 'indeed', 'furthermore',
+                'moreover', 'however', 'nevertheless', 'nonetheless', 'therefore', 'thus',
+                'meanwhile', 'subsequently', 'consequently', 'alternatively', 'similarly',
+                'likewise', 'accordingly', 'hence', 'besides', 'anyway', 'actually', 'incidentally',
+                'by the way', 'in fact', 'as a matter of fact', 'in any case', 'in either case',
+                'in both cases', 'either way', 'otherwise', 'rather', 'instead', 'conversely',
+                'in contrast', 'on the contrary', 'on the other hand', 'at any rate', 'in any event',
+                'in conclusion', 'to conclude', 'to summarize', 'to sum up', 'finally'
             },
             'ru': {
+                # Core Russian stopwords
                 "это", "вот", "так", "как", "ну", "да", "нет", "просто",
                 "значит", "сейчас", "здесь", "тут", "уже", "если", "все", "всё",
                 "хорошо", "там", "кстати", "итак", "будет", "ещё", "еще",
@@ -66,40 +76,129 @@ class MLCSAlgorithm:
                 "потом", "затем", "впоследствии", "сначала", "сперва", "вначале", "прежде",
                 "давайте", "рассмотрим", "посмотрим", "будем", "далее", "было", "быть",
                 "есть", "суть", "именно", "лишь", "даже", "ведь", "ещё", "уже", "опять",
-                "снова", "никогда", "всегда", "часто", "иногда", "редко"
+                "снова", "никогда", "всегда", "часто", "иногда", "редко",
+
+                # Extended Russian lecture stopwords - important for Russian physics lectures
+                "то есть", "так сказать", "вот так", "так вот", "как бы", "в общем",
+                "короче", "собственно", "фактически", "практически", "видите ли",
+                "знаете ли", "понимаете", "представляете", "допустим", "предположим",
+                "пускай", "дальше", "имеется", "получаем", "видим", "замечаем",
+                "смотрим", "рассматриваем", "обсуждаем", "обсудим", "рассмотрим",
+                "остановимся", "вернемся", "перейдем", "продолжим", "начнем",
+                "закончим", "заканчиваем", "начинаем", "следует", "надо", "необходимо",
+                "нужно", "хочется", "можем", "должны", "хотим", "будем", "попробуем",
+                "пробуем", "пытаемся", "хотелось бы", "допустим", "предположим",
+                "представим", "например", "положим", "обозначим", "тогда", "потом",
+                "затем", "следовательно", "таким образом", "значит", "поэтому",
+                "соответственно", "итак", "наконец", "кстати", "между прочим", "кстати",
+                "кроме того", "также", "причем", "заметим", "отметим", "напомним",
+                "запомним", "подчеркнем", "выделим", "скажем", "говорим", "помним",
+                "знаем", "помните", "знаете", "думаю", "считаю", "полагаю", "на мой взгляд",
+                "собственно говоря", "честно говоря", "образно говоря"
             }
         }
 
-        # Domain-specific keywords to keep during preprocessing
+        # Domain-specific keywords to keep during preprocessing - expanded for each domain
         self.domain_keywords = {
             "physics": {
                 "en": [
+                    # Core quantum physics terms
                     "quantum", "mechanics", "wave", "function", "operator", "state",
                     "eigenvalue", "eigenstate", "hamiltonian", "commutator", "hermitian",
                     "observable", "measurement", "probability", "amplitude", "schrodinger",
                     "dirac", "bra", "ket", "hilbert", "space", "vector", "momentum", "energy",
-                    "position", "uncertainty", "principle", "entanglement", "superposition"
+                    "position", "uncertainty", "principle", "entanglement", "superposition",
+
+                    # Extended physics terminology
+                    "fermion", "boson", "photon", "electron", "proton", "neutron",
+                    "spin", "charge", "field", "potential", "barrier", "well",
+                    "particle", "wave", "duality", "interference", "diffraction",
+                    "quantization", "discrete", "continuous", "spectrum", "matrix",
+                    "tensor", "eigenfunction", "ground", "excited", "stationary",
+                    "time-dependent", "time-independent", "perturbation", "vacuum",
+                    "vacuum", "density", "angular", "linear", "orbital", "interaction",
+                    "coupling", "coherence", "decoherence", "collapse", "emission",
+                    "absorption", "tunneling", "radiation", "nucleus", "atomic", "molecular"
                 ],
                 "ru": [
-                    "квантовый", "квантовая", "квантовое", "квантовые", "механика",
-                    "волновая", "функция", "оператор", "состояние", "собственное",
-                    "значение", "собственный", "вектор", "гамильтониан", "коммутатор",
-                    "эрмитов", "эрмитово", "эрмитова", "эрмитовый", "наблюдаемая",
-                    "измерение", "вероятность", "амплитуда", "шредингер", "дирак",
-                    "бра", "кет", "гильбертово", "пространство", "вектор", "импульс",
-                    "энергия", "положение", "неопределенность", "принцип", "запутанность",
-                    "суперпозиция", "матрица", "плотности", "чистое", "смешанное"
+                    # Core quantum physics terms in Russian
+                    "квантовый", "квантовая", "квантовое", "квантовые", "квантовость",
+                    "механика", "волновая", "функция", "оператор", "состояние",
+                    "собственное", "значение", "собственный", "вектор", "собственная",
+                    "гамильтониан", "коммутатор", "эрмитов", "эрмитово", "эрмитова",
+                    "наблюдаемая", "измерение", "вероятность", "амплитуда", "шредингер",
+                    "дирак", "бра", "кет", "гильбертово", "пространство",
+                    "импульс", "энергия", "положение", "координата", "координаты",
+                    "неопределенность", "принцип", "запутанность", "суперпозиция",
+
+                    # Extended physics terminology in Russian
+                    "фермион", "бозон", "фотон", "электрон", "протон", "нейтрон",
+                    "спин", "заряд", "поле", "потенциал", "барьер", "яма",
+                    "частица", "волна", "дуализм", "интерференция", "дифракция",
+                    "квантование", "дискретный", "непрерывный", "спектр", "матрица",
+                    "тензор", "собственная функция", "основное", "возбужденное", "стационарное",
+                    "зависящий от времени", "не зависящий от времени", "возмущение", "вакуум",
+                    "плотность", "угловой", "линейный", "орбитальный", "взаимодействие",
+                    "связь", "когерентность", "декогеренция", "коллапс", "излучение",
+                    "поглощение", "туннелирование", "радиация", "ядро", "атомный", "молекулярный",
+
+                    # Specific Russian physics terms
+                    "волновой пакет", "операторы рождения", "операторы уничтожения",
+                    "эрмитово сопряженный", "эрмитово сопряженная", "перестановочный",
+                    "гильбертово пространство", "матрица плотности", "унитарный",
+                    "унитарная", "унитарное", "нормировка", "нормировочный",
+                    "томографическое", "распределение", "матричный", "векторный",
+                    "спектральный", "уровень", "уровни", "энергетический", "сферический"
                 ]
             },
             "mathematics": {
-                "en": ["function", "derivative", "integral", "differential", "equation"],
-                "ru": ["функция", "производная", "интеграл", "дифференциал", "уравнение"]
+                "en": [
+                    "function", "derivative", "integral", "differential", "equation",
+                    "theorem", "lemma", "proof", "corollary", "proposition", "axiom",
+                    "definition", "variable", "constant", "expression", "formula",
+                    "identity", "inequality", "transformation", "mapping", "morphism",
+                    "isomorphism", "homomorphism", "bijection", "surjection", "injection",
+                    "domain", "codomain", "range", "image", "kernel", "vector", "scalar",
+                    "tensor", "matrix", "determinant", "trace", "eigenvalue", "eigenvector",
+                    "basis", "dimension", "topology", "continuous", "limit", "convergence",
+                    "divergence", "sequence", "series", "summation", "product", "induction",
+                    "recursion", "recurrence", "algorithm", "computation", "geometry",
+                    "trigonometry", "angle", "triangle", "circle", "sphere", "polynomial",
+                    "monomial", "binomial", "exponential", "logarithm", "asymptotic",
+                    "approximation", "error", "prime", "factorization", "divisor", "multiple",
+                    "greatest", "least", "remainder", "quotient", "factor", "fraction",
+                    "decimal", "rational", "irrational", "real", "complex", "imaginary",
+                    "conjugate", "magnitude", "argument", "sin", "cos", "tan", "arcsin",
+                    "arccos", "arctan", "sinh", "cosh", "tanh", "absolute", "maximum",
+                    "minimum", "critical", "stationary", "inflection", "concave", "convex"
+                ],
+                "ru": [
+                    "функция", "производная", "интеграл", "дифференциал", "уравнение",
+                    "теорема", "лемма", "доказательство", "следствие", "предложение", "аксиома",
+                    "определение", "переменная", "постоянная", "выражение", "формула",
+                    "тождество", "неравенство", "преобразование", "отображение", "морфизм",
+                    "изоморфизм", "гомоморфизм", "биекция", "сюръекция", "инъекция",
+                    "область определения", "область значений", "образ", "ядро", "вектор", "скаляр",
+                    "тензор", "матрица", "определитель", "след", "собственное значение", "собственный вектор",
+                    "базис", "размерность", "топология", "непрерывный", "предел", "сходимость",
+                    "расходимость", "последовательность", "ряд", "сумма", "произведение", "индукция",
+                    "рекурсия", "рекуррентность", "алгоритм", "вычисление", "геометрия",
+                    "тригонометрия", "угол", "треугольник", "круг", "сфера", "многочлен",
+                    "одночлен", "бином", "экспонента", "логарифм", "асимптотика",
+                    "приближение", "погрешность", "простое число", "факторизация", "делитель", "кратное",
+                    "наибольший", "наименьший", "остаток", "частное", "множитель", "дробь",
+                    "десятичный", "рациональный", "иррациональный", "действительный", "комплексный", "мнимый",
+                    "сопряженный", "модуль", "аргумент", "синус", "косинус", "тангенс", "арксинус",
+                    "арккосинус", "арктангенс", "гиперболический синус", "гиперболический косинус",
+                    "гиперболический тангенс", "абсолютный", "максимум", "минимум", "критический",
+                    "стационарный", "перегиб", "вогнутый", "выпуклый"
+                ]
             }
         }
 
     def normalize_token(self, token: str, language: Optional[str] = None) -> str:
         """
-        Normalize a token by lowercasing and removing non-alphanumeric characters.
+        Normalize a token using language-specific rules.
 
         Args:
             token: Token to normalize
@@ -114,6 +213,39 @@ class MLCSAlgorithm:
         # Lowercase the token
         normalized = token.lower()
 
+        # If Russian, apply Russian-specific normalizations
+        if lang == 'ru':
+            # Replace 'ё' with 'е' (common in Russian text normalization)
+            normalized = normalized.replace('ё', 'е')
+
+            # Remove Russian soft sign (ь) and hard sign (ъ) at the end of words
+            # These don't change the meaning but are grammatical markers
+            normalized = re.sub(r'[ьъ]$', '', normalized)
+
+            # Normalize common variant endings for adjectives
+            normalized = re.sub(r'(ого|его)$', 'ый', normalized)  # masculine genitive to nominative
+            normalized = re.sub(r'(ому|ему)$', 'ый', normalized)  # masculine dative to nominative
+            normalized = re.sub(r'(ую|юю)$', 'ая', normalized)    # feminine accusative to nominative
+
+            # Normalize common case endings for nouns
+            normalized = re.sub(r'(ом|ем|ам|ям|ей|ов|ев|ьев)$', '', normalized)  # plural forms
+
+            # Special case for Russian plurals
+            normalized = re.sub(r'и$', '', normalized) if len(normalized) > 4 else normalized
+
+        else:  # English and other languages
+            # Remove common English suffixes for normalization
+            if len(normalized) > 3:
+                # Plurals and verb forms
+                if normalized.endswith('s') and not normalized.endswith('ss'):
+                    normalized = normalized[:-1]
+                elif normalized.endswith('es'):
+                    normalized = normalized[:-2]
+                elif normalized.endswith('ing'):
+                    normalized = normalized[:-3]
+                elif normalized.endswith('ed') and len(normalized) > 4:
+                    normalized = normalized[:-2]
+
         # Remove non-alphanumeric characters except for hyphens
         normalized = re.sub(r'[^\w\-]', '', normalized)
 
@@ -122,7 +254,7 @@ class MLCSAlgorithm:
     def preprocess_text(self, text: str, language: Optional[str] = None) -> List[str]:
         """
         Preprocess text by tokenizing, removing stopwords, and normalizing tokens.
-        Used for token-level MLCS in concept signature extraction.
+        Enhanced with language-specific processing, especially for Russian.
 
         Args:
             text: Input text
@@ -137,28 +269,27 @@ class MLCSAlgorithm:
         # Use provided language or default
         lang = language or self.language
 
-        # Get domain keywords for physics (we're focusing on this domain)
-        physics_keywords = self.domain_keywords.get("physics", {}).get(lang, [])
-        if not physics_keywords:
-            # Fallback to English keywords
-            physics_keywords = self.domain_keywords.get("physics", {}).get("en", [])
-
-        # Mathematics keywords
-        math_keywords = self.domain_keywords.get("mathematics", {}).get(lang, [])
-        if not math_keywords:
-            math_keywords = self.domain_keywords.get("mathematics", {}).get("en", [])
-
-        # Combine all domain keywords
-        domain_keywords = set(physics_keywords + math_keywords)
+        # Get all domain-specific keywords for better filtering decisions
+        domain_keywords = set()
+        for domain, lang_keywords in self.domain_keywords.items():
+            domain_keywords.update(lang_keywords.get(lang, set()))
+            # Fallback to English keywords if the language isn't available
+            if not lang_keywords.get(lang):
+                domain_keywords.update(lang_keywords.get('en', set()))
 
         # Get stopwords for this language
         stop_words = self.stopwords.get(lang, set())
         if not stop_words:
             # Fallback to English stopwords
-            stop_words = self.stopwords.get("en", set())
+            stop_words = self.stopwords.get('en', set())
 
-        # Tokenize text
-        tokens = re.findall(r'\b[\w\-\']+\b', text.lower())
+        # Apply language-specific tokenization
+        if lang == 'ru':
+            # Russian tokenization with specific patterns
+            tokens = re.findall(r'[\w\-]+', text.lower())
+        else:
+            # Default tokenization
+            tokens = re.findall(r'\b[\w\-\']+\b', text.lower())
 
         # Filter out stopwords and short tokens, but keep domain keywords
         preprocessed = []
@@ -328,7 +459,7 @@ class MLCSAlgorithm:
     def _find_mlcs_linear(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
         """
         Find MLCS using a linear approach optimized for academic terms.
-        Works with both character and token sequences.
+        Enhanced for multilingual support.
 
         Args:
             sequences: List of token/character sequences
@@ -376,7 +507,7 @@ class MLCSAlgorithm:
 
     def _find_mlcs_token(self, sequences: List[List[str]], min_length: int = 2) -> List[str]:
         """
-        Optimized MLCS for token-level sequences with more sophisticated matching.
+        Optimized MLCS for token-level sequences with enhanced language handling.
         Used primarily for concept signature extraction.
 
         Args:
@@ -431,6 +562,12 @@ class MLCSAlgorithm:
             if len(set(seq_indices)) >= min_seq_count:
                 # Score the n-gram by length and number of sequences it appears in
                 score = len(ngram) * len(set(seq_indices)) / len(sequences)
+
+                # Boost score for domain-specific terms in the ngram
+                domain_term_count = sum(1 for token in ngram if self._is_domain_term(token))
+                if domain_term_count > 0:
+                    score *= (1 + 0.2 * domain_term_count)
+
                 common_ngrams.append((ngram, score))
 
         # Sort by score (higher score first)
@@ -439,6 +576,25 @@ class MLCSAlgorithm:
         # Return the highest scoring n-gram if any
         return list(common_ngrams[0][0]) if common_ngrams else []
 
+    def _is_domain_term(self, token: str) -> bool:
+        """
+        Check if a token is a domain-specific term based on loaded resources.
+
+        Args:
+            token: Token to check
+
+        Returns:
+            True if it's a domain term, False otherwise
+        """
+        # Check all domains for this token
+        for domain, lang_keywords in self.domain_keywords.items():
+            if token in lang_keywords.get(self.language, set()):
+                return True
+            # Try English as fallback
+            if self.language != 'en' and token in lang_keywords.get('en', set()):
+                return True
+        return False
+
     def extract_concept_signature(
         self,
         concept_text: str,
@@ -446,7 +602,7 @@ class MLCSAlgorithm:
         language: Optional[str] = None
     ) -> Tuple[List[str], float]:
         """
-        Extract a concept signature from its context occurrences.
+        Extract a concept signature from its context occurrences with enhanced language processing.
 
         Args:
             concept_text: Concept text
@@ -503,7 +659,7 @@ class MLCSAlgorithm:
         language: Optional[str] = None
     ) -> List[Tuple[List[str], float]]:
         """
-        Extract significant common patterns from multiple texts.
+        Extract significant common patterns from multiple texts with enhanced language processing.
 
         Args:
             texts: List of text strings
@@ -546,22 +702,36 @@ class MLCSAlgorithm:
 
         for ngram, count in ngrams.items():
             if count >= min_frequency:
-                # Score based on length, frequency, and domain term count
-                # Get domain keywords for this language
-                physics_keywords = self.domain_keywords.get("physics", {}).get(lang, [])
-                if not physics_keywords:
-                    physics_keywords = self.domain_keywords.get("physics", {}).get("en", [])
+                # Calculate base score based on length and frequency
+                length_weight = len(ngram) * 0.3
+                frequency_weight = (count / len(texts)) * 2.0
 
                 # Count domain terms in the n-gram
-                domain_term_count = sum(1 for term in ngram if term in physics_keywords)
+                domain_term_count = sum(1 for term in ngram if self._is_domain_term(term))
+                domain_weight = domain_term_count * 0.5
 
-                # Adjust score calculation to favor domain terms and longer patterns
-                domain_term_bonus = domain_term_count * 0.5
-                length_bonus = len(ngram) * 0.3
-                frequency_factor = count / len(texts)
+                # Language-specific scoring adjustments
+                if lang == 'ru':
+                    # For Russian, give higher weights to multi-word terms
+                    # that correspond to important physics concepts
+                    if len(ngram) >= 2:
+                        # Check for important Russian physics bigrams/trigrams
+                        term = " ".join(ngram)
+                        important_terms = [
+                            "волновая функция", "квантовая механика", "собственное значение",
+                            "собственное состояние", "гильбертово пространство", "принцип неопределенности",
+                            "оператор энергии", "оператор импульса", "оператор координаты",
+                            "эрмитов оператор", "унитарное преобразование", "стационарное состояние",
+                            "квантовая теория", "вакуумное состояние", "матрица плотности",
+                            "квантовый осциллятор", "уравнение шредингера"
+                        ]
+
+                        for important in important_terms:
+                            if important in term:
+                                domain_weight += 1.0  # Significant boost
 
                 # Calculate final score
-                score = length_bonus + (frequency_factor * 2.0) + domain_term_bonus
+                score = length_weight + frequency_weight + domain_weight
 
                 significant_ngrams.append((list(ngram), score))
 

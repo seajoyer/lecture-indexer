@@ -1,5 +1,6 @@
 {
-  description = "Lecture Video Content Indexer - Educational video analysis with theory/practice classification";
+  description =
+    "Lecture Video Content Indexer - Educational video analysis with theory/practice classification";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -11,54 +12,57 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          config.allowUnfree = true;  # In case we need non-free dependencies
+          config.allowUnfree = true; # In case we need non-free dependencies
         };
 
-        pythonEnv = pkgs.python3.withPackages (ps: with ps; [
-          # misc
-          colorama
+        pythonEnv = pkgs.python3.withPackages (ps:
+          with ps; [
+            # misc
+            colorama
 
-          # Core dependencies
-          fastapi
-          uvicorn
-          pydantic
-          aiofiles
-          httpx
-          sqlalchemy
+            # Core dependencies
+            fastapi
+            uvicorn
+            pydantic
+            aiofiles
+            httpx
+            sqlalchemy
 
-          # Data processing
-          nltk
-          spacy
-          scikit-learn
-          numpy
-          pandas
+            # Data processing
+            nltk
+            scikit-learn
+            numpy
+            pandas
+            spacy
+            spacy-models.en_core_web_sm
+            spacy-models.ru_core_news_sm
 
-          # Google API
-          google-api-python-client
-          google-auth
-          youtube-transcript-api
+            # Google API
+            google-api-python-client
+            google-auth
+            youtube-transcript-api
 
-          # Utilities
-          pyyaml
-          python-dotenv
-          tqdm
-          matplotlib
+            # Utilities
+            pyyaml
+            python-dotenv
+            tqdm
+            matplotlib
 
-          # Testing
-          pytest
-          pytest-asyncio
-          pytest-cov
+            # Testing
+            pytest
+            pytest-asyncio
+            pytest-cov
 
-          # Type checking and linting
-          mypy
-          pylint
-          black
-          isort
+            # Type checking and linting
+            mypy
+            pylint
+            black
+            isort
 
-          langdetect
-          git-filter-repo
-          tabulate
-        ]);
+            langdetect
+            git-filter-repo
+            tabulate
+          ]);
 
         # Download spaCy models
         spacyModels = pkgs.runCommand "spacy-models" { } ''
@@ -241,6 +245,5 @@
             fi
           '';
         };
-      }
-    );
+      });
 }

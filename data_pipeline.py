@@ -1,16 +1,16 @@
 """
 Enhanced data pipeline for the Lecture Video Content Indexer.
 Coordinates the end-to-end process of video extraction, transcript processing,
-and concept extraction with a unified approach and improved concept deduplication.
+and concept extraction using the hybrid global+local processing approach.
 """
 
 import os
 import logging
 import uuid
-from typing import Dict, List, Any
-from datetime import datetime
-import json
 import time
+import json
+from datetime import datetime
+from typing import Dict, List, Any, Optional, Tuple, Set
 
 # Import project modules
 from youtube_extractor import YouTubeExtractor
@@ -25,8 +25,10 @@ logger = logging.getLogger(__name__)
 
 class DataPipeline:
     """
-    Coordinates the end-to-end process of video data acquisition and analysis
-    with a unified concept extraction approach and enhanced deduplication.
+    Coordinates the end-to-end process of lecture video data acquisition,
+    transcript processing, and concept extraction using the hybrid
+    global+local processing approach for improved educational content
+    identification.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -45,7 +47,7 @@ class DataPipeline:
         # Initialize components
         self._init_components()
 
-        logger.info("DataPipeline initialized with unified concept extraction and enhanced deduplication")
+        logger.info("DataPipeline initialized with hybrid global+local concept processing")
 
     def _init_components(self):
         """Initialize pipeline components."""
@@ -66,6 +68,7 @@ class DataPipeline:
     def process_video(self, video_url: str, language_preference: List[str] = ['en', 'ru']) -> Dict[str, Any]:
         """
         Process a YouTube video through the entire pipeline.
+        Uses the hybrid global+local approach for improved concept extraction.
 
         Args:
             video_url: YouTube video URL
@@ -112,20 +115,25 @@ class DataPipeline:
             raw_transcript = self.youtube_extractor.extract_transcript(video_id, language_preference)
             logger.info(f"Extracted transcript with {len(raw_transcript)} segments")
 
-            # Step 4: Process transcript
+            # Step 4: Process transcript using hybrid approach
             processed_transcript = self.transcript_processor.process_transcript(raw_transcript, metadata)
             logger.info(f"Processed transcript with {len(processed_transcript['segments'])} segments")
 
-            # Step 5: Calculate theory/practice ratio
-            theory_practice_results = self._calculate_theory_practice_ratio(processed_transcript['segments'])
+            # Step 5: Calculate theory/practice ratio from processed segments
+            from transcript_processor import calculate_theory_practice_ratio
+            theory_practice_results = calculate_theory_practice_ratio(processed_transcript['segments'])
             logger.info(f"Calculated theory/practice ratio: {theory_practice_results['theory_practice_ratio']:.2f}")
 
-            # Record language for deduplication
+            # Record detected language
             detected_language = processed_transcript.get("language", "en")
 
-            # Step 6: Extract concepts using unified extractor
+            # Step 6: Extract concepts using enhanced unified extractor
             concept_start_time = time.time()
-            domain_features = self._extract_domain_features(processed_transcript, metadata["domain"])
+
+            # Note: The concept extractor now uses the full processed transcript
+            # with both global and segment-level information
+            domain_features = self.concept_extractor.extract_concepts_from_transcript(processed_transcript)
+
             concept_time = time.time() - concept_start_time
 
             # Log concept statistics
@@ -169,7 +177,7 @@ class DataPipeline:
                     "original_total": theoretical_before + practical_before,
                     "deduplicated_total": theoretical_after + practical_after,
                     "reduction_percentage": round(((theoretical_before + practical_before) - (theoretical_after + practical_after)) /
-                                            (theoretical_before + practical_before) * 100, 2) if (theoretical_before + practical_before) > 0 else 0,
+                                            max((theoretical_before + practical_before), 1) * 100, 2),
                     "processing_time": dedup_time
                 }
 
@@ -184,10 +192,16 @@ class DataPipeline:
 
         except Exception as e:
             logger.error(f"Error processing video {video_url}: {e}")
+
+            # Create more detailed error information
+            import traceback
+            error_traceback = traceback.format_exc()
+
             error_result = {
                 "job_id": job_id,
                 "status": "error",
                 "error": str(e),
+                "error_traceback": error_traceback,
                 "video_url": video_url,
                 "timestamp": datetime.now().isoformat()
             }
@@ -204,241 +218,6 @@ class DataPipeline:
             self._save_result(error_result)
 
             return error_result
-
-        except Exception as e:
-            logger.error(f"Error processing video {video_url}: {e}")
-            error_result = {
-                "job_id": job_id,
-                "status": "error",
-                "error": str(e),
-                "video_url": video_url,
-                "timestamp": datetime.now().isoformat()
-            }
-
-            # If we have a video_id, include it
-            if 'video_id' in locals() and video_id:
-                error_result["video_id"] = video_id
-
-            # If we have metadata, include it
-            if 'metadata' in locals() and metadata:
-                error_result["metadata"] = metadata
-
-            # Save error result
-            self._save_result(error_result)
-
-            return error_result
-
-    def _calculate_theory_practice_ratio(self, segments: List[Dict]) -> Dict[str, Any]:
-        """
-        Calculate theory/practice ratio from segments.
-
-        Args:
-            segments: Processed transcript segments
-
-        Returns:
-            Dictionary with theory/practice analysis
-        """
-        if not segments:
-            return {
-                "classification": "unknown",
-                "confidence": 0.0,
-                "theoretical_segments": 0,
-                "practical_segments": 0,
-                "mixed_segments": 0,
-                "theory_practice_ratio": 0.5
-            }
-
-        # Count segment types with confidence weighting
-        theoretical_count = 0
-        practical_count = 0
-        mixed_count = 0
-
-        # Track total confidence-weighted counts
-        theoretical_weighted = 0
-        practical_weighted = 0
-        mixed_weighted = 0
-
-        # Track time distribution
-        total_duration = 0
-        theoretical_duration = 0
-        practical_duration = 0
-        mixed_duration = 0
-
-        for segment in segments:
-            segment_type = segment.get("content_type", "mixed")
-            confidence = segment.get("classification_confidence", 0.6)  # Default confidence if not present
-
-            # Calculate segment duration
-            start_time = segment.get("start_time", 0)
-            end_time = segment.get("end_time", 0)
-            duration = end_time - start_time
-            total_duration += duration
-
-            if segment_type == "theoretical":
-                theoretical_count += 1
-                theoretical_weighted += confidence
-                theoretical_duration += duration
-            elif segment_type == "practical":
-                practical_count += 1
-                practical_weighted += confidence
-                practical_duration += duration
-            else:  # mixed
-                mixed_count += 1
-                mixed_weighted += confidence
-                mixed_duration += duration
-
-        total_segments = theoretical_count + practical_count + mixed_count
-
-        # Calculate theory/practice ratio with improved weighting
-        if total_segments > 0:
-            # Apply a weighted formula with confidence
-            total_weighted = theoretical_weighted + practical_weighted + mixed_weighted
-
-            if total_weighted > 0:
-                # Apply confidence-weighted formula
-                theory_weight = theoretical_weighted + (mixed_weighted * 0.5)
-                theory_practice_ratio = theory_weight / total_weighted
-            else:
-                theory_practice_ratio = 0.5
-
-            # Factor in duration-based ratio
-            if total_duration > 0:
-                duration_theory_ratio = (theoretical_duration + (mixed_duration * 0.5)) / total_duration
-
-                # Final ratio is an average of count-based and duration-based ratios
-                theory_practice_ratio = (theory_practice_ratio + duration_theory_ratio) / 2
-
-        else:
-            theory_practice_ratio = 0.5
-
-        # Determine overall classification
-        if theory_practice_ratio > 0.7:
-            classification = "theoretical"
-            confidence = 0.8 if theory_practice_ratio > 0.85 else 0.7
-        elif theory_practice_ratio < 0.3:
-            classification = "practical"
-            confidence = 0.8 if theory_practice_ratio < 0.15 else 0.7
-        else:
-            classification = "mixed"
-            closeness_to_half = 1.0 - abs(theory_practice_ratio - 0.5) * 2
-            confidence = 0.6 + (closeness_to_half * 0.3)
-
-        return {
-            "classification": classification,
-            "confidence": confidence,
-            "theoretical_segments": theoretical_count,
-            "practical_segments": practical_count,
-            "mixed_segments": mixed_count,
-            "theory_practice_ratio": theory_practice_ratio,
-            "duration_analysis": {
-                "total_duration": total_duration,
-                "theoretical_duration": theoretical_duration,
-                "practical_duration": practical_duration,
-                "mixed_duration": mixed_duration
-            }
-        }
-
-    # Update the _extract_domain_features method:
-    def _extract_domain_features(self, processed_transcript: Dict, domain: str) -> Dict[str, Any]:
-        """
-        Extract domain-specific features from processed transcript using the unified concept extractor.
-
-        Args:
-            processed_transcript: Processed transcript dictionary
-            domain: Content domain
-
-        Returns:
-            Dictionary with domain-specific features
-        """
-        segments = processed_transcript.get("segments", [])
-        language = processed_transcript.get("language", "en")
-
-        # Use the unified concept extractor to extract concepts from segments
-        concept_results = self.concept_extractor.extract_concepts_from_segments(segments, domain, language)
-
-        # Get theoretical and practical concepts directly
-        theoretical_concepts = concept_results.get("theoretical_concepts", [])
-        practical_concepts = concept_results.get("practical_concepts", [])
-
-        # Find relationships between concepts
-        concept_relationships = self._find_concept_relationships(theoretical_concepts + practical_concepts)
-
-        # Log the concept counts
-        total_concepts = len(theoretical_concepts) + len(practical_concepts)
-        logger.info(f"Extracted {total_concepts} concepts: {len(theoretical_concepts)} theoretical, {len(practical_concepts)} practical")
-
-        return {
-            "domain": domain,
-            "theoretical_concepts": theoretical_concepts,
-            "practical_concepts": practical_concepts,
-            "concept_relationships": concept_relationships
-        }
-
-    def _find_concept_relationships(self, concepts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Find relationships between concepts (simplified version).
-
-        Args:
-            concepts: List of concept dictionaries
-
-        Returns:
-            List of concept relationship dictionaries
-        """
-        if len(concepts) < 2:
-            return []
-
-        # Create a mapping of concepts to their occurrences
-        concept_occurrences = {}
-        for concept in concepts:
-            concept_text = concept.get("text", "").lower()
-            concept_occurrences[concept_text] = concept.get("occurrences", [])
-
-        # Track concept co-occurrences in the same segments
-        co_occurrences = {}
-
-        # For each pair of concepts, check if they co-occur in segments
-        concept_texts = list(concept_occurrences.keys())
-        for i, concept1 in enumerate(concept_texts):
-            for concept2 in concept_texts[i+1:]:
-                # Skip if it's the same concept
-                if concept1 == concept2:
-                    continue
-
-                # Get segments IDs for each concept
-                segments1 = set(occ.get("segment_id") for occ in concept_occurrences.get(concept1, []))
-                segments2 = set(occ.get("segment_id") for occ in concept_occurrences.get(concept2, []))
-
-                # Check for common segments
-                common_segments = segments1.intersection(segments2)
-
-                if common_segments:
-                    co_occurrences[(concept1, concept2)] = len(common_segments)
-
-        # Create relationships from co-occurrences
-        relationships = []
-
-        for (source, target), count in co_occurrences.items():
-            # Find the concept objects
-            source_concept = next((c for c in concepts if c.get("text", "").lower() == source), None)
-            target_concept = next((c for c in concepts if c.get("text", "").lower() == target), None)
-
-            if source_concept and target_concept:
-                relationship = {
-                    "source_concept": source,
-                    "target_concept": target,
-                    "co_occurrence_count": count,
-                    "relationship_type": "related",
-                    "source_class": source_concept.get("concept_class", "theoretical"),
-                    "target_class": target_concept.get("concept_class", "theoretical")
-                }
-                relationships.append(relationship)
-
-        # Sort by co-occurrence count
-        relationships.sort(key=lambda x: x.get("co_occurrence_count", 0), reverse=True)
-
-        # Limit to top relationships
-        max_relationships = min(25, len(relationships))
-        return relationships[:max_relationships]
 
     def _save_result(self, result: Dict[str, Any]):
         """
@@ -491,3 +270,101 @@ class DataPipeline:
 
         logger.info(f"Batch processing completed for {len(video_urls)} videos")
         return results
+
+    def process_playlist(self, playlist_url: str, language_preference: List[str] = ['en', 'ru'], max_videos: int = 10) -> Dict[str, Any]:
+        """
+        Process an entire YouTube playlist.
+
+        Args:
+            playlist_url: YouTube playlist URL
+            language_preference: List of language codes in order of preference
+            max_videos: Maximum number of videos to process
+
+        Returns:
+            Dictionary with processing results
+        """
+        logger.info(f"Starting playlist processing for {playlist_url}")
+
+        try:
+            # Validate and extract playlist ID
+            valid, playlist_id = self.youtube_extractor.validate_playlist_url(playlist_url)
+            if not valid or not playlist_id:
+                error_msg = f"Invalid YouTube playlist URL: {playlist_url}"
+                logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "error": error_msg,
+                    "playlist_url": playlist_url
+                }
+
+            # Get playlist metadata
+            playlist_metadata = self.youtube_extractor.extract_playlist_metadata(playlist_id)
+
+            # Get videos in playlist
+            playlist_videos = self.youtube_extractor.extract_playlist_videos(playlist_id, max_videos)
+
+            if not playlist_videos:
+                return {
+                    "status": "error",
+                    "error": "No videos found in playlist",
+                    "playlist_id": playlist_id,
+                    "playlist_url": playlist_url
+                }
+
+            logger.info(f"Found {len(playlist_videos)} videos in playlist {playlist_id}")
+
+            # Process each video
+            video_results = []
+            for i, video in enumerate(playlist_videos):
+                video_id = video.get("video_id")
+                if not video_id:
+                    continue
+
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+                try:
+                    logger.info(f"Processing playlist video {i+1}/{len(playlist_videos)}: {video_id}")
+                    result = self.process_video(video_url, language_preference)
+                    video_results.append(result)
+                except Exception as e:
+                    logger.error(f"Error processing video {video_id}: {e}")
+                    video_results.append({
+                        "video_id": video_id,
+                        "video_url": video_url,
+                        "status": "error",
+                        "error": str(e)
+                    })
+
+            # Create playlist result
+            playlist_result = {
+                "status": "completed",
+                "playlist_id": playlist_id,
+                "playlist_url": playlist_url,
+                "playlist_title": playlist_metadata.get("title", ""),
+                "playlist_channel": playlist_metadata.get("channel", ""),
+                "video_count": len(playlist_videos),
+                "processed_count": len(video_results),
+                "videos": video_results,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Save result
+            filename = f"playlist_{playlist_id}.json"
+            filepath = os.path.join(self.output_dir, filename)
+
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(playlist_result, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving playlist result to file: {e}")
+
+            logger.info(f"Playlist processing completed for {playlist_id} with {len(video_results)} videos")
+            return playlist_result
+
+        except Exception as e:
+            logger.error(f"Error processing playlist {playlist_url}: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "playlist_url": playlist_url
+            }

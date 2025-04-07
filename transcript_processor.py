@@ -1,568 +1,210 @@
 """
-Enhanced transcript processor for the Lecture Video Content Indexer.
-Handles processing of raw transcripts into structured text suitable for analysis.
-Implements improved NLP-based classification for theoretical vs practical content.
+Redesigned transcript processor for the Lecture Video Content Indexer.
+Implements a hybrid global+local processing approach for improved accuracy and performance.
 """
 
 import re
 import uuid
 import logging
-import nltk
 import string
 import os
-from typing import List, Dict, Tuple, Counter as CounterType, Set, Optional
+from typing import List, Dict, Tuple, Any, Optional, Set
 from collections import Counter
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer, SnowballStemmer
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
+import time
+import concurrent.futures
+from functools import lru_cache
 
-# Import simplified modules
+# NLP libraries - with graceful degradation if not available
+try:
+    import nltk
+    from nltk.tokenize import sent_tokenize, word_tokenize
+    from nltk.corpus import stopwords
+    from nltk.stem import WordNetLemmatizer, SnowballStemmer
+    NLTK_AVAILABLE = True
+except ImportError:
+    NLTK_AVAILABLE = False
+    logging.warning("NLTK not available - using simplified text processing")
+
+try:
+    import spacy
+    # Load models only when needed to minimize memory usage
+    SPACY_AVAILABLE = True
+except ImportError:
+    SPACY_AVAILABLE = False
+    logging.warning("Spacy not available - using alternative NLP processing")
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    logging.warning("Scikit-learn not available - using simplified text analysis")
+
+# Import project modules
 from cache_manager import cache_get, cache_set
-from performance_utils import time_function
+from performance_utils import time_function, Timer
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Cache version - increment when processing logic changes
+CACHE_VERSION = "1.0.0"
+
 class TranscriptProcessor:
     """
-    Processes raw transcripts into structured text suitable for analysis.
-    Enhanced with NLP techniques for improved classification.
+    Processes YouTube video transcripts using a hybrid global+local approach.
+    First processes the complete transcript as a unified document to establish
+    global context, then applies that knowledge to individual segments.
     """
 
     def __init__(self):
-        """Initialize the transcript processor with NLP components and educational content markers."""
-        # Download necessary NLTK resources if not already available
-        self._ensure_nltk_resources()
+        """Initialize the transcript processor with NLP components."""
+        # Initialize NLP components with lazy loading
+        self._nlp_initialized = False
+        self._spacy_models = {}
+        self._stemmer_cache = {}
+        self._stopwords_cache = {}
 
-        # Initialize NLP components
-        self.lemmatizer = WordNetLemmatizer()
+        # Load basic resources immediately for lightweight initialization
+        self._load_basic_resources()
 
-        # Initialize stemmers for multiple languages
-        self.stemmers = {}
-        for lang in ['english', 'russian']:
-            try:
-                self.stemmers[lang[:2]] = SnowballStemmer(lang)
-            except:
-                logger.warning(f"Could not initialize stemmer for {lang}")
+        # Version for cache invalidation
+        self.processor_version = CACHE_VERSION
 
-        # Load stopwords for multiple languages with enhanced lists
-        self.stopwords = {}
-        self._load_enhanced_stopwords()
+        # Set maximum workers for parallel processing
+        self.max_workers = os.cpu_count() or 4
 
-        # Initialize domain classification models
-        self._init_classification_models()
+        logger.info("TranscriptProcessor initialized with hybrid processing approach")
 
-        # Initialize educational markers for identifying substantive explanations
-        self.educational_markers = {
-            "en": [
-                r'important concept',
-                r'key principle',
-                r'fundamental idea',
-                r'essential to understand',
-                r'core concept',
-                r'critical to',
-                r'central idea',
-                r'primarily concerned with',
-                r'focuses on',
-                r'the main',
-                r'in depth',
-                r'thoroughly',
-                r'explain in detail',
-                r'explore the',
-                r'analyze',
-                r'examine',
-                r'investigate',
-                r'detailed',
-                r'significant',
-                r'important',
-                r'crucial',
-                r'vital',
-                r'key',
-                r'central',
-                r'underlying',
-                r'foundation',
-                r'basis',
-                r'fundamental',
-                r'primary',
-                r'comprehensive',
-                r'thorough',
-                r'elaborate',
-                r'rigorous',
-                r'systematic',
-                r'precise',
-                r'specific',
-                r'in-depth',
-                r'detailed analysis',
-                r'extensive discussion'
-            ],
-            "ru": [
-                r'важная концепция',
-                r'ключевой принцип',
-                r'фундаментальная идея',
-                r'необходимо понять',
-                r'основная концепция',
-                r'критически важно',
-                r'центральная идея',
-                r'в первую очередь',
-                r'фокусируется на',
-                r'главный',
-                r'подробно',
-                r'тщательно',
-                r'объяснить детально',
-                r'исследовать',
-                r'анализировать',
-                r'изучить',
-                r'исследовать',
-                r'детальный',
-                r'значительный',
-                r'важный',
-                r'существенный',
-                r'жизненно важный',
-                r'ключевой',
-                r'центральный',
-                r'лежащий в основе',
-                r'фундамент',
-                r'основа',
-                r'фундаментальный',
-                r'главный',
-                r'всесторонний',
-                r'тщательный',
-                r'подробный',
-                r'строгий',
-                r'систематический',
-                r'точный',
-                r'специфический',
-                r'углубленный',
-                r'детальный анализ',
-                r'обширное обсуждение'
-            ]
+    def _load_basic_resources(self):
+        """Load minimal language resources for basic operations."""
+        # Simple language detection patterns
+        self.language_patterns = {
+            "en": re.compile(r'[a-zA-Z]'),  # English: Latin characters
+            "ru": re.compile(r'[а-яА-ЯёЁ]')  # Russian: Cyrillic characters
         }
 
-        # Compile educational markers patterns
-        self.educational_markers_regex = {
-            lang: re.compile('|'.join(patterns), re.IGNORECASE)
-            for lang, patterns in self.educational_markers.items()
+        # Basic stopwords for minimal filtering (used even without NLTK)
+        self.basic_stopwords = {
+            'en': {'a', 'an', 'the', 'and', 'or', 'but', 'if', 'in', 'on', 'at', 'by', 'for', 'with', 'about'},
+            'ru': {'и', 'в', 'на', 'с', 'по', 'к', 'у', 'от', 'из', 'для', 'это', 'так', 'что', 'как'}
         }
 
-        logger.info("TranscriptProcessor initialized with educational content detection")
-
-    def _ensure_nltk_resources(self):
-        """Ensure all required NLTK resources are available."""
-        required_resources = [
-            ('punkt', 'tokenizers/punkt'),
-            ('stopwords', 'corpora/stopwords'),
-            ('wordnet', 'corpora/wordnet')
-        ]
-
-        for resource, path in required_resources:
-            try:
-                nltk.data.find(path)
-            except LookupError:
-                print(f"Downloading {resource}...")
-                nltk.download(resource, quiet=True)
-
-    def _load_enhanced_stopwords(self):
-        """Load comprehensive stopwords for multiple languages with extended sets."""
-        # Core language stopwords
-        languages = {
-            'en': 'english',
-            'ru': 'russian'
-        }
-
-        for code, lang in languages.items():
-            try:
-                # Load NLTK stopwords
-                self.stopwords[code] = set(stopwords.words(lang))
-
-                # Add language-specific common words that should be filtered
-                if code == 'en':
-                    english_extras = {
-                        # Common English filler words and discourse markers
-                        "uh", "um", "like", "so", "well", "actually", "basically",
-                        "literally", "sort", "kind", "really", "very", "quite",
-                        "okay", "ok", "yeah", "yes", "no", "right", "let", "just",
-                        "gonna", "going", "let's", "now", "here", "there", "this",
-                        "that", "these", "those", "will", "shall", "should", "would",
-                        "could", "can", "may", "might", "must", "although", "however",
-
-                        # Common pronouns and determiners
-                        "i", "me", "my", "mine", "myself",
-                        "you", "your", "yours", "yourself",
-                        "he", "him", "his", "himself",
-                        "she", "her", "hers", "herself",
-                        "it", "its", "itself",
-                        "we", "us", "our", "ours", "ourselves",
-                        "they", "them", "their", "theirs", "themselves",
-                        "what", "which", "who", "whom", "whose",
-                        "this", "that", "these", "those", "such",
-                        "the", "a", "an", "some", "any", "all", "most", "every", "many", "much",
-
-                        # Common verbs
-                        "am", "is", "are", "was", "were", "be", "been", "being",
-                        "have", "has", "had", "having", "do", "does", "did", "doing",
-                        "get", "gets", "got", "getting", "go", "goes", "went", "gone", "going",
-                        "make", "makes", "made", "making", "take", "takes", "took", "taken", "taking",
-                        "come", "comes", "came", "coming", "see", "sees", "saw", "seen", "seeing",
-                        "use", "uses", "used", "using",
-
-                        # Common adverbs and prepositions
-                        "up", "down", "in", "out", "on", "off", "over", "under", "at", "by",
-                        "for", "from", "to", "with", "about", "against", "between", "into",
-                        "through", "during", "before", "after", "as", "since", "until",
-                        "above", "below", "near", "far", "then", "also", "even", "only",
-                        "already", "still", "always", "never", "sometimes", "usually",
-
-                        # Conjunctions and other function words
-                        "and", "but", "or", "nor", "yet", "so", "because", "if", "unless",
-                        "while", "where", "when", "how", "why", "whether", "though",
-                        "although", "since", "then", "than", "etc", "ie", "eg"
-                    }
-                    self.stopwords[code].update(english_extras)
-
-                elif code == 'ru':
-                    russian_extras = {
-                        # Common Russian filler words and discourse markers
-                        "это", "что", "как", "так", "вот", "просто", "если",
-                        "там", "здесь", "сейчас", "тут", "ну", "да", "нет", "уже",
-                        "значит", "такой", "такая", "такое", "давайте", "есть", "был",
-                        "была", "были", "будет", "будут", "потому", "ещё", "еще",
-                        "нас", "меня", "можно", "всё", "все", "они", "только", "для",
-
-                        # Common Russian pronouns and determiners
-                        "я", "мне", "меня", "мой", "моя", "моё", "мои", "мною",
-                        "ты", "тебя", "тебе", "твой", "твоя", "твоё", "твои", "тобой",
-                        "он", "его", "ему", "им", "него", "нему", "ним",
-                        "она", "её", "ей", "ею", "неё", "ней",
-                        "оно", "нас", "нам", "нами", "них", "ими",
-                        "вы", "вас", "вам", "вами",
-                        "они", "их", "им", "ими",
-                        "кто", "что", "какой", "какая", "какое", "какие", "чей", "который",
-                        "тот", "та", "то", "те", "этот", "эта", "это", "эти",
-                        "весь", "вся", "всё", "все", "каждый", "любой", "самый", "другой",
-
-                        # Common Russian verbs
-                        "быть", "есть", "буду", "будешь", "будет", "будем", "будете", "будут",
-                        "был", "была", "было", "были",
-                        "иметь", "имею", "имеешь", "имеет", "имеем", "имеете", "имеют",
-                        "делать", "делаю", "делаешь", "делает", "делаем", "делаете", "делают",
-                        "идти", "иду", "идёшь", "идёт", "идём", "идёте", "идут",
-                        "сказать", "скажу", "скажешь", "скажет", "скажем", "скажете", "скажут",
-                        "видеть", "вижу", "видишь", "видит", "видим", "видите", "видят",
-                        "знать", "знаю", "знаешь", "знает", "знаем", "знаете", "знают",
-                        "мочь", "могу", "можешь", "может", "можем", "можете", "могут",
-                        "хотеть", "хочу", "хочешь", "хочет", "хотим", "хотите", "хотят",
-
-                        # Common Russian adverbs and prepositions
-                        "в", "на", "с", "к", "у", "от", "из", "по", "за", "о", "об", "без", "до",
-                        "над", "под", "при", "через", "между", "около", "перед", "после",
-                        "сейчас", "потом", "всегда", "никогда", "иногда", "обычно", "вверх", "вниз",
-                        "внутри", "снаружи", "здесь", "там", "далеко", "близко", "очень", "слишком",
-                        "более", "менее", "почти", "совсем", "где", "когда", "куда", "откуда", "зачем",
-
-                        # Additional common words that appear in the output
-                        "поэтому", "равно", "нужно", "получается", "означает", "должна", "вами",
-                        "можем", "какой-то", "что-то", "стоит", "хочу", "буду", "видим",
-                        "понятно", "сделать", "например", "должны", "какие-то", "сюда",
-                        "плюс", "минус", "будем", "результат", "такое"
-                    }
-                    self.stopwords[code].update(russian_extras)
-            except:
-                logger.warning(f"Failed to load stopwords for {lang}")
-                self.stopwords[code] = set()
-
-    def _init_classification_models(self):
-        """
-        Initialize classification models and related data structures
-        with improved multilingual support and domain-specific patterns.
-        """
-        # Language-specific patterns for theoretical content
-        self.theoretical_patterns = {
-            'en': [
-                r'is defined as',
-                r'is called',
-                r'refers to',
-                r'is known as',
-                r'can be described as',
-                r'is a concept',
-                r'is characterized by',
-                r'is understood as',
-                r'is formulated as',
-                r'is represented by',
-                r'is expressed as',
-                r'is given by',
-                r'is derived from',
-                r'is related to',
-                r'the definition of',
-                r'the concept of',
-                r'the theory of',
-                r'the principle of',
-                r'the law of',
-                r'the equation for',
-                r'according to the theory',
-                r'in theoretical terms',
-                r'from a theoretical perspective',
-                r'a fundamental principle',
-                r'the basis of'
-            ],
-            'ru': [
-                r'определяется как',
-                r'называется',
-                r'обозначает',
-                r'известен как',
-                r'может быть описан как',
-                r'является концепцией',
-                r'характеризуется',
-                r'понимается как',
-                r'формулируется как',
-                r'представлен как',
-                r'выражается как',
-                r'дается как',
-                r'выводится из',
-                r'связан с',
-                r'определение',
-                r'концепция',
-                r'теория',
-                r'принцип',
-                r'закон',
-                r'уравнение для',
-                r'согласно теории',
-                r'с теоретической точки зрения',
-                r'фундаментальный принцип',
-                r'основа',
-                r'теоретически'
-            ]
-        }
-
-        # Language-specific patterns for practical content
-        self.practical_patterns = {
-            'en': [
-                r"let['']s",
-                r'we (can|will|should|could)',
-                r'you (can|will|should|could)',
-                r'for example',
-                r'as an example',
-                r'step by step',
-                r'how to',
-                r'in practice',
-                r'in this example',
-                r'to solve this',
-                r'to implement this',
-                r'to calculate',
-                r'to compute',
-                r'let me show you',
-                r'I\'ll demonstrate',
-                r'try to',
-                r'let\'s try',
-                r'in our case',
-                r'the procedure is',
-                r'application of',
-                r'when working with',
-                r'in real world',
-                r'practically speaking',
-                r'to illustrate',
-                r'case study'
-            ],
-            'ru': [
-                r'давайте',
-                r'мы (можем|будем|должны|могли)',
-                r'вы (можете|будете|должны|могли)',
-                r'например',
-                r'в качестве примера',
-                r'шаг за шагом',
-                r'как сделать',
-                r'на практике',
-                r'в этом примере',
-                r'чтобы решить',
-                r'для реализации',
-                r'для вычисления',
-                r'позвольте показать',
-                r'я продемонстрирую',
-                r'попробуйте',
-                r'давайте попробуем',
-                r'в нашем случае',
-                r'процедура',
-                r'применение',
-                r'при работе с',
-                r'в реальном мире',
-                r'практически говоря',
-                r'для иллюстрации',
-                r'пример из практики'
-            ]
-        }
-
-        # Compile patterns for efficiency
-        self.theoretical_regex = {
-            lang: re.compile('|'.join(patterns), re.IGNORECASE)
-            for lang, patterns in self.theoretical_patterns.items()
-        }
-
-        self.practical_regex = {
-            lang: re.compile('|'.join(patterns), re.IGNORECASE)
-            for lang, patterns in self.practical_patterns.items()
-        }
-
-        # Domain-specific linguistic features by language
-        self.domain_features = {
-            "mathematics": {
-                "en": {
-                    # Theoretical indicators
-                    "theorem": 0.9, "proof": 0.9, "lemma": 0.9, "define": 0.8,
-                    "equation": 0.8, "formula": 0.8, "function": 0.7, "property": 0.7,
-                    "axiom": 0.9, "postulate": 0.9, "corollary": 0.9, "proposition": 0.9,
-                    "identity": 0.8, "inequality": 0.8, "relation": 0.7, "topology": 0.9,
-                    "algebra": 0.8, "calculus": 0.8, "geometry": 0.8, "analysis": 0.8,
-                    "theory": 0.9, "definition": 0.9,
-
-                    # Practical indicators
-                    "calculate": 0.8, "compute": 0.8, "solve": 0.8, "example": 0.7,
-                    "problem": 0.7, "find": 0.7, "evaluate": 0.7, "simplify": 0.7,
-                    "demonstrate": 0.7, "show": 0.6, "practice": 0.8, "exercise": 0.8,
-                    "application": 0.7, "plug in": 0.8, "substitute": 0.7, "result": 0.6,
-                    "numeric": 0.7, "estimate": 0.7, "approximate": 0.7, "implement": 0.8
-                },
-                "ru": {
-                    # Theoretical indicators
-                    "теорема": 0.9, "доказательство": 0.9, "лемма": 0.9, "определение": 0.8,
-                    "уравнение": 0.8, "формула": 0.8, "функция": 0.7, "свойство": 0.7,
-                    "аксиома": 0.9, "постулат": 0.9, "следствие": 0.9, "предложение": 0.9,
-                    "тождество": 0.8, "неравенство": 0.8, "отношение": 0.7, "топология": 0.9,
-                    "алгебра": 0.8, "анализ": 0.8, "геометрия": 0.8, "теория": 0.9,
-
-                    # Practical indicators
-                    "вычислить": 0.8, "рассчитать": 0.8, "решить": 0.8, "пример": 0.7,
-                    "задача": 0.7, "найти": 0.7, "определить": 0.7, "упростить": 0.7,
-                    "показать": 0.6, "демонстрировать": 0.7, "практика": 0.8, "упражнение": 0.8,
-                    "применение": 0.7, "подставить": 0.7, "результат": 0.6,
-                    "числовой": 0.7, "оценить": 0.7, "приблизить": 0.7, "реализовать": 0.8
-                }
+        # Content classification indicators
+        self.classification_indicators = {
+            "theoretical": {
+                "en": ["definition", "concept", "theory", "principle", "defined as", "refers to", "means"],
+                "ru": ["определение", "концепция", "теория", "принцип", "определяется как", "означает"]
             },
-            "programming": {
-                "en": {
-                    # Theoretical indicators
-                    "algorithm": 0.8, "complexity": 0.85, "paradigm": 0.9,
-                    "architecture": 0.8, "pattern": 0.7, "principle": 0.8,
-                    "framework": 0.7, "abstraction": 0.9, "encapsulation": 0.9,
-                    "inheritance": 0.8, "polymorphism": 0.9, "recursion": 0.8,
-                    "structure": 0.7, "interface": 0.7, "protocol": 0.8,
-                    "syntax": 0.8, "semantics": 0.9, "compiler": 0.7,
-
-                    # Practical indicators
-                    "code": 0.9, "implement": 0.85, "function": 0.7, "class": 0.7,
-                    "debug": 0.9, "run": 0.8, "execute": 0.8, "compile": 0.7,
-                    "install": 0.9, "library": 0.7, "framework": 0.7, "API": 0.8,
-                    "build": 0.8, "deploy": 0.9, "test": 0.8, "version": 0.7,
-                    "package": 0.7, "dependency": 0.7, "configuration": 0.7
-                },
-                "ru": {
-                    # Theoretical indicators
-                    "алгоритм": 0.8, "сложность": 0.85, "парадигма": 0.9,
-                    "архитектура": 0.8, "шаблон": 0.7, "принцип": 0.8,
-                    "фреймворк": 0.7, "абстракция": 0.9, "инкапсуляция": 0.9,
-                    "наследование": 0.8, "полиморфизм": 0.9, "рекурсия": 0.8,
-                    "структура": 0.7, "интерфейс": 0.7, "протокол": 0.8,
-                    "синтаксис": 0.8, "семантика": 0.9, "компилятор": 0.7,
-
-                    # Practical indicators
-                    "код": 0.9, "реализовать": 0.85, "функция": 0.7, "класс": 0.7,
-                    "отладка": 0.9, "запустить": 0.8, "выполнить": 0.8, "компилировать": 0.7,
-                    "установить": 0.9, "библиотека": 0.7, "фреймворк": 0.7, "API": 0.8,
-                    "сборка": 0.8, "развертывание": 0.9, "тест": 0.8, "версия": 0.7,
-                    "пакет": 0.7, "зависимость": 0.7, "конфигурация": 0.7
-                }
-            },
-            "physics": {
-                "en": {
-                    # Theoretical indicators
-                    "theory": 0.9, "law": 0.9, "principle": 0.9, "constant": 0.8,
-                    "equation": 0.8, "field": 0.7, "force": 0.7, "energy": 0.7,
-                    "quantum": 0.9, "relativity": 0.9, "mechanics": 0.8, "dynamics": 0.8,
-                    "thermodynamics": 0.9, "electromagnetism": 0.9, "oscillation": 0.8,
-                    "particle": 0.8, "wave": 0.7, "momentum": 0.8, "conservation": 0.9,
-                    "operator": 0.9, "eigenvalue": 0.9, "eigenstate": 0.9, "hamiltonian": 0.9,
-                    "schrodinger": 0.9, "dirac": 0.9, "commutator": 0.9, "symmetry": 0.8,
-
-                    # Practical indicators
-                    "experiment": 0.9, "measure": 0.8, "observation": 0.8,
-                    "calculate": 0.8, "predict": 0.7, "demonstrate": 0.8,
-                    "laboratory": 0.9, "setup": 0.8, "device": 0.8, "apparatus": 0.9,
-                    "probe": 0.8, "detector": 0.9, "sensor": 0.8, "signal": 0.7,
-                    "data": 0.7, "instrument": 0.8, "calibration": 0.8, "procedure": 0.7
-                },
-                "ru": {
-                    # Theoretical indicators
-                    "теория": 0.9, "закон": 0.9, "принцип": 0.9, "константа": 0.8,
-                    "уравнение": 0.8, "поле": 0.7, "сила": 0.7, "энергия": 0.7,
-                    "квантовый": 0.9, "относительность": 0.9, "механика": 0.8, "динамика": 0.8,
-                    "термодинамика": 0.9, "электромагнетизм": 0.9, "колебание": 0.8,
-                    "частица": 0.8, "волна": 0.7, "импульс": 0.8, "сохранение": 0.9,
-                    "оператор": 0.9, "собственное значение": 0.9, "собственное состояние": 0.9,
-                    "гамильтониан": 0.9, "шредингер": 0.9, "дирак": 0.9, "коммутатор": 0.9,
-                    "симметрия": 0.8, "состояние": 0.8, "представление": 0.8, "базис": 0.7,
-
-                    # Practical indicators
-                    "эксперимент": 0.9, "измерение": 0.8, "наблюдение": 0.8,
-                    "рассчитать": 0.8, "предсказать": 0.7, "демонстрировать": 0.8,
-                    "лаборатория": 0.9, "установка": 0.8, "устройство": 0.8, "аппарат": 0.9,
-                    "зонд": 0.8, "детектор": 0.9, "датчик": 0.8, "сигнал": 0.7,
-                    "данные": 0.7, "инструмент": 0.8, "калибровка": 0.8, "процедура": 0.7
-                }
+            "practical": {
+                "en": ["example", "application", "practice", "how to", "implement", "demonstrate", "let's"],
+                "ru": ["пример", "применение", "практика", "как", "реализовать", "показать", "давайте"]
             }
         }
 
-        # Initialize TF-IDF vectorizers for domain detection
-        self.domain_vectorizers = {}
-        self.domain_centroids = {}
-
-        # Load pre-trained domain vectorizers if available
-        # This would be implemented in production with saved models
-        self._load_domain_models()
-
-    def _load_domain_models(self):
-        """Load or train TF-IDF domain classifiers if possible."""
-        # This would load pre-trained models in production
-        # For now, we'll use a simple training approach
-        sample_texts = {
-            "mathematics": [
-                "Mathematics is the study of numbers, quantity, space, structure, and change.",
-                "Calculus is the mathematical study of continuous change.",
-                "A derivative measures the sensitivity to change of a function value."
-            ],
-            "programming": [
-                "Programming is the process of creating instructions for computers.",
-                "Python is a high-level programming language for general-purpose programming.",
-                "Object-oriented programming is a programming paradigm based on objects."
-            ],
-            "physics": [
-                "Physics is the natural science that studies matter and its motion.",
-                "Quantum mechanics is a fundamental theory in physics.",
-                "Energy is the quantitative property that must be transferred to an object."
-            ]
+        # Educational significance indicators
+        self.educational_indicators = {
+            "en": ["important", "essential", "key", "fundamental", "core", "critical", "main"],
+            "ru": ["важный", "существенный", "ключевой", "фундаментальный", "основной", "критический"]
         }
 
-        try:
-            # Initialize a general vectorizer
-            vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+    def _ensure_nlp_resources(self, language: str = 'en'):
+        """
+        Ensure NLP resources are available for the specified language.
+        Uses lazy initialization to minimize startup time and memory usage.
 
-            # Fit each domain separately
-            for domain, texts in sample_texts.items():
-                domain_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
-                domain_vectors = domain_vectorizer.fit_transform(texts)
+        Args:
+            language: Two-letter language code
+        """
+        if self._nlp_initialized:
+            return
 
-                # Create a centroid (average vector)
-                if domain_vectors.shape[0] > 0:
-                    centroid = np.mean(domain_vectors.toarray(), axis=0)
+        # Initialize NLTK resources if available
+        if NLTK_AVAILABLE:
+            try:
+                # Download necessary resources
+                for resource in ['punkt', 'stopwords', 'wordnet']:
+                    try:
+                        nltk.data.find(f'tokenizers/{resource}')
+                    except LookupError:
+                        nltk.download(resource, quiet=True)
 
-                    self.domain_vectorizers[domain] = domain_vectorizer
-                    self.domain_centroids[domain] = centroid
-        except Exception as e:
-            logger.warning(f"Failed to initialize domain vectorizers: {e}")
+                # Initialize stemmers and lemmatizers
+                self.lemmatizer = WordNetLemmatizer()
+
+                # Load language-specific resources
+                if language == 'en':
+                    self._stopwords_cache['en'] = set(stopwords.words('english'))
+                    self._stemmer_cache['en'] = SnowballStemmer('english')
+                elif language == 'ru':
+                    self._stopwords_cache['ru'] = set(stopwords.words('russian'))
+                    self._stemmer_cache['ru'] = SnowballStemmer('russian')
+
+            except Exception as e:
+                logger.warning(f"Error initializing NLTK resources: {e}")
+
+        # Initialize Spacy models if available
+        if SPACY_AVAILABLE and language in ['en', 'ru']:
+            try:
+                model_name = 'en_core_web_sm' if language == 'en' else 'ru_core_news_sm'
+                try:
+                    self._spacy_models[language] = spacy.load(model_name)
+                except OSError:
+                    logger.warning(f"Spacy model {model_name} not found. Make sure it's installed in your Nix environment.")
+                    # Don't try to download - it won't work in NixOS
+                    raise
+            except Exception as e:
+                logger.warning(f"Error initializing Spacy model for {language}: {e}")
+
+        # Initialize scikit-learn models if available
+        if SKLEARN_AVAILABLE:
+            # Initialize TF-IDF vectorizers for domain detection
+            self.domain_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+
+            # Sample data for domain detection - improved with more examples
+            self.domain_samples = {
+                "mathematics": [
+                    "Mathematics is the study of numbers, shapes, quantities and patterns.",
+                    "Linear algebra studies vector spaces and linear mappings between them.",
+                    "Calculus is the mathematical study of continuous change.",
+                    "Geometry is concerned with properties of space and figures.",
+                    "Number theory studies the properties of integers and number systems."
+                ],
+                "physics": [
+                    "Physics is the natural science of matter, energy, and motion.",
+                    "Quantum mechanics describes nature at the smallest scales of energy.",
+                    "Electromagnetic theory explains the interaction between particles.",
+                    "Thermodynamics deals with heat and temperature and their relation to energy.",
+                    "Relativity describes the relationship between space and time."
+                ],
+                "programming": [
+                    "Programming is the process of creating a set of instructions for computers.",
+                    "Algorithms are step-by-step procedures for calculations and data processing.",
+                    "Object-oriented programming organizes code around data and objects.",
+                    "Data structures are specialized formats for organizing and storing data.",
+                    "Software development includes coding, testing, and maintaining source code."
+                ]
+            }
+
+            # Fit domain vectorizers
+            self.domain_vectors = {}
+            for domain, texts in self.domain_samples.items():
+                try:
+                    vectors = self.domain_vectorizer.fit_transform(texts)
+                    self.domain_vectors[domain] = vectors.mean(axis=0)
+                except:
+                    logger.warning(f"Error creating domain vector for {domain}")
+
+        self._nlp_initialized = True
+        logger.info(f"NLP resources initialized for language: {language}")
 
     @time_function(5000)  # Log warning if takes more than 5 seconds
     def process_transcript(self, raw_segments: List[Dict], video_metadata: Dict) -> Dict:
         """
-        Process raw transcript segments into a structured format.
+        Process raw transcript segments into a structured format using hybrid approach.
+        First processes the complete transcript as a unified document, then
+        processes individual segments with that global context.
 
         Args:
             raw_segments: List of raw transcript segments
@@ -571,10 +213,10 @@ class TranscriptProcessor:
         Returns:
             Dictionary containing processed transcript data
         """
-        video_id = video_metadata.get("video_id", "")
+        video_id = video_metadata.get("video_id", "unknown")
 
-        # Check cache first
-        cache_key = f"processed_transcript_{video_id}"
+        # Generate cache key with version info
+        cache_key = f"processed_transcript_{video_id}_v{self.processor_version}"
         cached_result = cache_get("transcript", cache_key)
         if cached_result:
             logger.info(f"Using cached processed transcript for video {video_id}")
@@ -584,43 +226,64 @@ class TranscriptProcessor:
             logger.warning("Empty transcript provided")
             result = {
                 "segments": [],
+                "global_text": "",
                 "language": "en",
                 "domain": "unknown",
                 "video_id": video_id
             }
             return result
 
-        # Determine language from first segment or metadata
-        language = raw_segments[0].get("language", video_metadata.get("language", "en"))
-        if not language or language not in ['en', 'ru']:
-            language = self._detect_language([s.get("text", "") for s in raw_segments[:5]])
+        # Create a timer for performance tracking
+        process_timer = Timer("transcript_processing")
+        process_timer.start()
 
-        # Normalize to 2-letter code
-        language = language[:2]
+        # STAGE 1: Global Processing
+        # Concatenate all segments to create a unified document
+        global_text = " ".join([s.get("text", "") for s in raw_segments if s.get("text")])
+
+        # 1.1: Language Detection (using the full text for better accuracy)
+        language = self._detect_language(global_text)
         logger.info(f"Detected language: {language}")
 
-        # Get domain from metadata or detect it
+        # 1.2: Ensure NLP resources are loaded for this language
+        self._ensure_nlp_resources(language)
+
+        # 1.3: Domain Detection (using the full text)
         domain = video_metadata.get("domain", "unknown")
         if domain == "unknown":
-            domain = self._detect_domain([s.get("text", "") for s in raw_segments], language)
+            domain = self._detect_domain(global_text, language)
             logger.info(f"Detected domain: {domain}")
 
-        # Normalize transcript segments
-        normalized_segments = self._normalize_transcript(raw_segments, language)
+        # 1.4: Global text analysis
+        global_analysis = self._analyze_global_text(global_text, language, domain)
 
-        # Segment into sentences (when possible)
-        try:
-            sentence_segments = self._segment_into_sentences(normalized_segments, language)
-        except Exception as e:
-            logger.warning(f"Error segmenting into sentences: {e}, using original segments")
-            sentence_segments = normalized_segments
+        # STAGE 2: Segment Processing
+        # 2.1: Normalize segments
+        normalized_segments = self._normalize_segments(raw_segments, language)
 
-        # Classify segments as theoretical or practical
-        classified_segments = self._classify_segments(sentence_segments, domain, language)
+        # 2.2: Sentence segmentation - convert transcript segments to sentence segments
+        sentence_segments = self._create_sentence_segments(normalized_segments, language)
 
-        # Combine results
+        # 2.3: Classify segments using global context
+        classified_segments = self._classify_segments(
+            sentence_segments,
+            global_analysis,
+            domain,
+            language
+        )
+
+        # Prepare result with both global and segment-level information
         result = {
             "segments": classified_segments,
+            "global_analysis": {
+                "language": language,
+                "domain": domain,
+                "word_count": global_analysis.get("word_count", 0),
+                "sentence_count": global_analysis.get("sentence_count", 0),
+                "key_terms": global_analysis.get("key_terms", []),
+                "theoretical_indicators": global_analysis.get("theoretical_indicators", 0),
+                "practical_indicators": global_analysis.get("practical_indicators", 0)
+            },
             "language": language,
             "domain": domain,
             "video_id": video_id
@@ -629,115 +292,124 @@ class TranscriptProcessor:
         # Cache the result
         cache_set("transcript", cache_key, result)
 
-        logger.info(f"Processed transcript with {len(classified_segments)} segments")
+        process_time = process_timer.stop() / 1000  # Convert to seconds
+        logger.info(f"Processed transcript for video {video_id} in {process_time:.2f}s")
+
         return result
 
-    def _detect_language(self, text_samples: List[str]) -> str:
+    def _detect_language(self, text: str) -> str:
         """
-        Detect language from text samples using character frequency analysis.
+        Detect text language using character frequency analysis.
+        Enhanced to be more accurate with mixed-language text.
 
         Args:
-            text_samples: List of text samples
+            text: Text to analyze
 
         Returns:
-            Language code ('en' or 'ru')
+            Two-letter language code ('en' or 'ru')
         """
-        if not text_samples:
-            return 'en'
+        if not text:
+            return 'en'  # Default to English for empty text
 
-        # Join samples
-        full_text = ' '.join(text_samples)
+        # Count character frequencies
+        latin_chars = len(re.findall(r'[a-zA-Z]', text))
+        cyrillic_chars = len(re.findall(r'[а-яА-ЯёЁ]', text))
 
-        # Count Cyrillic characters
-        cyrillic_count = sum(1 for c in full_text if 'а' <= c.lower() <= 'я' or c.lower() in 'ёэіїєґў')
+        # Calculate ratios
+        total_chars = max(1, len(re.findall(r'[a-zA-Zа-яА-ЯёЁ]', text)))
+        latin_ratio = latin_chars / total_chars
+        cyrillic_ratio = cyrillic_chars / total_chars
 
-        # Count Latin characters
-        latin_count = sum(1 for c in full_text if 'a' <= c.lower() <= 'z')
-
-        # Determine language based on character distribution
-        if cyrillic_count > latin_count:
+        # Use thresholds to determine language
+        if cyrillic_ratio > 0.4:  # If text is at least 40% Cyrillic
             return 'ru'
-        else:
+        elif latin_ratio > 0.4:  # If text is at least 40% Latin
             return 'en'
 
-    def _detect_domain(self, text_samples: List[str], language: str) -> str:
+        # If no clear pattern, try additional detection methods
+        if SPACY_AVAILABLE:
+            # Use spaCy's language detection if available
+            try:
+                # Sample the text (for performance)
+                sample = text[:1000]
+                from spacy.language import Language
+                from spacy_langdetect import LanguageDetector
+
+                # Only set up language detector if needed
+                if not hasattr(self, 'language_detector'):
+                    Language.factory("language_detector", func=lambda nlp, name: LanguageDetector())
+                    # Use English model as base
+                    if 'en' not in self._spacy_models:
+                        self._spacy_models['en'] = spacy.load("en_core_web_sm")
+                    self._spacy_models['en'].add_pipe('language_detector', last=True)
+
+                doc = self._spacy_models['en'](sample)
+                detected_lang = doc._.language.get('language')
+
+                if detected_lang in ['en', 'ru']:
+                    return detected_lang
+            except:
+                logger.warning("spaCy language detection failed, using character-based fallback")
+
+        # Default to English if detection is inconclusive
+        return 'en'
+
+    def _detect_domain(self, text: str, language: str) -> str:
         """
-        Detect domain using TF-IDF similarity to domain centroids or keyword analysis.
+        Detect the content domain using improved classification techniques.
 
         Args:
-            text_samples: List of text samples
+            text: Text to analyze
             language: Language code
 
         Returns:
             Domain name
         """
-        if not text_samples:
+        if not text:
             return 'unknown'
 
-        # Join samples
-        full_text = ' '.join(text_samples)
-
-        # Try machine learning approach first (for English content)
-        if language == 'en' and self.domain_vectorizers:
+        # Use TF-IDF and cosine similarity if scikit-learn is available
+        if SKLEARN_AVAILABLE:
             try:
-                # Compute similarity to each domain
+                # Transform the text
+                text_vector = self.domain_vectorizer.transform([text])
+
+                # Calculate similarity to each domain
                 similarities = {}
-                for domain, vectorizer in self.domain_vectorizers.items():
-                    # Transform the text
-                    vector = vectorizer.transform([full_text])
+                for domain, domain_vector in self.domain_vectors.items():
+                    similarity = cosine_similarity(text_vector, domain_vector)[0][0]
+                    similarities[domain] = similarity
 
-                    # Calculate cosine similarity with domain centroid
-                    centroid = self.domain_centroids.get(domain)
-                    if centroid is not None and vector.shape[1] == len(centroid):
-                        # Calculate cosine similarity
-                        similarity = np.dot(vector.toarray()[0], centroid) / (
-                            np.linalg.norm(vector.toarray()[0]) * np.linalg.norm(centroid) + 1e-10  # Avoid division by zero
-                        )
-                        similarities[domain] = similarity
-
+                # Get the most similar domain if confidence is sufficient
                 if similarities:
-                    # Return domain with highest similarity if above threshold
-                    max_domain, max_sim = max(similarities.items(), key=lambda x: x[1])
-                    if max_sim > 0.2:  # Threshold for confidence
-                        return max_domain
+                    best_domain, best_score = max(similarities.items(), key=lambda x: x[1])
+                    if best_score > 0.1:  # Minimum confidence threshold
+                        return best_domain
             except Exception as e:
-                logger.warning(f"TF-IDF domain detection error: {e}")
+                logger.warning(f"TF-IDF domain detection failed: {e}")
 
-        # Fallback: Keyword-based detection (multilingual)
+        # Fallback: Keyword-based detection
         domain_keywords = {
             "mathematics": {
-                "en": ["math", "mathematics", "calculus", "algebra", "geometry", "theorem", "equation", "function",
-                       "derivative", "integral", "linear", "quadratic", "polynomial", "vector", "matrix",
-                       "differential", "series", "sequence", "limit", "continuous", "discrete"],
-                "ru": ["математика", "алгебра", "геометрия", "теорема", "уравнение", "функция",
-                       "производная", "интеграл", "линейный", "квадратичный", "полином", "вектор", "матрица",
-                       "дифференциал", "ряд", "последовательность", "предел", "непрерывный", "дискретный"]
-            },
-            "programming": {
-                "en": ["programming", "algorithm", "code", "software", "python", "java", "javascript",
-                       "function", "class", "object", "method", "variable", "data structure", "loop",
-                       "recursion", "compiler", "debugging", "framework", "library", "API"],
-                "ru": ["программирование", "алгоритм", "код", "программа", "python", "java",
-                       "функция", "класс", "объект", "метод", "переменная", "структура данных",
-                       "цикл", "рекурсия", "компилятор", "отладка", "фреймворк", "библиотека", "API"]
+                "en": ["math", "mathematics", "calculus", "algebra", "geometry", "theorem", "equation"],
+                "ru": ["математика", "алгебра", "геометрия", "теорема", "уравнение"]
             },
             "physics": {
-                "en": ["physics", "mechanics", "dynamics", "quantum", "relativity", "force", "energy",
-                       "momentum", "particle", "wave", "field", "nuclear", "atomic", "electromagnetic",
-                       "thermodynamics", "velocity", "acceleration", "mass", "gravity", "charge"],
-                "ru": ["физика", "механика", "динамика", "квантовая", "относительность", "сила", "энергия",
-                       "импульс", "частица", "волна", "поле", "ядерный", "атомный", "электромагнитный",
-                       "термодинамика", "скорость", "ускорение", "масса", "гравитация", "заряд",
-                       "оператор", "состояние", "гамильтониан", "шредингер", "коммутатор", "представление"]
+                "en": ["physics", "quantum", "mechanics", "energy", "force", "particle", "wave"],
+                "ru": ["физика", "квантовый", "механика", "энергия", "сила", "частица", "волна"]
+            },
+            "programming": {
+                "en": ["programming", "code", "algorithm", "function", "class", "object", "data"],
+                "ru": ["программирование", "код", "алгоритм", "функция", "класс", "объект", "данные"]
             }
         }
 
-        # Get keywords for detected language, falling back to English if necessary
+        # Get keywords for detected language, fallback to English if needed
         lang_key = language if language in ["en", "ru"] else "en"
 
-        # Count keyword occurrences with improved algorithm giving more weight to specialized terms
+        # Count keyword occurrences with improved algorithm
         domain_scores = {domain: 0 for domain in domain_keywords}
-        lowered_text = full_text.lower()
+        lowered_text = text.lower()
 
         for domain, keywords_dict in domain_keywords.items():
             keywords = keywords_dict.get(lang_key, keywords_dict.get("en", []))
@@ -750,25 +422,201 @@ class TranscriptProcessor:
                 if " " in keyword:
                     count *= 2
 
-                # Add to domain score
                 domain_scores[domain] += count
 
-        # Return domain with highest score if any found
+        # Return domain with highest score
         if sum(domain_scores.values()) > 0:
             return max(domain_scores.items(), key=lambda x: x[1])[0]
 
         return 'unknown'
 
-    def _normalize_transcript(self, raw_segments: List[Dict], language: str) -> List[Dict]:
+    def _analyze_global_text(self, text: str, language: str, domain: str) -> Dict[str, Any]:
+        """
+        Perform comprehensive analysis on the global text to extract features
+        that will inform segment-level processing.
+
+        Args:
+            text: Full transcript text
+            language: Detected language code
+            domain: Content domain
+
+        Returns:
+            Dictionary of global text features
+        """
+        # Initialize result structure
+        analysis = {
+            "word_count": 0,
+            "sentence_count": 0,
+            "key_terms": [],
+            "theoretical_indicators": 0,
+            "practical_indicators": 0,
+            "educational_indicators": 0,
+            "domain_terms": [],
+            "term_frequencies": {},
+            "sentence_lengths": [],
+            "average_sentence_length": 0
+        }
+
+        if not text.strip():
+            return analysis
+
+        # Use spaCy for advanced analysis if available
+        if SPACY_AVAILABLE and language in self._spacy_models:
+            try:
+                # Process text with spaCy (in chunks to manage memory)
+                doc = self._process_text_with_spacy(text, language)
+
+                # Extract basic statistics
+                analysis["word_count"] = len([token for token in doc if not token.is_punct and not token.is_space])
+                analysis["sentence_count"] = len(list(doc.sents))
+
+                # Extract key terms - handle language-specific differences
+                key_terms = []
+
+                # Check if noun_chunks attribute is available for this language
+                has_noun_chunks = True
+                try:
+                    # Just test if we can iterate through noun chunks
+                    next(iter(doc.noun_chunks), None)
+                except (ValueError, AttributeError) as e:
+                    has_noun_chunks = False
+                    logger.debug(f"Noun chunks not available for language '{language}': {e}")
+
+                if has_noun_chunks:
+                    # Use noun chunks for languages that support it (like English)
+                    for chunk in doc.noun_chunks:
+                        if len(chunk.text) > 2:  # Filter out very short terms
+                            key_terms.append(chunk.text.lower())
+                else:
+                    # For languages without noun chunks (like Russian),
+                    # extract nouns and noun+adjective combinations
+                    nouns = []
+                    for token in doc:
+                        # Extract single nouns
+                        if token.pos_ == "NOUN" and len(token.text) > 2:
+                            nouns.append(token.text.lower())
+                            key_terms.append(token.text.lower())
+
+                        # Extract adjective+noun combinations
+                        if token.pos_ == "NOUN" and token.i > 0:
+                            prev_token = doc[token.i - 1]
+                            if prev_token.pos_ == "ADJ":
+                                phrase = f"{prev_token.text} {token.text}".lower()
+                                key_terms.append(phrase)
+
+                # Count frequencies
+                term_counter = Counter(key_terms)
+                analysis["term_frequencies"] = {term: count for term, count in term_counter.most_common(50)}
+                analysis["key_terms"] = [term for term, _ in term_counter.most_common(20)]
+
+                # Get sentence lengths
+                analysis["sentence_lengths"] = [len([t for t in sent if not t.is_punct and not t.is_space])
+                                            for sent in doc.sents]
+                if analysis["sentence_lengths"]:
+                    analysis["average_sentence_length"] = sum(analysis["sentence_lengths"]) / len(analysis["sentence_lengths"])
+
+            except Exception as e:
+                logger.warning(f"spaCy analysis failed: {e} - using fallback")
+                # Continue with fallback analysis
+
+        # Fallback analysis for when spaCy isn't available or fails
+        if not analysis["word_count"]:
+            # Basic tokenization
+            words = re.findall(r'\b\w+\b', text.lower())
+            analysis["word_count"] = len(words)
+
+            # Simple sentence segmentation
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            analysis["sentence_count"] = len(sentences)
+
+            # Get word frequencies
+            word_counter = Counter(words)
+            # Filter out stopwords if available
+            if language in self._stopwords_cache:
+                word_counter = {word: count for word, count in word_counter.items()
+                            if word not in self._stopwords_cache[language]}
+
+            analysis["term_frequencies"] = {term: count for term, count in word_counter.most_common(50)}
+            analysis["key_terms"] = [term for term, _ in word_counter.most_common(20)]
+
+        # Count theoretical and practical indicators
+        theoretical_patterns = self.classification_indicators["theoretical"].get(language, [])
+        practical_patterns = self.classification_indicators["practical"].get(language, [])
+        educational_indicators = self.educational_indicators.get(language, [])
+
+        text_lower = text.lower()
+
+        # Count pattern occurrences
+        analysis["theoretical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in theoretical_patterns)
+        analysis["practical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in practical_patterns)
+        analysis["educational_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in educational_indicators)
+
+        # Determine overall content type based on indicators ratio
+        content_type_ratio = 0.5  # Default balanced
+        if analysis["theoretical_indicators"] + analysis["practical_indicators"] > 0:
+            content_type_ratio = analysis["theoretical_indicators"] / (analysis["theoretical_indicators"] + analysis["practical_indicators"])
+
+        analysis["content_type_ratio"] = content_type_ratio
+        analysis["primary_content_type"] = "theoretical" if content_type_ratio > 0.6 else "practical" if content_type_ratio < 0.4 else "mixed"
+
+        return analysis
+
+    def _process_text_with_spacy(self, text: str, language: str) -> Any:
+        """
+        Process text with spaCy in a memory-efficient way.
+
+        Args:
+            text: Text to process
+            language: Language code
+
+        Returns:
+            spaCy Doc object
+        """
+        # Use appropriate spaCy model based on language
+        nlp = self._spacy_models.get(language)
+        if not nlp:
+            raise ValueError(f"No spaCy model available for language: {language}")
+
+        # For very long text, we need to process in chunks to avoid memory issues
+        if len(text) > 100000:  # 100KB threshold
+            # Split into roughly sentence-sized chunks
+            chunks = re.split(r'(?<=[.!?])\s+', text)
+            processed_docs = []
+
+            # Process chunks in batches
+            batch_size = 100
+            for i in range(0, len(chunks), batch_size):
+                batch_text = " ".join(chunks[i:i+batch_size])
+                # For Russian specifically, disable parser to avoid noun_chunks errors
+                if language == 'ru':
+                    # Temporarily disable parser for Russian to avoid the noun_chunks error
+                    with nlp.select_pipes(disable=["parser"]):
+                        processed_docs.append(nlp(batch_text))
+                else:
+                    processed_docs.append(nlp(batch_text))
+
+            # Combine results - need a way to merge spaCy docs
+            # For simplicity, we'll just return the first chunk for now
+            return processed_docs[0]
+        else:
+            # For Russian specifically, disable parser to avoid noun_chunks errors if not needed
+            if language == 'ru':
+                # Disable parser for Russian to avoid the noun_chunks error
+                with nlp.select_pipes(disable=["parser"]):
+                    return nlp(text)
+            else:
+                return nlp(text)
+
+    def _normalize_segments(self, raw_segments: List[Dict], language: str) -> List[Dict]:
         """
         Normalize raw transcript segments.
 
         Args:
             raw_segments: List of raw transcript segments
-            language: Language code ('en' or 'ru')
+            language: Language code
 
         Returns:
-            List of normalized transcript segments
+            List of normalized segments
         """
         normalized_segments = []
 
@@ -779,7 +627,7 @@ class TranscriptProcessor:
             if not text.strip():
                 continue
 
-            # Basic text normalization based on language
+            # Apply language-specific normalization
             if language == "ru":
                 normalized_text = self._normalize_russian_text(text)
             else:
@@ -787,155 +635,617 @@ class TranscriptProcessor:
 
             # Create normalized segment
             normalized_segment = {
-                "id": str(uuid.uuid4()),
-                "start_time": segment.get("start", 0),
-                "end_time": segment.get("start", 0) + segment.get("duration", 0),
+                "id": segment.get("id", str(uuid.uuid4())),
+                "start_time": segment.get("start", 0.0),
+                "end_time": segment.get("start", 0.0) + segment.get("duration", 0.0),
                 "text": normalized_text,
-                "language": language
+                "language": language,
+                "raw_data": segment  # Keep original data for reference
             }
 
             normalized_segments.append(normalized_segment)
 
         return normalized_segments
 
-    def _segment_into_sentences(self, normalized_segments: List[Dict], language: str) -> List[Dict]:
+    def _create_sentence_segments(self, normalized_segments: List[Dict], language: str) -> List[Dict]:
         """
-        Segment normalized transcript into sentences with improved language handling.
+        Convert transcript segments into sentence-based segments.
+        Improves sentence boundary detection by considering the global context.
 
         Args:
             normalized_segments: List of normalized transcript segments
-            language: Language code ('en' or 'ru')
+            language: Language code
 
         Returns:
-            List of sentence segments
+            List of sentence-based segments
         """
         sentence_segments = []
 
+        # Configure sentence tokenization based on language
+        tokenize_func = self._get_sentence_tokenizer(language)
+
+        # Process each segment to extract sentences
         for segment in normalized_segments:
-            text = segment.get("text", "")
+            segment_id = segment.get("id", "")
+            segment_text = segment.get("text", "")
+            start_time = segment.get("start_time", 0.0)
+            end_time = segment.get("end_time", 0.0)
 
-            # Use language-specific sentence tokenization
-            try:
-                # For Russian, handle specially
-                if language == 'ru':
-                    try:
-                        # Try with Russian-specific tokenizer if available
-                        sentences = sent_tokenize(text, language='russian')
-                    except:
-                        # Fallback for Russian using simple rules
-                        sentences = re.split(r'(?<=[.!?])\s+', text)
-                else:
-                    # For English and other languages
-                    sentences = sent_tokenize(text)
-            except:
-                # Fallback to simple regex for all languages
-                sentences = re.split(r'(?<=[.!?])\s+', text)
+            # Skip empty segments
+            if not segment_text.strip():
+                continue
 
-            # If no sentences were detected, use the whole segment as one sentence
+            # Extract sentences
+            sentences = tokenize_func(segment_text)
+
+            # If no sentences were detected, use the whole segment
             if not sentences:
-                sentences = [text]
+                sentences = [segment_text]
 
-            start_time = segment.get("start_time", 0)
-            end_time = segment.get("end_time", 0)
-            duration = end_time - start_time
+            # Calculate timing for each sentence based on character count
+            segment_duration = end_time - start_time
+            total_chars = sum(len(s) for s in sentences)
 
-            # Create sentence segments with interpolated timestamps
-            for i, sentence in enumerate(sentences):
+            current_pos = 0
+            for sentence in sentences:
+                sentence_len = len(sentence)
+
                 # Skip empty sentences
                 if not sentence.strip():
                     continue
 
-                # Estimate time position proportionally to text length
-                sentence_length = len(sentence)
-                total_length = sum(len(s) for s in sentences)
-
-                if total_length == 0:
-                    # Avoid division by zero
+                # Calculate proportional timing
+                if total_chars > 0:
+                    sentence_portion = sentence_len / total_chars
+                    sentence_duration = segment_duration * sentence_portion
+                    sentence_start = start_time + (segment_duration * current_pos / total_chars)
+                    sentence_end = sentence_start + sentence_duration
+                    current_pos += sentence_len
+                else:
+                    # Handle empty segments gracefully
                     sentence_start = start_time
                     sentence_end = end_time
-                else:
-                    prev_length = sum(len(s) for s in sentences[:i])
-
-                    # Calculate start and end times
-                    sentence_start = start_time + (duration * prev_length / total_length)
-                    sentence_end = sentence_start + (duration * sentence_length / total_length)
-
-                    # Ensure the last sentence ends at the segment end time
-                    if i == len(sentences) - 1:
-                        sentence_end = end_time
 
                 # Create sentence segment
                 sentence_segment = {
-                    "id": str(uuid.uuid4()),
+                    "id": f"{segment_id}_{len(sentence_segments)}",
                     "start_time": sentence_start,
                     "end_time": sentence_end,
                     "text": sentence.strip(),
                     "language": language,
-                    "original_segment_id": segment.get("id")
+                    "segment_id": segment_id,  # Track the original segment
+                    "is_sentence": True  # Flag as a sentence-level segment
                 }
 
                 sentence_segments.append(sentence_segment)
 
         return sentence_segments
 
-    def _classify_segments(self, segments: List[Dict], domain: str, language: str = 'en') -> List[Dict]:
+    def _get_sentence_tokenizer(self, language: str):
         """
-        Classify segments as theoretical or practical with enhanced educational content detection.
+        Get the appropriate sentence tokenizer function for the language.
 
         Args:
-            segments: List of transcript segments
-            domain: Content domain
-            language: Language code ('en' or 'ru')
+            language: Language code
 
         Returns:
-            List of classified segments with educational content scores
+            Tokenizer function
         """
-        classified_segments = []
+        # If NLTK is available, use its sentence tokenizer
+        if NLTK_AVAILABLE:
+            if language == 'ru':
+                return lambda text: sent_tokenize(text, language='russian')
+            else:
+                return lambda text: sent_tokenize(text)
 
-        # Ensure we have pattern matchers for this language
-        lang = language if language in self.theoretical_regex else 'en'
+        # If spaCy is available, use its sentence tokenizer
+        if SPACY_AVAILABLE and language in self._spacy_models:
+            nlp = self._spacy_models[language]
+            return lambda text: [sent.text for sent in nlp(text).sents]
 
-        # Get domain-specific features for this language
-        domain_features = {}
-        if domain in self.domain_features:
-            # Try to get language-specific features first
-            if language in self.domain_features[domain]:
-                domain_features = self.domain_features[domain][language]
-            # Fall back to English if language-specific features not available
-            elif 'en' in self.domain_features[domain]:
-                domain_features = self.domain_features[domain]['en']
+        # Fallback to simple regex-based tokenization
+        return lambda text: re.split(r'(?<=[.!?])\s+', text)
 
-        # First pass: analyze segments individually
-        for segment in segments:
-            text = segment.get("text", "")
+    def _classify_segments(
+        self,
+        segments: List[Dict],
+        global_analysis: Dict,
+        domain: str,
+        language: str
+    ) -> List[Dict]:
+        """
+        Classify segments as theoretical or practical, and score educational significance,
+        using both local features and global context.
 
-            # Extract features and classify
-            features = self._extract_features(text, language)
-            content_type, confidence = self._classify_with_features(features, domain_features, text, domain, language)
+        Args:
+            segments: List of sentence segments
+            global_analysis: Global text analysis results
+            domain: Content domain
+            language: Language code
 
-            # Determine if this segment contains educational content
-            educational_score = self._calculate_educational_score(text, features, domain_features, language)
+        Returns:
+            List of classified segments
+        """
+        # Extract global context that will inform classification
+        global_context = {
+            "primary_content_type": global_analysis.get("primary_content_type", "mixed"),
+            "content_type_ratio": global_analysis.get("content_type_ratio", 0.5),
+            "key_terms": set(global_analysis.get("key_terms", [])),
+            "educational_indicators": global_analysis.get("educational_indicators", 0)
+        }
 
-            # Create classified segment
-            classified_segment = segment.copy()
-            classified_segment["content_type"] = content_type
-            classified_segment["classification_confidence"] = confidence
-            classified_segment["educational_score"] = educational_score
-            classified_segment["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
+        # Determine if parallel processing is beneficial and safe
+        # Deactivate parallel processing for Russian to avoid potential spaCy issues
+        use_parallel = (len(segments) > 20 and
+                    self.max_workers > 1 and
+                    language != "ru")  # Skip parallel for Russian
 
-            classified_segments.append(classified_segment)
+        if use_parallel:
+            try:
+                # Process segments in parallel for better performance
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    # Create tasks for each segment
+                    futures = {
+                        executor.submit(
+                            self._classify_single_segment,
+                            segment,
+                            global_context,
+                            domain,
+                            language
+                        ): segment for segment in segments
+                    }
 
-        # Second pass: improve classification with context from adjacent segments
+                    # Set a timeout for the entire operation
+                    timeout = 60  # 60 seconds timeout to prevent hanging
+
+                    # Collect results as they complete
+                    classified_segments = []
+
+                    try:
+                        for future in concurrent.futures.as_completed(futures, timeout=timeout):
+                            try:
+                                classified_segment = future.result(timeout=2)  # 2 second timeout per segment
+                                classified_segments.append(classified_segment)
+                            except Exception as e:
+                                logger.error(f"Error classifying segment: {e}")
+                                # If classification fails, include the original segment
+                                segment = futures[future]
+                                segment["content_type"] = "mixed"
+                                segment["classification_confidence"] = 0.5
+                                segment["educational_score"] = 0.0
+                                classified_segments.append(segment)
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Timeout in parallel segment classification, falling back to sequential")
+                        # If we got a timeout, use the results we have and process the rest sequentially
+                        processed_ids = {s.get("id") for s in classified_segments}
+                        remaining = [s for s in segments if s.get("id") not in processed_ids]
+
+                        # Process remaining segments sequentially
+                        for segment in remaining:
+                            try:
+                                classified_segment = self._classify_single_segment(
+                                    segment,
+                                    global_context,
+                                    domain,
+                                    language
+                                )
+                                classified_segments.append(classified_segment)
+                            except Exception as e:
+                                logger.error(f"Error in sequential fallback: {e}")
+                                segment["content_type"] = "mixed"
+                                segment["classification_confidence"] = 0.5
+                                segment["educational_score"] = 0.0
+                                classified_segments.append(segment)
+
+                    # Sort by start time to maintain order
+                    classified_segments.sort(key=lambda x: x.get("start_time", 0))
+            except Exception as e:
+                logger.error(f"Parallel processing error: {e}, falling back to sequential")
+                use_parallel = False  # Fall back to sequential
+
+        # If parallel processing is disabled or failed, use sequential processing
+        if not use_parallel:
+            # Process segments sequentially
+            classified_segments = []
+            for segment in segments:
+                try:
+                    classified_segment = self._classify_single_segment(
+                        segment,
+                        global_context,
+                        domain,
+                        language
+                    )
+                    classified_segments.append(classified_segment)
+                except Exception as e:
+                    logger.error(f"Error classifying segment: {e}")
+                    # If classification fails, include the original segment
+                    segment["content_type"] = "mixed"
+                    segment["classification_confidence"] = 0.5
+                    segment["educational_score"] = 0.0
+                    classified_segments.append(segment)
+
+        # Second pass: enhance classification with context from adjacent segments
         enhanced_segments = self._enhance_with_context(classified_segments)
 
         return enhanced_segments
+
+    def _classify_single_segment(
+        self,
+        segment: Dict,
+        global_context: Dict,
+        domain: str,
+        language: str
+    ) -> Dict:
+        """
+        Classify a single segment based on its content and global context.
+
+        Args:
+            segment: Segment dictionary
+            global_context: Global context information
+            domain: Content domain
+            language: Language code
+
+        Returns:
+            Classified segment dictionary
+        """
+        # Copy segment to avoid modifying original
+        result = segment.copy()
+        text = segment.get("text", "")
+
+        # Skip empty segments
+        if not text.strip():
+            result["content_type"] = "mixed"
+            result["classification_confidence"] = 0.5
+            result["educational_score"] = 0.0
+            return result
+
+        # Extract features for classification
+        features = self._extract_segment_features(text, language)
+
+        # Combine local features with global context
+        classification = self._classify_with_features(
+            features,
+            global_context,
+            domain,
+            language
+        )
+
+        # Calculate educational significance
+        educational_score = self._calculate_educational_score(
+            text,
+            features,
+            global_context,
+            domain,
+            language
+        )
+
+        # Update segment with classification
+        result["content_type"] = classification["content_type"]
+        result["classification_confidence"] = classification["confidence"]
+        result["educational_score"] = educational_score
+        result["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
+
+        # Save extracted features for debugging/visualization
+        result["features"] = {
+            "theoretical_score": classification.get("theoretical_score", 0),
+            "practical_score": classification.get("practical_score", 0),
+            "key_terms": features.get("key_terms", []),
+            "domain_terms": features.get("domain_terms", [])
+        }
+
+        return result
+
+    def _extract_segment_features(self, text: str, language: str) -> Dict[str, Any]:
+        """
+        Extract features from a segment for classification.
+
+        Args:
+            text: Segment text
+            language: Language code
+
+        Returns:
+            Dictionary of features
+        """
+        # Initialize features
+        features = {
+            "word_count": 0,
+            "key_terms": [],
+            "domain_terms": [],
+            "theoretical_indicators": 0,
+            "practical_indicators": 0,
+            "educational_indicators": 0,
+            "tokens": [],
+            "word_counts": {}
+        }
+
+        if not text.strip():
+            return features
+
+        # Use spaCy for feature extraction if available
+        if SPACY_AVAILABLE and language in self._spacy_models:
+            try:
+                # Process with spaCy
+                nlp = self._spacy_models[language]
+                doc = nlp(text)
+
+                # Extract tokens
+                features["tokens"] = [token.text.lower() for token in doc
+                                    if not token.is_punct and not token.is_space]
+                features["word_count"] = len(features["tokens"])
+
+                # Extract key terms - handle language-specific differences
+                key_terms = []
+
+                # Check if noun_chunks attribute is available
+                has_noun_chunks = True
+                try:
+                    # Just test if we can iterate through noun chunks
+                    next(iter(doc.noun_chunks), None)
+                except (ValueError, AttributeError):
+                    has_noun_chunks = False
+
+                if has_noun_chunks:
+                    # Use noun chunks for languages that support it
+                    for chunk in doc.noun_chunks:
+                        if len(chunk.text) > 2:
+                            key_terms.append(chunk.text.lower())
+                else:
+                    # For languages without noun chunks (like Russian),
+                    # extract nouns and noun+adjective combinations
+                    for token in doc:
+                        # Extract single nouns
+                        if token.pos_ == "NOUN" and len(token.text) > 2:
+                            key_terms.append(token.text.lower())
+
+                        # Extract adjective+noun combinations
+                        if token.pos_ == "NOUN" and token.i > 0:
+                            prev_token = doc[token.i - 1]
+                            if prev_token.pos_ == "ADJ":
+                                phrase = f"{prev_token.text} {token.text}".lower()
+                                key_terms.append(phrase)
+
+                features["key_terms"] = key_terms
+
+                # Count words
+                features["word_counts"] = Counter(features["tokens"])
+
+            except Exception as e:
+                logger.warning(f"spaCy feature extraction failed: {e} - using fallback")
+
+        # Fallback feature extraction
+        if not features["word_count"]:
+            # Basic tokenization
+            tokens = re.findall(r'\b\w+\b', text.lower())
+            features["tokens"] = tokens
+            features["word_count"] = len(tokens)
+            features["word_counts"] = Counter(tokens)
+
+        # Count theoretical and practical indicators
+        theoretical_patterns = self.classification_indicators["theoretical"].get(language, [])
+        practical_patterns = self.classification_indicators["practical"].get(language, [])
+        educational_indicators = self.educational_indicators.get(language, [])
+
+        text_lower = text.lower()
+
+        # Count pattern occurrences
+        features["theoretical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in theoretical_patterns)
+        features["practical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in practical_patterns)
+        features["educational_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in educational_indicators)
+
+        return features
+
+    def _classify_with_features(
+        self,
+        features: Dict[str, Any],
+        global_context: Dict,
+        domain: str,
+        language: str
+    ) -> Dict[str, Any]:
+        """
+        Classify segment based on features and global context.
+
+        Args:
+            features: Segment features
+            global_context: Global context information
+            domain: Content domain
+            language: Language code
+
+        Returns:
+            Classification result dictionary
+        """
+        # Calculate theoretical and practical scores
+        theoretical_score = 0.0
+        practical_score = 0.0
+
+        # 1. Score based on indicator patterns
+        theoretical_score += features["theoretical_indicators"] * 1.0
+        practical_score += features["practical_indicators"] * 1.0
+
+        # 2. Score based on domain-specific keywords
+        # Domain-specific keywords for theoretical/practical scoring
+        domain_keywords = {
+            "physics": {
+                "theoretical": {
+                    "en": ["theory", "principle", "law", "equation", "model", "concept"],
+                    "ru": ["теория", "принцип", "закон", "уравнение", "модель", "концепция"]
+                },
+                "practical": {
+                    "en": ["example", "experiment", "demonstration", "application", "measurement"],
+                    "ru": ["пример", "эксперимент", "демонстрация", "применение", "измерение"]
+                }
+            },
+            "mathematics": {
+                "theoretical": {
+                    "en": ["theorem", "proof", "definition", "lemma", "corollary", "axiom"],
+                    "ru": ["теорема", "доказательство", "определение", "лемма", "следствие", "аксиома"]
+                },
+                "practical": {
+                    "en": ["example", "problem", "calculation", "application", "solution"],
+                    "ru": ["пример", "задача", "вычисление", "применение", "решение"]
+                }
+            },
+            "programming": {
+                "theoretical": {
+                    "en": ["concept", "paradigm", "principle", "architecture", "algorithm"],
+                    "ru": ["концепция", "парадигма", "принцип", "архитектура", "алгоритм"]
+                },
+                "practical": {
+                    "en": ["code", "implementation", "example", "function", "method"],
+                    "ru": ["код", "реализация", "пример", "функция", "метод"]
+                }
+            }
+        }
+
+        # Get domain-specific keywords
+        theoretical_keywords = domain_keywords.get(domain, {}).get("theoretical", {}).get(language, [])
+        practical_keywords = domain_keywords.get(domain, {}).get("practical", {}).get(language, [])
+
+        # Score based on domain keywords
+        text_lower = " ".join(features["tokens"]).lower()
+        theoretical_score += sum(text_lower.count(kw.lower()) for kw in theoretical_keywords) * 0.5
+        practical_score += sum(text_lower.count(kw.lower()) for kw in practical_keywords) * 0.5
+
+        # 3. Consider global context
+        # Bias classification based on global primary content type
+        if global_context["primary_content_type"] == "theoretical":
+            theoretical_score += 0.5
+        elif global_context["primary_content_type"] == "practical":
+            practical_score += 0.5
+
+        # 4. Normalize scores based on text length to avoid bias towards longer segments
+        word_count = features["word_count"]
+        if word_count > 0:
+            normalization_factor = 1.0 / (0.5 + 0.05 * min(word_count, 50))  # Cap for very long segments
+            theoretical_score *= normalization_factor
+            practical_score *= normalization_factor
+
+        # Determine classification and confidence
+        content_type = "mixed"
+        confidence = 0.5
+
+        if theoretical_score > practical_score:
+            content_type = "theoretical"
+            margin = theoretical_score - practical_score
+            confidence = min(0.5 + margin / 4, 0.95)  # Cap confidence at 0.95
+        elif practical_score > theoretical_score:
+            content_type = "practical"
+            margin = practical_score - theoretical_score
+            confidence = min(0.5 + margin / 4, 0.95)  # Cap confidence at 0.95
+
+        return {
+            "content_type": content_type,
+            "confidence": confidence,
+            "theoretical_score": theoretical_score,
+            "practical_score": practical_score
+        }
+
+    def _calculate_educational_score(
+        self,
+        text: str,
+        features: Dict,
+        global_context: Dict,
+        domain: str,
+        language: str
+    ) -> float:
+        """
+        Calculate an educational significance score for a segment.
+        Determines whether this is a substantive explanation vs. passing mention.
+
+        Args:
+            text: Segment text
+            features: Segment features
+            global_context: Global context information
+            domain: Content domain
+            language: Language code
+
+        Returns:
+            Educational score (higher = more educational significance)
+        """
+        # Start with no educational significance
+        educational_score = 0.0
+
+        # Factor 1: Length of content - longer segments tend to have more educational value
+        word_count = features["word_count"]
+        if word_count > 0:
+            # Logarithmic scale to give diminishing returns for very long segments
+            import math
+            length_score = min(1.0 + math.log10(word_count / 10 + 1), 2.0)
+            educational_score += length_score
+
+        # Factor 2: Educational markers presence
+        educational_score += features["educational_indicators"] * 0.5
+
+        # Factor 3: Domain-specific term density
+        # Higher density of domain terms indicates educational content
+        domain_keywords = {
+            "physics": {
+                "en": ["quantum", "mechanics", "energy", "force", "particle", "wave", "theory"],
+                "ru": ["квантовый", "механика", "энергия", "сила", "частица", "волна", "теория"]
+            },
+            "mathematics": {
+                "en": ["theorem", "proof", "equation", "function", "derivative", "integral"],
+                "ru": ["теорема", "доказательство", "уравнение", "функция", "производная", "интеграл"]
+            },
+            "programming": {
+                "en": ["algorithm", "function", "class", "object", "method", "variable"],
+                "ru": ["алгоритм", "функция", "класс", "объект", "метод", "переменная"]
+            }
+        }
+
+        # Get domain terms
+        domain_terms = domain_keywords.get(domain, {}).get(language, [])
+
+        # Count domain terms in text
+        domain_term_count = sum(text.lower().count(term) for term in domain_terms)
+
+        # Calculate domain term density
+        if word_count > 0:
+            domain_density = domain_term_count / word_count
+            domain_score = min(domain_density * 5.0, 2.0)  # Cap at 2.0
+            educational_score += domain_score
+
+        # Factor 4: Contains key terms from global context
+        segment_terms = set(features["key_terms"])
+        global_terms = global_context["key_terms"]
+
+        # If segment contains global key terms, it's more likely to be educational
+        shared_terms = segment_terms.intersection(global_terms)
+        if shared_terms:
+            term_score = min(len(shared_terms) * 0.3, 1.0)
+            educational_score += term_score
+
+        # Factor 5: Contains terminology patterns that suggest explanation
+        explanation_patterns = {
+            'en': [
+                r'(is|are) defined as', r'refers to', r'means that', r'represents',
+                r'consists of', r'comprises', r'described as', r'characterized by',
+                r'explanation of', r'understanding of', r'concept of'
+            ],
+            'ru': [
+                r'определяется как', r'означает', r'обозначает', r'представляет',
+                r'состоит из', r'включает в себя', r'описывается как', r'характеризуется',
+                r'объяснение', r'понимание', r'концепция'
+            ]
+        }
+
+        # Count explanatory patterns
+        explanation_patterns_lang = explanation_patterns.get(language, explanation_patterns['en'])
+        explanation_score = 0
+
+        for pattern in explanation_patterns_lang:
+            if re.search(pattern, text.lower()):
+                explanation_score += 0.5
+
+        educational_score += min(explanation_score, 1.5)  # Cap at 1.5
+
+        return educational_score
 
     def _enhance_with_context(self, segments: List[Dict]) -> List[Dict]:
         """
         Enhance segment classification by considering context from adjacent segments.
 
         Args:
-            segments: List of initially classified segments
+            segments: List of classified segments
 
         Returns:
             Enhanced segments with improved classification
@@ -994,278 +1304,16 @@ class TranscriptProcessor:
 
         return enhanced_segments
 
-    def _calculate_educational_score(
-        self,
-        text: str,
-        features: Dict,
-        domain_features: Dict,
-        language: str
-    ) -> float:
-        """
-        Calculate educational significance score for a segment.
-
-        Args:
-            text: Segment text
-            features: Extracted text features
-            domain_features: Domain-specific features
-            language: Language code
-
-        Returns:
-            Educational score (higher = more educational content)
-        """
-        # Base score starts at zero
-        educational_score = 0.0
-
-        # Get correct language for matching patterns
-        lang = language if language in self.educational_markers_regex else 'en'
-
-        # Factor 1: Length of content - longer segments tend to be more educational
-        # but with diminishing returns after a certain point
-        word_count = len(features.get("tokens", []))
-        if word_count > 0:
-            length_score = min(word_count / 50.0, 3.0)  # Cap at 3.0 for very long segments
-            educational_score += length_score
-
-        # Factor 2: Educational markers presence
-        if self.educational_markers_regex[lang].search(text.lower()):
-            educational_score += 2.0  # Strong indicator of educational content
-
-        # Factor 3: Domain-specific term density
-        word_counts = features.get("word_counts", {})
-        total_words = sum(word_counts.values())
-
-        if total_words > 0:
-            domain_term_count = 0
-            domain_term_weight = 0.0
-
-            for word, count in word_counts.items():
-                if word in domain_features:
-                    domain_term_count += count
-                    domain_term_weight += domain_features[word] * count
-
-            # Calculate domain term density with weighted importance
-            if domain_term_count > 0:
-                # Both absolute count and relative density matter
-                domain_density = domain_term_count / total_words
-                domain_score = min(domain_term_weight * 0.7 + (domain_density * 5.0), 3.0)
-                educational_score += domain_score
-
-        # Factor 4: Check for structured explanations using patterns
-        explanation_patterns = {
-            'en': [
-                r'first[,\.].*then', r'begin by.*next', r'starts with.*followed by',
-                r'step \d+', r'example[s]? of', r'consider the',
-                r'this means that', r'is defined as', r'can be understood as',
-                r'represents', r'characterized by', r'illustrated by',
-                r'described as', r'known as', r'referred to as',
-                r'in other words', r'to be precise', r'specifically',
-                r'for instance', r'in particular'
-            ],
-            'ru': [
-                r'сначала.*затем', r'начнем с.*далее', r'начинается с.*затем',
-                r'шаг \d+', r'примеры?', r'рассмотрим',
-                r'это означает', r'определяется как', r'можно понять как',
-                r'представляет', r'характеризуется', r'иллюстрируется',
-                r'описывается как', r'известен как', r'называется',
-                r'другими словами', r'если точнее', r'конкретно',
-                r'например', r'в частности'
-            ]
-        }
-
-        explanation_patterns_lang = explanation_patterns.get(lang, explanation_patterns['en'])
-        explanation_pattern_count = 0
-
-        for pattern in explanation_patterns_lang:
-            if re.search(pattern, text.lower()):
-                explanation_pattern_count += 1
-
-        # Add score based on structured explanation markers
-        explanation_score = min(explanation_pattern_count * 0.5, 1.5)
-        educational_score += explanation_score
-
-        # Factor 5: Check for comparison language that typically indicates substantive explanations
-        comparison_patterns = {
-            'en': [
-                r'(different|difference) (from|between)', r'(similar|similarly) to',
-                r'(unlike|like)', r'(compared|comparing) to', r'(contrasted|contrast) with',
-                r'on the other hand', r'alternatively', r'conversely',
-                r'analogous to', r'equivalent to', r'corresponds to'
-            ],
-            'ru': [
-                r'(отличается|отличие) (от|между)', r'(похож|похожий|схожий) (на|с)',
-                r'(в отличие от|как)', r'(по сравнению с|сравнивая с)',
-                r'(в противоположность|противопоставляя)',
-                r'с другой стороны', r'в качестве альтернативы', r'наоборот',
-                r'аналогично', r'эквивалентно', r'соответствует'
-            ]
-        }
-
-        comparison_patterns_lang = comparison_patterns.get(lang, comparison_patterns['en'])
-        if any(re.search(pattern, text.lower()) for pattern in comparison_patterns_lang):
-            educational_score += 1.0  # Comparison language suggests substantive explanation
-
-        return educational_score
-
-    def _extract_features(self, text: str, language: str = 'en') -> Dict:
-        """
-        Extract NLP features from text for classification with language support.
-
-        Args:
-            text: Text to extract features from
-            language: Language code
-
-        Returns:
-            Dictionary of features
-        """
-        # Lowercase the text for case-insensitive matching
-        text_lower = text.lower()
-
-        # Get correct stopwords and stemmer
-        lang_code = language if language in self.stopwords else 'en'
-        stop_words = self.stopwords.get(lang_code, set())
-        stemmer = self.stemmers.get(lang_code, self.stemmers.get('en', None))
-
-        # Extract tokens
-        try:
-            tokens = word_tokenize(text_lower)
-        except:
-            # Fallback tokenization (simple whitespace split)
-            tokens = text_lower.split()
-
-        # Remove stopwords and punctuation, then stem tokens
-        filtered_tokens = []
-        for token in tokens:
-            if token not in stop_words and token not in string.punctuation:
-                # Apply stemming if available
-                try:
-                    if stemmer:
-                        stemmed = stemmer.stem(token)
-                        filtered_tokens.append(stemmed)
-                    else:
-                        filtered_tokens.append(token)
-                except:
-                    filtered_tokens.append(token)
-
-        # Count word frequencies
-        word_counts = Counter(filtered_tokens)
-
-        return {
-            "tokens": filtered_tokens,
-            "word_counts": word_counts,
-            "text_lower": text_lower
-        }
-
-    def _classify_with_features(
-        self,
-        features: Dict,
-        domain_features: Dict,
-        text: str,
-        domain: str,
-        language: str = 'en'
-    ) -> Tuple[str, float]:
-        """
-        Classify text as theoretical or practical using extracted features.
-
-        Args:
-            features: Extracted text features
-            domain_features: Domain-specific language features
-            text: Original text
-            domain: Content domain
-            language: Language code
-
-        Returns:
-            Tuple of (classification, confidence)
-        """
-        word_counts = features["word_counts"]
-        text_lower = features["text_lower"]
-
-        # Get correct language for patterns
-        lang = language if language in self.theoretical_regex else 'en'
-
-        # Calculate theoretical and practical scores
-        theoretical_score = 0.0
-        practical_score = 0.0
-
-        # Score based on linguistic features/domain features
-        for word, count in word_counts.items():
-            # Check if word is in domain features
-            if word in domain_features:
-                # Use the feature weight directly - higher weights for theoretical terms
-                if domain_features[word] >= 0.75:  # Threshold for theoretical
-                    theoretical_score += domain_features[word] * count
-                else:
-                    practical_score += domain_features[word] * count
-
-        # Score based on syntactic patterns
-        if self.theoretical_regex[lang].search(text_lower):
-            theoretical_score += 1.5
-
-        if self.practical_regex[lang].search(text_lower):
-            practical_score += 1.5
-
-        # Add domain-specific pattern matching
-        if domain == "mathematics":
-            # Check for mathematical symbols (theoretical)
-            math_symbols = ["∫", "∑", "∏", "∀", "∃", "→", "∴", "∵", "≡", "≠", "≤", "≥"]
-            if any(symbol in text for symbol in math_symbols):
-                theoretical_score += 1.0
-
-            # Check for calculation keywords (practical)
-            calc_pattern = r'\b(calculate|compute|find|solve|evaluate|вычислить|рассчитать|решить)\b'
-            if re.search(calc_pattern, text_lower):
-                practical_score += 1.0
-
-        elif domain == "programming":
-            # Check for code blocks or snippets (practical)
-            code_pattern = r'(```|def\s+\w+\(|class\s+\w+:|if\s+.*:|for\s+.*:|while\s+.*:)'
-            if re.search(code_pattern, text):
-                practical_score += 1.5
-
-            # Check for conceptual programming terms (theoretical)
-            concept_pattern = r'\b(complexity|algorithm design|design pattern|architecture|сложность|проектирование алгоритмов|шаблон проектирования)\b'
-            if re.search(concept_pattern, text_lower):
-                theoretical_score += 1.0
-
-        elif domain == "physics":
-            # Check for physics equations (theoretical)
-            equation_pattern = r'[A-Za-z]+\s*=\s*[A-Za-z0-9\s\+\-\*\/\(\)]+'
-            if re.search(equation_pattern, text):
-                theoretical_score += 0.8
-
-            # Check for experimental indicators (practical)
-            experiment_pattern = r'\b(experiment|measurement|observation|data|result|эксперимент|измерение|наблюдение|данные|результат)\b'
-            if re.search(experiment_pattern, text_lower):
-                practical_score += 1.0
-
-        # Normalize scores based on text length to avoid bias towards longer segments
-        tokens_count = len(features["tokens"])
-        if tokens_count > 0:
-            normalization_factor = 1.0 / (0.5 + 0.05 * tokens_count)  # Smooth normalization
-            theoretical_score *= normalization_factor
-            practical_score *= normalization_factor
-
-        # Determine classification and confidence
-        if theoretical_score > practical_score:
-            margin = theoretical_score - practical_score
-            confidence = min(0.5 + margin / 2, 0.95)  # Cap confidence at 0.95
-            return "theoretical", confidence
-        elif practical_score > theoretical_score:
-            margin = practical_score - theoretical_score
-            confidence = min(0.5 + margin / 2, 0.95)  # Cap confidence at 0.95
-            return "practical", confidence
-        else:
-            # If scores are equal, look at other factors like domain default
-            if domain == "mathematics":
-                # Mathematics tends to be theoretical by default
-                return "theoretical", 0.6
-            elif domain == "programming":
-                # Programming tends to be practical by default
-                return "practical", 0.6
-            else:
-                return "mixed", 0.5
-
     def _normalize_english_text(self, text: str) -> str:
-        """Normalize English text."""
+        """
+        Normalize English text.
+
+        Args:
+            text: Input text
+
+        Returns:
+            Normalized text
+        """
         # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text.strip())
 
@@ -1282,10 +1330,22 @@ class TranscriptProcessor:
         # Remove musical notes, applause indicators, etc.
         text = re.sub(r'\[.*?\]', '', text)
 
+        # Simple grammar fixes
+        text = re.sub(r'\s+,', ',', text)  # Remove space before comma
+        text = re.sub(r'\s+\.', '.', text)  # Remove space before period
+
         return text.strip()
 
     def _normalize_russian_text(self, text: str) -> str:
-        """Normalize Russian text."""
+        """
+        Normalize Russian text.
+
+        Args:
+            text: Input text
+
+        Returns:
+            Normalized text
+        """
         # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text.strip())
 
@@ -1301,138 +1361,159 @@ class TranscriptProcessor:
         # Remove musical notes, applause indicators, etc.
         text = re.sub(r'\[.*?\]', '', text)
 
+        # Simple grammar fixes
+        text = re.sub(r'\s+,', ',', text)  # Remove space before comma
+        text = re.sub(r'\s+\.', '.', text)  # Remove space before period
+
+        # Common problematic phrases in Russian transcripts
+        text = text.replace("то обсуждений давайте", "")
+        text = text.replace("то состояние второго определённо такое", "")
+        text = text.replace("вакуумное состояние оно", "вакуумное состояние")
+        text = text.replace("эрмитово оператора", "эрмитов оператор")
+        text = text.replace("любое собственное состояние оно", "собственное состояние")
+
         return text.strip()
 
-    def normalize_word(self, word: str, language: str = 'en') -> str:
-        """
-        Normalize a word using appropriate stemmer for the language.
+# Helper functions for testing and standalone usage
+def calculate_theory_practice_ratio(segments: List[Dict]) -> Dict[str, Any]:
+    """
+    Calculate theory/practice ratio from classified segments.
 
-        Args:
-            word: Word to normalize
-            language: Language code
+    Args:
+        segments: Classified transcript segments
 
-        Returns:
-            Normalized word
-        """
-        # Skip very short words
-        if len(word) <= 2:
-            return word
+    Returns:
+        Dictionary with theory/practice analysis
+    """
+    if not segments:
+        return {
+            "classification": "unknown",
+            "confidence": 0.0,
+            "theoretical_segments": 0,
+            "practical_segments": 0,
+            "mixed_segments": 0,
+            "theory_practice_ratio": 0.5
+        }
 
-        # Skip if word contains digits (likely a formula or equation)
-        if any(char.isdigit() for char in word):
-            return word
+    # Count segment types with confidence weighting
+    theoretical_count = 0
+    practical_count = 0
+    mixed_count = 0
 
-        # Get appropriate stemmer
-        lang_code = language if language in self.stemmers else 'en'
-        stemmer = self.stemmers.get(lang_code)
+    # Track total confidence-weighted counts
+    theoretical_weighted = 0
+    practical_weighted = 0
+    mixed_weighted = 0
 
-        if not stemmer:
-            return word
+    # Track time distribution
+    total_duration = 0
+    theoretical_duration = 0
+    practical_duration = 0
+    mixed_duration = 0
 
-        try:
-            return stemmer.stem(word.lower())
-        except:
-            return word.lower()
+    for segment in segments:
+        segment_type = segment.get("content_type", "mixed")
+        confidence = segment.get("classification_confidence", 0.6)  # Default confidence if not present
 
-    def get_bigrams(self, text: str, language: str = 'en') -> List[str]:
-        """
-        Extract meaningful bigrams from text.
+        # Calculate segment duration
+        start_time = segment.get("start_time", 0)
+        end_time = segment.get("end_time", 0)
+        duration = end_time - start_time
+        total_duration += duration
 
-        Args:
-            text: Input text
-            language: Language code
+        if segment_type == "theoretical":
+            theoretical_count += 1
+            theoretical_weighted += confidence
+            theoretical_duration += duration
+        elif segment_type == "practical":
+            practical_count += 1
+            practical_weighted += confidence
+            practical_duration += duration
+        else:  # mixed
+            mixed_count += 1
+            mixed_weighted += confidence
+            mixed_duration += duration
 
-        Returns:
-            List of bigrams
-        """
-        # Get appropriate stopwords
-        lang_code = language if language in self.stopwords else 'en'
-        stop_words = self.stopwords.get(lang_code, set())
+    total_segments = theoretical_count + practical_count + mixed_count
 
-        # Tokenize text
-        try:
-            tokens = word_tokenize(text.lower())
-        except:
-            tokens = text.lower().split()
+    # Calculate theory/practice ratio with improved weighting
+    if total_segments > 0:
+        # Apply a weighted formula with confidence
+        total_weighted = theoretical_weighted + practical_weighted + mixed_weighted
 
-        # Filter out stopwords and punctuation
-        filtered_tokens = [token for token in tokens if token not in stop_words
-                          and token not in string.punctuation
-                          and len(token) > 2]
+        if total_weighted > 0:
+            # Apply confidence-weighted formula
+            theory_weight = theoretical_weighted + (mixed_weighted * 0.5)
+            theory_practice_ratio = theory_weight / total_weighted
+        else:
+            theory_practice_ratio = 0.5
 
-        # Extract bigrams
-        bigrams = []
-        for i in range(len(filtered_tokens) - 1):
-            # Don't include bigrams where both words are the same
-            if filtered_tokens[i] != filtered_tokens[i+1]:
-                bigrams.append(f"{filtered_tokens[i]} {filtered_tokens[i+1]}")
+        # Factor in duration-based ratio
+        if total_duration > 0:
+            duration_theory_ratio = (theoretical_duration + (mixed_duration * 0.5)) / total_duration
 
-        return bigrams
+            # Final ratio is an average of count-based and duration-based ratios
+            theory_practice_ratio = (theory_practice_ratio + duration_theory_ratio) / 2
 
-    def get_trigrams(self, text: str, language: str = 'en') -> List[str]:
-        """
-        Extract meaningful trigrams from text.
+    else:
+        theory_practice_ratio = 0.5
 
-        Args:
-            text: Input text
-            language: Language code
+    # Determine overall classification
+    if theory_practice_ratio > 0.7:
+        classification = "theoretical"
+        confidence = 0.8 if theory_practice_ratio > 0.85 else 0.7
+    elif theory_practice_ratio < 0.3:
+        classification = "practical"
+        confidence = 0.8 if theory_practice_ratio < 0.15 else 0.7
+    else:
+        classification = "mixed"
+        closeness_to_half = 1.0 - abs(theory_practice_ratio - 0.5) * 2
+        confidence = 0.6 + (closeness_to_half * 0.3)
 
-        Returns:
-            List of trigrams
-        """
-        # Get appropriate stopwords
-        lang_code = language if language in self.stopwords else 'en'
-        stop_words = self.stopwords.get(lang_code, set())
+    return {
+        "classification": classification,
+        "confidence": confidence,
+        "theoretical_segments": theoretical_count,
+        "practical_segments": practical_count,
+        "mixed_segments": mixed_count,
+        "theory_practice_ratio": theory_practice_ratio,
+        "duration_analysis": {
+            "total_duration": total_duration,
+            "theoretical_duration": theoretical_duration,
+            "practical_duration": practical_duration,
+            "mixed_duration": mixed_duration
+        }
+    }
 
-        # Tokenize text
-        try:
-            tokens = word_tokenize(text.lower())
-        except:
-            tokens = text.lower().split()
+def test_transcript_processor(raw_segments: List[Dict], video_metadata: Dict) -> Dict[str, Any]:
+    """
+    Test the transcript processor with a sample transcript.
 
-        # Filter out stopwords and punctuation
-        filtered_tokens = [token for token in tokens if token not in stop_words
-                          and token not in string.punctuation
-                          and len(token) > 2]
+    Args:
+        raw_segments: List of raw transcript segments
+        video_metadata: Video metadata dictionary
 
-        # Extract trigrams
-        trigrams = []
-        for i in range(len(filtered_tokens) - 2):
-            # Don't include trigrams with repeated words
-            if len(set([filtered_tokens[i], filtered_tokens[i+1], filtered_tokens[i+2]])) == 3:
-                trigrams.append(f"{filtered_tokens[i]} {filtered_tokens[i+1]} {filtered_tokens[i+2]}")
+    Returns:
+        Processing results
+    """
+    processor = TranscriptProcessor()
+    start_time = time.time()
 
-        return trigrams
+    # Process the transcript
+    result = processor.process_transcript(raw_segments, video_metadata)
 
-    def get_domain_specific_patterns(self, text: str, domain: str, language: str = 'en') -> List[str]:
-        """
-        Extract domain-specific patterns from text.
+    # Calculate timing metrics
+    processing_time = time.time() - start_time
 
-        Args:
-            text: Input text
-            domain: Domain (mathematics, programming, physics)
-            language: Language code
+    # Add test metrics
+    result["test_metrics"] = {
+        "processing_time_seconds": processing_time,
+        "segments_processed": len(raw_segments),
+        "output_segments": len(result["segments"])
+    }
 
-        Returns:
-            List of matched patterns
-        """
-        lang_key = language if language in ['en', 'ru'] else 'en'
+    # Calculate theory/practice ratio for the processed segments
+    theory_practice_results = calculate_theory_practice_ratio(result["segments"])
+    result["theory_practice_results"] = theory_practice_results
 
-        # Get appropriate patterns for domain and language
-        if domain not in self.compiled_domain_patterns:
-            return []
-
-        domain_patterns = self.compiled_domain_patterns.get(domain, {}).get(lang_key, [])
-        if not domain_patterns:
-            domain_patterns = self.compiled_domain_patterns.get(domain, {}).get('en', [])
-
-        # Extract matches
-        matches = []
-        for pattern in domain_patterns:
-            for match in pattern.finditer(text):
-                # Extract the matched phrase
-                phrase = text[match.start():match.end()]
-                if phrase and len(phrase) > 3:  # Ensure non-empty matches
-                    matches.append(phrase.lower())
-
-        return matches
+    return result
