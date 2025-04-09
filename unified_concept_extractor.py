@@ -2,6 +2,7 @@
 Enhanced Unified Concept Extractor for the Lecture Video Content Indexer.
 Redesigned with improved concept validation, educational significance detection,
 and language-specific processing, particularly for Russian content.
+Theory/practice categorization removed for a simpler, unified approach.
 """
 
 import re
@@ -98,52 +99,6 @@ class UnifiedConceptExtractor:
                       "массив", "список", "цикл", "рекурсия", "данные", "структура",
                       "сложность", "время", "память", "интерфейс", "наследование", "полиморфизм"}
             }
-        }
-
-        # Patterns for theoretical/practical content (used for concept classification)
-        self.theoretical_patterns = {
-            'en': [
-                r'is defined as', r'is called', r'refers to', r'is known as',
-                r'can be described as', r'is a concept', r'is characterized by',
-                r'is understood as', r'is formulated as', r'is represented by',
-                r'is expressed as', r'is given by', r'is derived from', r'is related to',
-                r'the definition of', r'the concept of', r'the theory of', r'the principle of',
-                r'the law of', r'the equation for', r'according to the theory'
-            ],
-            'ru': [
-                r'определяется как', r'называется', r'обозначает', r'известен как',
-                r'можно описать как', r'является концепцией', r'характеризуется',
-                r'понимается как', r'формулируется как', r'представлен как',
-                r'выражается как', r'задается как', r'выводится из', r'связан с',
-                r'определение', r'концепция', r'теория', r'принцип',
-                r'закон', r'уравнение для', r'согласно теории'
-            ]
-        }
-
-        self.practical_patterns = {
-            'en': [
-                r"let['']s", r'we (can|will|should|could)', r'you (can|will|should|could)',
-                r'for example', r'as an example', r'step by step', r'how to',
-                r'in practice', r'in this example', r'to solve this', r'to implement this',
-                r'to calculate', r'to compute', r'let me show you', r'I\'ll demonstrate'
-            ],
-            'ru': [
-                r'давайте', r'мы (можем|будем|должны|могли)', r'вы (можете|будете|должны|могли)',
-                r'например', r'в качестве примера', r'шаг за шагом', r'как сделать',
-                r'на практике', r'в этом примере', r'чтобы решить', r'для реализации',
-                r'для вычисления', r'позвольте показать', r'я продемонстрирую', r'рассмотрим'
-            ]
-        }
-
-        # Compile regex patterns
-        self.theoretical_regex = {
-            lang: re.compile('|'.join(patterns), re.IGNORECASE)
-            for lang, patterns in self.theoretical_patterns.items()
-        }
-
-        self.practical_regex = {
-            lang: re.compile('|'.join(patterns), re.IGNORECASE)
-            for lang, patterns in self.practical_patterns.items()
         }
 
         # Educational content markers for substantive explanations
@@ -1016,7 +971,7 @@ class UnifiedConceptExtractor:
             processed_transcript: Processed transcript from TranscriptProcessor
 
         Returns:
-            Dictionary containing theoretical and practical concepts
+            Dictionary containing concepts
         """
         segments = processed_transcript.get("segments", [])
         language = processed_transcript.get("language", "en")
@@ -1052,7 +1007,7 @@ class UnifiedConceptExtractor:
             global_analysis: Optional global text analysis data
 
         Returns:
-            Dictionary containing theoretical and practical concepts with occurrences
+            Dictionary containing concepts with occurrences
         """
         # Use specified language or default
         lang = language or self.language
@@ -1086,7 +1041,7 @@ class UnifiedConceptExtractor:
                         lang,
                         global_analysis,
                         # Pass segment educational score to inform concept extraction
-                        segment.get("educational_score", 0)
+                        segment.get("educational_value", 0)
                     )
                     all_segment_concepts.extend(segment_concepts)
 
@@ -1124,36 +1079,18 @@ class UnifiedConceptExtractor:
                         "segment_id": segment_id,
                         "start_time": segment.get("start_time", 0),
                         "end_time": segment.get("end_time", 0),
-                        "context_type": segment.get("content_type", "mixed"),
                         "context_text": segment.get("text", "")
                     }
 
                     # Add to concept's occurrences
                     concept["occurrences"].append(occurrence)
 
-        # Update concept scores based on educational content metrics:
-        # 1. Frequency of occurrences (concepts that appear multiple times are more likely educational)
-        # 2. Distribution across segments (concepts that appear in multiple segments get higher weight)
-        # 3. Duration of segments where concept appears (longer segments = more extensive explanation)
-        # 4. Educational scores of containing segments (segments marked as educational boost the concept)
+        # Calculate educational significance metrics
         self._score_educational_occurrences(concept_map, segments)
 
         # Update concept frequency based on actual occurrences
         for concept in concept_map.values():
             concept["frequency"] = len(concept.get("occurrences", []))
-
-            # Verify theoretical vs practical based on occurrences
-            occurrences = concept.get("occurrences", [])
-            theoretical_count = sum(1 for o in occurrences if o.get("context_type") == "theoretical")
-            practical_count = sum(1 for o in occurrences if o.get("context_type") == "practical")
-
-            # Use majority vote across segments
-            if theoretical_count > practical_count:
-                concept["theoretical"] = True
-                concept["concept_class"] = "theoretical"
-            elif practical_count > theoretical_count:
-                concept["theoretical"] = False
-                concept["concept_class"] = "practical"
 
         # Convert to list and sort by frequency and score
         result_concepts = list(concept_map.values())
@@ -1168,19 +1105,13 @@ class UnifiedConceptExtractor:
             else:
                 logger.debug(f"Filtered out invalid concept: {concept_text}")
 
-        # Separate concepts into theoretical and practical
-        theoretical_concepts = [c for c in valid_concepts if c.get("concept_class") == "theoretical"]
-        practical_concepts = [c for c in valid_concepts if c.get("concept_class") == "practical"]
-
         processing_time = time.time() - start_time
         logger.info(f"Concept extraction completed in {processing_time:.2f} seconds")
         logger.info(f"Found {len(valid_concepts)} valid concepts from {len(result_concepts)} candidates")
-        logger.info(f"Theoretical concepts: {len(theoretical_concepts)}, Practical concepts: {len(practical_concepts)}")
 
-        # Return dictionary with theoretical and practical concepts
+        # Return a unified list of concepts
         return {
-            "theoretical_concepts": theoretical_concepts,
-            "practical_concepts": practical_concepts
+            "concepts": valid_concepts,
         }
 
     def extract_concepts(
@@ -1292,9 +1223,6 @@ class UnifiedConceptExtractor:
             # Generate a concept ID
             concept_id = hashlib.md5(f"{normalized_text}:{domain}:{lang}".encode()).hexdigest()
 
-            # Classify as theoretical or practical
-            is_theoretical = self._is_theoretical_concept(term, text, domain, lang)
-
             # Create the concept entry with educational metrics
             filtered_candidates[normalized_text] = {
                 "text": term,
@@ -1305,8 +1233,6 @@ class UnifiedConceptExtractor:
                 "source": data.get("source", ""),
                 "domain": domain,
                 "language": lang,
-                "theoretical": is_theoretical,
-                "concept_class": "theoretical" if is_theoretical else "practical",
                 "educational_weight": data.get("educational_weight", 0),
                 "is_educational": data.get("is_educational", False)
             }
@@ -1498,299 +1424,205 @@ class UnifiedConceptExtractor:
                         if self.is_valid_concept(normalized, language):
                             matches[match_text] = matches.get(match_text, 0) + 1
 
-        # Special processing for Russian physics terms
+                    # Special processing for Russian physics terms
         if domain == "physics" and language == "ru":
             # List of important quantum physics bigrams/trigrams
             quantum_phrases = [
                 "волновая функция", "собственное состояние", "собственное значение",
-                "эрмитов оператор", "операторы рождения", "операторы уничтожения",
-                "квантовое состояние", "квантовая механика", "принцип неопределенности",
-                "волновой пакет", "энергетический уровень", "стационарное состояние",
-                "квантовый осциллятор", "вакуумное состояние", "квантовая система",
-                "гамильтониан системы", "скалярное произведение", "матрица плотности",
-                "спиновое состояние", "угловой момент", "оператор энергии",
-                "оператор импульса", "оператор координаты", "уравнение Шредингера",
-                "базис состояний", "дискретный спектр", "непрерывный спектр",
-                "коэффициент разложения", "нормировка функции", "гармонический осциллятор",
-                "квантовая теория", "спиновая система", "спин-орбитальное взаимодействие",
-                "атомный спектр", "молекулярная орбиталь", "базисный вектор",
-                "функция распределения", "вероятностная интерпретация", "принцип суперпозиции",
-                "уравнение непрерывности", "соотношение неопределенностей", "граничные условия",
-                "начальные условия", "квантовый эффект", "пространство состояний",
-                "тензорное произведение", "прямое произведение", "комплексное сопряжение",
-                "импульсное представление", "координатное представление"
+                "эрмитов оператор", "матрица плотности", "вакуумное состояние",
+                "оператор координаты", "оператор импульса", "оператор энергии",
+                "гамильтониан системы", "квантовая механика", "спиновое состояние",
+                "орбитальное состояние", "квантовое число", "стационарное состояние",
+                "принцип суперпозиции", "принцип неопределенности", "квантовая запутанность",
+                "уравнение шредингера", "спектральное разложение", "тензорное произведение",
+                "прямое произведение", "базис гильбертова пространства", "унитарный оператор",
+                "эрмитово сопряжение", "бра вектор", "кет вектор", "скалярное произведение",
+                "ортогональный базис", "гильбертово пространство", "квантовая теория",
+                "амплитуда вероятности", "коммутатор операторов", "антикоммутатор операторов",
+                "оператор эволюции", "оператор рождения", "оператор уничтожения",
+                "когерентное состояние", "сферическая функция"
             ]
 
-            # Search for phrases
+            # Check for these specific phrases in the text
             for phrase in quantum_phrases:
-                count = text.lower().count(phrase)
-                if count > 0 and self.is_valid_concept(phrase, language):
-                    matches[phrase] = matches.get(phrase, 0) + count * 2  # Higher weight for phrases
+                if phrase.lower() in text.lower():
+                    matches[phrase] = matches.get(phrase, 0) + 1
 
         return matches
 
-    def _extract_significant_bigrams(self, text: str, language: str = "en") -> Dict[str, float]:
+    def _extract_significant_bigrams(self, text: str, language: str) -> Dict[str, float]:
         """
-        Extract significant bigrams from text with better filtering.
+        Extract significant bigrams from text.
 
         Args:
             text: Input text
             language: Language code
 
         Returns:
-            Dictionary of bigrams with their scores
+            Dictionary of bigrams and their scores
         """
-        # Get stopwords for the language
-        stopwords_set = self.stopwords.get(language, self.stopwords.get('en', set()))
+        # Get stopwords for this language
+        stop_words = self.stopwords.get(language, self.stopwords.get('en', set()))
 
-        # Tokenize text
-        tokens = text.lower().split()
+        # Tokenize the text
+        tokens = [token.strip().lower() for token in re.findall(r'\b[\w\-]+\b', text.lower())
+                 if token.strip() and token.strip().lower() not in stop_words and len(token.strip()) > 1]
 
-        # Filter stopwords and short tokens
-        filtered_tokens = [token for token in tokens
-                          if token not in stopwords_set
-                          and token not in string.punctuation
-                          and len(token) > 2]
-
-        # Skip if too few tokens
-        if len(filtered_tokens) < 3:
+        # Skip if not enough tokens
+        if len(tokens) < 2:
             return {}
 
-        # Extract bigrams
+        # Create bigrams
         bigrams = []
-        for i in range(len(filtered_tokens) - 1):
-            # Skip bigrams where both tokens are the same
-            if filtered_tokens[i] != filtered_tokens[i+1]:
-                # Create the bigram
-                bigram = f"{filtered_tokens[i]} {filtered_tokens[i+1]}"
-                # Only add if it's long enough
-                if len(bigram) >= 3:
-                    bigrams.append((filtered_tokens[i], filtered_tokens[i+1]))
+        for i in range(len(tokens) - 1):
+            bigram = f"{tokens[i]} {tokens[i+1]}"
+            # Normalize and validate bigram
+            normalized = self.normalize_concept_text(bigram, language)
+            if normalized and self.is_valid_concept(normalized, language):
+                bigrams.append(normalized)
 
-        # Count frequencies
+        # Count bigram frequencies
         bigram_counts = Counter(bigrams)
 
-        # Skip if no repeated bigrams
-        if len(bigram_counts) == 0:
-            return {}
-
-        # Calculate scores based on frequency
-        max_count = max(bigram_counts.values()) if bigram_counts else 1
-
-        # Convert to string format and calculate scores
+        # Calculate scores based on frequency and length
         bigram_scores = {}
-        for (word1, word2), count in bigram_counts.items():
-            # Include bigrams that appear at least once
-            bigram_text = f"{word1} {word2}"
+        for bigram, count in bigram_counts.items():
+            words = bigram.split()
+            # Skip single-word results (should be handled elsewhere)
+            if len(words) < 2:
+                continue
 
-            # Score is based on frequency and normalized by max count
-            score = (count / max_count) * 2.0
+            # Base score: frequency + length bonus
+            score = count + 0.2 * len(bigram)
 
-            # Boost score for domain-specific terms
-            if language == "ru" and any(keyword in [word1, word2] for keyword in
-                                      ["квантовый", "квантовая", "собственное", "эрмитов", "эрмитово",
-                                       "волновая", "функция", "состояние", "оператор", "гамильтониан"]):
-                score *= 1.5
+            # If any word in the bigram is a domain keyword, boost score
+            for domain, lang_keywords in self.domain_keywords.items():
+                domain_terms = lang_keywords.get(language, set())
+                if any(word in domain_terms for word in words):
+                    score += 1.0  # Domain term bonus
+                    break
 
-            # Only keep valid bigrams
-            if self.is_valid_concept(bigram_text, language):
-                bigram_scores[bigram_text] = score
+            bigram_scores[bigram] = score
 
         return bigram_scores
 
-    def _extract_significant_trigrams(self, text: str, language: str = "en") -> Dict[str, float]:
+    def _extract_significant_trigrams(self, text: str, language: str) -> Dict[str, float]:
         """
-        Extract significant trigrams from text with better filtering.
+        Extract significant trigrams from text.
 
         Args:
             text: Input text
             language: Language code
 
         Returns:
-            Dictionary of trigrams with their scores
+            Dictionary of trigrams and their scores
         """
-        # Get stopwords for the language
-        stopwords_set = self.stopwords.get(language, self.stopwords.get('en', set()))
+        # Get stopwords for this language
+        stop_words = self.stopwords.get(language, self.stopwords.get('en', set()))
 
-        # Tokenize text
-        tokens = text.lower().split()
+        # Tokenize the text
+        tokens = [token.strip().lower() for token in re.findall(r'\b[\w\-]+\b', text.lower())
+                 if token.strip() and token.strip().lower() not in stop_words and len(token.strip()) > 1]
 
-        # Filter stopwords and short tokens
-        filtered_tokens = [token for token in tokens
-                          if token not in stopwords_set
-                          and token not in string.punctuation
-                          and len(token) > 2]
-
-        # Skip if too few tokens
-        if len(filtered_tokens) < 4:
+        # Skip if not enough tokens
+        if len(tokens) < 3:
             return {}
 
-        # Extract trigrams
+        # Create trigrams
         trigrams = []
-        for i in range(len(filtered_tokens) - 2):
-            # Only use trigrams with unique tokens
-            if len(set([filtered_tokens[i], filtered_tokens[i+1], filtered_tokens[i+2]])) >= 2:
-                # Create the trigram
-                trigram = f"{filtered_tokens[i]} {filtered_tokens[i+1]} {filtered_tokens[i+2]}"
-                # Only add if it's long enough
-                if len(trigram) >= 5:
-                    trigrams.append((filtered_tokens[i], filtered_tokens[i+1], filtered_tokens[i+2]))
+        for i in range(len(tokens) - 2):
+            trigram = f"{tokens[i]} {tokens[i+1]} {tokens[i+2]}"
+            # Normalize and validate trigram
+            normalized = self.normalize_concept_text(trigram, language)
+            if normalized and self.is_valid_concept(normalized, language):
+                trigrams.append(normalized)
 
-        # Count frequencies
+        # Count trigram frequencies
         trigram_counts = Counter(trigrams)
 
-        # Skip if no repeated trigrams
-        if len(trigram_counts) == 0:
-            return {}
-
-        # Calculate scores based on frequency
-        max_count = max(trigram_counts.values()) if trigram_counts else 1
-
-        # Convert to string format and calculate scores
+        # Calculate scores based on frequency and length
         trigram_scores = {}
-        for (word1, word2, word3), count in trigram_counts.items():
-            # Include all trigrams
-            trigram_text = f"{word1} {word2} {word3}"
+        for trigram, count in trigram_counts.items():
+            words = trigram.split()
+            # Skip if fewer than 3 words (should not happen with trigrams)
+            if len(words) < 3:
+                continue
 
-            # Score is based on frequency and normalized by max count, with a boost for trigrams
-            score = (count / max_count) * 2.5
+            # Base score: frequency + length bonus (higher for trigrams)
+            score = count + 0.3 * len(trigram)
 
-            # Boost score for domain-specific terms
-            if language == "ru" and any(keyword in [word1, word2, word3] for keyword in
-                                      ["квантовый", "квантовая", "собственное", "эрмитов", "эрмитово",
-                                       "волновая", "функция", "состояние", "оператор", "гамильтониан"]):
-                score *= 1.5
+            # If any word in the trigram is a domain keyword, boost score even more
+            for domain, lang_keywords in self.domain_keywords.items():
+                domain_terms = lang_keywords.get(language, set())
+                if any(word in domain_terms for word in words):
+                    score += 1.5  # Higher domain term bonus for trigrams
+                    break
 
-            # Validate trigram and only add if valid
-            if self.is_valid_concept(trigram_text, language):
-                trigram_scores[trigram_text] = score
+            trigram_scores[trigram] = score
 
         return trigram_scores
 
-    def _is_theoretical_concept(
+    def _score_educational_occurrences(
         self,
-        concept: str,
-        context: str,
-        domain: str,
-        language: str
-    ) -> bool:
+        concept_map: Dict[str, Dict[str, Any]],
+        segments: List[Dict[str, Any]]
+    ):
         """
-        Determine if a concept is theoretical based on its context.
+        Score concepts based on occurrence context educational value.
+        Using unified approach instead of theoretical/practical division.
 
         Args:
-            concept: Concept text
-            context: Context text
-            domain: Content domain
-            language: Language code
-
-        Returns:
-            True if theoretical, False if practical
+            concept_map: Dictionary of concepts by ID
+            segments: List of transcript segments
         """
-        # Use language-specific patterns
-        lang = language if language in self.theoretical_regex else 'en'
-
-        # Check for theoretical and practical patterns in context
-        theoretical_match = bool(self.theoretical_regex[lang].search(context))
-        practical_match = bool(self.practical_regex[lang].search(context))
-
-        # If clear match in one category, use that
-        if theoretical_match and not practical_match:
-            return True
-        if practical_match and not theoretical_match:
-            return False
-
-        # Count words to estimate complexity - longer concepts tend to be more theoretical
-        word_count = len(concept.split())
-
-        # Domain-specific defaults
-        if domain == "physics":
-            # Physics concepts are more likely theoretical by default,
-            # especially for more complex terms with multiple words
-            if word_count >= 2:
-                # For quantum physics concepts, most multi-word terms are theoretical
-                return True
-
-            # Check if concept contains domain-specific terms
-            domain_keywords = self.domain_keywords.get(domain, {}).get(language, set())
-            for word in concept.lower().split():
-                if word in domain_keywords:
-                    return True
-
-        # For single words, depend on domain
-        return True  # Default to theoretical for academic content
-
-    def _score_educational_occurrences(self, concept_map: Dict[str, Dict[str, Any]], segments: List[Dict] = None):
-        """
-        Score concepts based on their occurrences to distinguish educational content from passing mentions.
-        Uses segment educational scores to improve accuracy.
-
-        Args:
-            concept_map: Dictionary mapping concept_id to concept data
-            segments: List of transcript segments with educational scores
-        """
-        # Create segment map for efficient lookup if segments provided
+        # Create segment map for quick lookup
         segment_map = {}
-        if segments:
-            segment_map = {seg["id"]: seg for seg in segments if "id" in seg}
+        for segment in segments:
+            segment_id = segment.get("id")
+            if segment_id:
+                segment_map[segment_id] = segment
 
+        # Process each concept
         for concept_id, concept in concept_map.items():
-            occurrences = concept.get("occurrences", [])
+            # Calculate educational value from occurrences
+            educational_sum = 0.0
+            occurrence_count = 0
 
-            if not occurrences:
-                continue
+            # Get language for educational markers
+            language = concept.get("language", "en")
+            edu_markers = self.educational_markers.get(language, self.educational_markers.get("en", []))
 
-            # Calculate educational metrics
-            frequency = len(occurrences)
-            unique_segments = len(set(occ.get("segment_id") for occ in occurrences))
-            total_duration = sum(occ.get("end_time", 0) - occ.get("start_time", 0) for occ in occurrences)
+            for occurrence in concept.get("occurrences", []):
+                # Get segment educational value if available
+                segment_id = occurrence.get("segment_id")
+                segment = segment_map.get(segment_id, {})
+                segment_edu_value = segment.get("educational_value", 0.0)
 
-            # Metrics for educational vs passing mention:
-            # 1. Frequency bonus - concepts mentioned multiple times
-            frequency_factor = min(frequency, 5) * 0.5
+                # Get context text
+                context_text = occurrence.get("context_text", "").lower()
 
-            # 2. Segment distribution - concepts in multiple segments
-            segment_factor = min(unique_segments, 3) * 0.7
+                # Base educational value
+                occurrence_edu_value = segment_edu_value
 
-            # 3. Duration bonus - longer total discussion time
-            duration_factor = min(total_duration / 10.0, 3.0)
+                # Check for educational markers in context
+                for marker in edu_markers:
+                    if marker.lower() in context_text:
+                        occurrence_edu_value += 1.0
+                        break
 
-            # 4. Use educational scores from segments if available
-            segments_educational_score = 0.0
-            if segment_map:
-                # Get educational scores from segments containing this concept
-                segment_scores = []
-                for occ in occurrences:
-                    segment_id = occ.get("segment_id")
-                    if segment_id in segment_map:
-                        segment_scores.append(segment_map[segment_id].get("educational_score", 0.0))
+                # Add to total
+                educational_sum += occurrence_edu_value
+                occurrence_count += 1
 
-                # Calculate average educational score across segments
-                if segment_scores:
-                    segments_educational_score = sum(segment_scores) / len(segment_scores)
+            # Calculate average educational value
+            avg_educational_value = 0.0
+            if occurrence_count > 0:
+                avg_educational_value = educational_sum / occurrence_count
 
-            # Calculate educational score
-            educational_score = frequency_factor + segment_factor + duration_factor + segments_educational_score
+                # Add bonus for concepts that appear in multiple occurrences
+                if occurrence_count > 1:
+                    avg_educational_value += min(occurrence_count * 0.3, 1.5)
 
-            # Add educational weight to concept score
-            concept["educational_weight"] = educational_score
-            concept["score"] += educational_score
-
-            # Mark concepts with high educational weight
-            concept["is_educational"] = educational_score > 2.5
-
-    def is_domain_keyword(self, word: str, domain: str, language: str = None) -> bool:
-        """
-        Check if a word is a domain-specific keyword.
-
-        Args:
-            word: Word to check
-            domain: Domain to check against
-            language: Language code
-
-        Returns:
-            True if domain keyword, False otherwise
-        """
-        lang = language or self.language
-        domain_keywords = self.domain_keywords.get(domain, {}).get(lang, set())
-
-        return word.lower() in domain_keywords
+            # Update concept's educational weight
+            concept["educational_weight"] = avg_educational_value
+            concept["is_educational"] = avg_educational_value > 2.5

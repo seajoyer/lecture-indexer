@@ -1,7 +1,7 @@
 """
 Enhanced data access layer for the Lecture Video Content Indexer.
 Provides optimized database operations with improved security, performance,
-and reliability.
+and reliability. Theory/practice categorization removed for improved design.
 """
 
 import os
@@ -123,7 +123,7 @@ class DataAccess:
     def _ensure_schema(self) -> None:
         """
         Ensure all necessary tables exist in the database with optimized schema.
-        Consolidates schema creation and adds indexes for performance.
+        Theory/practice categories removed for simplicity and clarity.
         """
         schema_script = """
         -- Enable foreign key constraints
@@ -141,8 +141,6 @@ class DataAccess:
             domain TEXT,
             domain_confidence REAL,
             theory_practice_ratio REAL,
-            theoretical_segments INTEGER,
-            practical_segments INTEGER,
             indexed_at TEXT,
             processing_status TEXT,
             processing_errors TEXT
@@ -164,16 +162,13 @@ class DataAccess:
             start_time REAL,
             end_time REAL,
             text TEXT,
-            context_type TEXT,
             language TEXT,
+            educational_value REAL,
             FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE
         );
 
         -- Create index on video_id in segments for faster queries
         CREATE INDEX IF NOT EXISTS idx_segments_video_id ON segments(video_id);
-
-        -- Create index on context_type for filtering
-        CREATE INDEX IF NOT EXISTS idx_segments_context_type ON segments(context_type);
 
         -- Create index on start_time for timeline ordering
         CREATE INDEX IF NOT EXISTS idx_segments_start_time ON segments(start_time);
@@ -181,27 +176,29 @@ class DataAccess:
         -- Add language index for multilingual search
         CREATE INDEX IF NOT EXISTS idx_segments_language ON segments(language);
 
+        -- Add index for educational value
+        CREATE INDEX IF NOT EXISTS idx_segments_educational_value ON segments(educational_value);
+
         -- Concepts table for storing concept information
         CREATE TABLE IF NOT EXISTS concepts (
             concept_id TEXT PRIMARY KEY,
             text TEXT NOT NULL,
-            normalized_text TEXT, -- Add normalized text field for better matching
+            normalized_text TEXT,
             domain TEXT,
-            concept_class TEXT,
-            language TEXT,  -- Store concept language
+            language TEXT,
             total_occurrences INTEGER DEFAULT 0,
             canonical_concept_id TEXT, -- Reference to canonical concept if this is a variant
-            educational_weight REAL DEFAULT 0, -- NEW: Measure of educational significance
-            is_educational INTEGER DEFAULT 0   -- NEW: Flag for educational vs passing mention
+            educational_weight REAL DEFAULT 0, -- Measure of educational significance
+            is_educational INTEGER DEFAULT 0   -- Flag for educational vs passing mention
         );
 
         -- Create indexes for concept filtering
         CREATE INDEX IF NOT EXISTS idx_concepts_domain ON concepts(domain);
-        CREATE INDEX IF NOT EXISTS idx_concepts_class ON concepts(concept_class);
         CREATE INDEX IF NOT EXISTS idx_concepts_text ON concepts(text);
         CREATE INDEX IF NOT EXISTS idx_concepts_language ON concepts(language);
         CREATE INDEX IF NOT EXISTS idx_concepts_normalized_text ON concepts(normalized_text);
         CREATE INDEX IF NOT EXISTS idx_concepts_educational ON concepts(is_educational);
+        CREATE INDEX IF NOT EXISTS idx_concepts_educational_weight ON concepts(educational_weight);
 
         -- Occurrences table for concept-segment associations
         CREATE TABLE IF NOT EXISTS occurrences (
@@ -211,7 +208,6 @@ class DataAccess:
             segment_id TEXT NOT NULL,
             start_time REAL,
             end_time REAL,
-            context_type TEXT,
             context_text TEXT,
             FOREIGN KEY (concept_id) REFERENCES concepts(concept_id) ON DELETE CASCADE,
             FOREIGN KEY (video_id) REFERENCES videos(video_id) ON DELETE CASCADE,
@@ -221,23 +217,10 @@ class DataAccess:
         -- Create indexes for occurrence queries
         CREATE INDEX IF NOT EXISTS idx_occurrences_concept_id ON occurrences(concept_id);
         CREATE INDEX IF NOT EXISTS idx_occurrences_video_id ON occurrences(video_id);
-        CREATE INDEX IF NOT EXISTS idx_occurrences_context_type ON occurrences(context_type);
 
         -- Add a composite index for efficient related concept lookup
         CREATE INDEX IF NOT EXISTS idx_occurrences_segment_concept ON occurrences(segment_id, concept_id);
         CREATE INDEX IF NOT EXISTS idx_occurrences_video_segment ON occurrences(video_id, segment_id);
-
-        -- Create FTS table for search with improved tokenization and ranking
-        CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
-            id,
-            text,
-            domain,
-            context_type,
-            item_type,
-            video_id,
-            language,  -- Add language column for multilingual search
-            tokenize='porter unicode61 remove_diacritics 2'
-        );
 
         -- Create playlists table
         CREATE TABLE IF NOT EXISTS playlists (
@@ -254,39 +237,93 @@ class DataAccess:
         CREATE TABLE IF NOT EXISTS language_resources (
             language_code TEXT PRIMARY KEY,
             stopwords TEXT,  -- JSON array of stopwords
-            theoretical_patterns TEXT,  -- JSON array of theoretical patterns
-            practical_patterns TEXT,  -- JSON array of practical patterns
+            educational_patterns TEXT,  -- JSON array of educational content patterns
             updated_at TEXT
         );
-
-        -- Check if educational metrics columns exist and add them if needed
-        PRAGMA table_info(concepts);
         """
 
         try:
             with self.get_connection() as conn:
                 conn.executescript(schema_script)
 
-                # Check if educational metrics columns exist, add if they don't
-                cursor = conn.cursor()
-                columns = cursor.execute("PRAGMA table_info(concepts)").fetchall()
-                column_names = [col[1] for col in columns]
+                # Check if old columns exist in segments
+                segments_columns = conn.execute("PRAGMA table_info(segments)").fetchall()
+                segment_column_names = [col[1] for col in segments_columns]
 
-                if "normalized_text" not in column_names:
-                    conn.execute("ALTER TABLE concepts ADD COLUMN normalized_text TEXT")
-                    logger.info("Added normalized_text column to concepts table")
+                if "context_type" in segment_column_names:
+                    # Add educational_value column if needed
+                    if "educational_value" not in segment_column_names:
+                        conn.execute("ALTER TABLE segments ADD COLUMN educational_value REAL DEFAULT 0")
 
-                if "canonical_concept_id" not in column_names:
-                    conn.execute("ALTER TABLE concepts ADD COLUMN canonical_concept_id TEXT")
-                    logger.info("Added canonical_concept_id column to concepts table")
+                    # Migrate context_type data to avoid data loss during transition
+                    conn.execute("""
+                    UPDATE segments
+                    SET educational_value = CASE
+                        WHEN context_type = 'theoretical' THEN 2.0
+                        WHEN context_type = 'practical' THEN 1.0
+                        ELSE 0.0
+                    END
+                    WHERE educational_value = 0
+                    """)
 
-                if "educational_weight" not in column_names:
-                    conn.execute("ALTER TABLE concepts ADD COLUMN educational_weight REAL DEFAULT 0")
-                    logger.info("Added educational_weight column to concepts table")
+                    logger.info("Migrated segment context_type data to educational_value")
 
-                if "is_educational" not in column_names:
-                    conn.execute("ALTER TABLE concepts ADD COLUMN is_educational INTEGER DEFAULT 0")
-                    logger.info("Added is_educational column to concepts table")
+                # Check if old columns exist in concepts
+                concepts_columns = conn.execute("PRAGMA table_info(concepts)").fetchall()
+                concept_column_names = [col[1] for col in concepts_columns]
+
+                if "concept_class" in concept_column_names and "educational_weight" in concept_column_names:
+                    # Migrate concept_class data to educational_weight
+                    conn.execute("""
+                    UPDATE concepts
+                    SET educational_weight = CASE
+                        WHEN concept_class = 'theoretical' THEN educational_weight + 1.0
+                        ELSE educational_weight
+                    END
+                    """)
+
+                    logger.info("Migrated concept_class data to educational_weight")
+
+                # RECREATE THE SEARCH INDEX TABLE - This is a critical fix
+                try:
+                    # First, check if search_index exists and drop it
+                    conn.execute("DROP TABLE IF EXISTS search_index")
+                    logger.info("Dropped existing search_index table")
+
+                    # Create the search index table with proper tokenization options
+                    conn.execute("""
+                    CREATE VIRTUAL TABLE search_index USING fts5(
+                        id,
+                        text,
+                        domain,
+                        item_type,
+                        video_id,
+                        language,
+                        educational_weight,
+                        tokenize='unicode61 remove_diacritics 1'
+                    )
+                    """)
+                    logger.info("Created new search_index table with improved tokenization")
+                except Exception as e:
+                    logger.error(f"Error recreating search_index: {e}")
+                    # Try with a simpler configuration if the first attempt fails
+                    try:
+                        conn.execute("DROP TABLE IF EXISTS search_index")
+                        conn.execute("""
+                        CREATE VIRTUAL TABLE search_index USING fts5(
+                            id,
+                            text,
+                            domain,
+                            item_type,
+                            video_id,
+                            language,
+                            educational_weight
+                        )
+                        """)
+                        logger.info("Created new search_index table with basic configuration")
+                    except Exception as e2:
+                        logger.error(f"Error creating basic search_index: {e2}")
+                        raise
 
                 conn.commit()
 
@@ -295,7 +332,6 @@ class DataAccess:
             logger.error(f"Error initializing database schema: {e}")
             raise
 
-    # The optimized list_concepts query
     def list_concepts(self, domain_filter=None, video_filter=None, playlist_filter=None, language=None):
         """
         List all concepts with improved query performance
@@ -368,7 +404,7 @@ class DataAccess:
             GROUP BY c.concept_id
             ORDER BY
                 c.domain,
-                c.concept_class,
+                educational_weight DESC,
                 occurrence_count DESC
             """
 
@@ -413,7 +449,7 @@ class DataAccess:
         resources = dict(results[0])
 
         # Convert JSON strings to Python objects
-        for field in ['stopwords', 'theoretical_patterns', 'practical_patterns']:
+        for field in ['stopwords', 'educational_patterns']:
             if resources.get(field):
                 try:
                     resources[field] = json.loads(resources[field])
@@ -440,8 +476,7 @@ class DataAccess:
             data = {
                 'language_code': language_code,
                 'stopwords': json.dumps(resources.get('stopwords', [])),
-                'theoretical_patterns': json.dumps(resources.get('theoretical_patterns', [])),
-                'practical_patterns': json.dumps(resources.get('practical_patterns', [])),
+                'educational_patterns': json.dumps(resources.get('educational_patterns', [])),
                 'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
             }
 
@@ -453,15 +488,13 @@ class DataAccess:
                 query = """
                 UPDATE language_resources SET
                     stopwords = ?,
-                    theoretical_patterns = ?,
-                    practical_patterns = ?,
+                    educational_patterns = ?,
                     updated_at = ?
                 WHERE language_code = ?
                 """
                 self.execute_update(query, (
                     data['stopwords'],
-                    data['theoretical_patterns'],
-                    data['practical_patterns'],
+                    data['educational_patterns'],
                     data['updated_at'],
                     language_code
                 ))
@@ -469,15 +502,13 @@ class DataAccess:
                 # Insert new
                 query = """
                 INSERT INTO language_resources (
-                    language_code, stopwords, theoretical_patterns,
-                    practical_patterns, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    language_code, stopwords, educational_patterns, updated_at
+                ) VALUES (?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     language_code,
                     data['stopwords'],
-                    data['theoretical_patterns'],
-                    data['practical_patterns'],
+                    data['educational_patterns'],
                     data['updated_at']
                 ))
 
@@ -804,8 +835,6 @@ class DataAccess:
                     domain = ?,
                     domain_confidence = ?,
                     theory_practice_ratio = ?,
-                    theoretical_segments = ?,
-                    practical_segments = ?,
                     indexed_at = ?,
                     processing_status = ?,
                     processing_errors = ?
@@ -821,8 +850,6 @@ class DataAccess:
                     video_data.get("domain", "unknown"),
                     video_data.get("domain_confidence", 0.0),
                     video_data.get("theory_practice_ratio", 0.5),
-                    video_data.get("theoretical_segments", 0),
-                    video_data.get("practical_segments", 0),
                     video_data.get("indexed_at", ""),
                     video_data.get("processing_status", "completed"),
                     video_data.get("processing_errors"),
@@ -834,9 +861,8 @@ class DataAccess:
                 INSERT INTO videos (
                     video_id, title, description, channel, publication_date,
                     duration_seconds, language, domain, domain_confidence,
-                    theory_practice_ratio, theoretical_segments, practical_segments,
-                    indexed_at, processing_status, processing_errors
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    theory_practice_ratio, indexed_at, processing_status, processing_errors
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     video_id,
@@ -849,8 +875,6 @@ class DataAccess:
                     video_data.get("domain", "unknown"),
                     video_data.get("domain_confidence", 0.0),
                     video_data.get("theory_practice_ratio", 0.5),
-                    video_data.get("theoretical_segments", 0),
-                    video_data.get("practical_segments", 0),
                     video_data.get("indexed_at", ""),
                     video_data.get("processing_status", "completed"),
                     video_data.get("processing_errors")
@@ -896,6 +920,7 @@ class DataAccess:
     def save_segments(self, video_id: str, segments: List[Dict[str, Any]]) -> bool:
         """
         Save video transcript segments with optimized batch processing.
+        Updated to use educational_value instead of content_type.
 
         Args:
             video_id: Video ID
@@ -921,7 +946,7 @@ class DataAccess:
             # Prepare batch insert
             query = """
             INSERT INTO segments (
-                segment_id, video_id, start_time, end_time, text, context_type, language
+                segment_id, video_id, start_time, end_time, text, language, educational_value
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """
 
@@ -935,6 +960,7 @@ class DataAccess:
                     continue
 
                 language = segment.get("language", "")
+                educational_value = segment.get("educational_value", 0.0)
 
                 params_list.append((
                     segment_id,
@@ -942,19 +968,19 @@ class DataAccess:
                     segment.get("start_time", 0.0),
                     segment.get("end_time", 0.0),
                     segment.get("text", ""),
-                    segment.get("content_type", "mixed"),
-                    language
+                    language,
+                    educational_value
                 ))
 
-                # Prepare search index parameters
+                # Prepare search index parameters (with educational_weight instead of context_type)
                 search_index_params.append((
                     segment_id,
                     segment.get("text", ""),
                     segment.get("domain", "unknown"),
-                    segment.get("content_type", "mixed"),
                     "segment",
                     video_id,
-                    language
+                    language,
+                    educational_value  # Use educational_value as educational_weight
                 ))
 
             # Execute batch insert for segments
@@ -964,7 +990,7 @@ class DataAccess:
             if search_index_params:
                 search_query = """
                 INSERT INTO search_index (
-                    id, text, domain, context_type, item_type, video_id, language
+                    id, text, domain, item_type, video_id, language, educational_weight
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_many(search_query, search_index_params)
@@ -982,16 +1008,17 @@ class DataAccess:
     def get_video_segments(
         self,
         video_id: str,
-        context_type: Optional[str] = None,
+        min_educational_value: Optional[float] = None,
         start_time: Optional[float] = None,
         end_time: Optional[float] = None
     ) -> List[Dict[str, Any]]:
         """
         Get segments for a video with optional filtering.
+        Updated to use educational_value instead of context_type.
 
         Args:
             video_id: Video ID
-            context_type: Optional filter for context type
+            min_educational_value: Optional minimum educational value
             start_time: Optional filter for minimum start time
             end_time: Optional filter for maximum end time
 
@@ -999,7 +1026,7 @@ class DataAccess:
             List of segment dictionaries
         """
         # Build cache key based on all parameters
-        cache_key = self._get_cache_key("segments", (video_id, context_type, start_time, end_time))
+        cache_key = self._get_cache_key("segments", (video_id, min_educational_value, start_time, end_time))
         cached_result = self._get_from_cache(cache_key)
         if cached_result is not None:
             return cached_result
@@ -1008,9 +1035,9 @@ class DataAccess:
         query = "SELECT * FROM segments WHERE video_id = ?"
         params = [video_id]
 
-        if context_type:
-            query += " AND context_type = ?"
-            params.append(context_type)
+        if min_educational_value is not None:
+            query += " AND educational_value >= ?"
+            params.append(min_educational_value)
 
         if start_time is not None:
             query += " AND end_time >= ?"
@@ -1061,6 +1088,22 @@ class DataAccess:
             normalized = re.sub(r'^то\s+', '', normalized)     # "то " at beginning (then/that)
             normalized = re.sub(r'^у\s+нас\s+', '', normalized)  # "у нас " (we have)
             normalized = re.sub(r'^просто\s+', '', normalized) # "просто " (just)
+            normalized = re.sub(r'^давайте\s+', '', normalized) # "давайте " (let's)
+            normalized = re.sub(r'^это\s+', '', normalized)    # "это " (this)
+            normalized = re.sub(r'^такое\s+', '', normalized)  # "такое " (such)
+            normalized = re.sub(r'^такой\s+', '', normalized)  # "такой " (such)
+            normalized = re.sub(r'^такая\s+', '', normalized)  # "такая " (such)
+            normalized = re.sub(r'^такие\s+', '', normalized)  # "такие " (such)
+
+            # Remove problematic phrases
+            normalized = normalized.replace("то обсуждений давайте", "")
+            normalized = normalized.replace("то состояние второго определённо такое", "")
+            normalized = normalized.replace("некоторого некоторой", "")
+            normalized = normalized.replace("состояние едини на2", "")
+            normalized = normalized.replace("сейчас скажу", "")
+            normalized = normalized.replace("потом обсужу", "")
+            normalized = normalized.replace("можно убедиться", "")
+            normalized = normalized.replace("второго определённо", "")
         else:
             # English filler phrases to remove
             normalized = re.sub(r'^the\s+', '', normalized)    # "the " at beginning
@@ -1152,6 +1195,7 @@ class DataAccess:
         """
         Save or update a concept with enhanced educational content tracking.
         Checks for similar existing concepts to avoid duplication.
+        Updated to remove concept_class and use educational metrics.
 
         Args:
             concept_data: Concept data dictionary
@@ -1176,12 +1220,6 @@ class DataAccess:
             # Create deterministic ID based on text, domain and language
             text_for_hash = concept_text.lower().strip()
             concept_id = hashlib.md5(f"{text_for_hash}:{domain}:{language}".encode()).hexdigest()
-
-        # Determine concept class
-        concept_class = concept_data.get("concept_class", "")
-        if not concept_class:
-            theoretical = concept_data.get("theoretical", False)
-            concept_class = "theoretical" if theoretical else "practical"
 
         # Normalize text for better matching
         normalized_text = self.normalize_concept_text(concept_text, language)
@@ -1225,7 +1263,6 @@ class DataAccess:
                     text = ?,
                     normalized_text = ?,
                     domain = ?,
-                    concept_class = ?,
                     language = ?,
                     total_occurrences = ?,
                     canonical_concept_id = ?,
@@ -1237,7 +1274,6 @@ class DataAccess:
                     concept_text,
                     normalized_text,
                     domain,
-                    concept_class,
                     language,
                     total_occurrences,
                     canonical_concept_id,
@@ -1250,16 +1286,15 @@ class DataAccess:
                 # Insert new concept
                 query = """
                 INSERT INTO concepts (
-                    concept_id, text, normalized_text, domain, concept_class, language,
+                    concept_id, text, normalized_text, domain, language,
                     total_occurrences, canonical_concept_id, educational_weight, is_educational
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 self.execute_update(query, (
                     concept_id,
                     concept_text,
                     normalized_text,
                     domain,
-                    concept_class,
                     language,
                     total_occurrences,
                     canonical_concept_id,
@@ -1274,18 +1309,16 @@ class DataAccess:
                 (concept_id,)
             )
 
+            # Use the video_id from concept_data instead of None for proper indexing
             self.execute_update(
                 """
-                INSERT INTO search_index (id, text, domain, context_type, item_type, video_id, language)
+                INSERT INTO search_index (id, text, domain, item_type, video_id, language, educational_weight)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (concept_id, concept_text, domain, concept_class, "concept", None, language)
+                (concept_id, concept_text, domain, "concept", concept_data.get("video_id"), language, educational_weight)
             )
 
-            # STEP 4: Store educational content metrics
-            # This replaces the previous definition metadata storage
-
-            # STEP 5: Clear cache for this concept
+            # STEP 4: Clear cache for this concept
             self.clear_cache(f"concept_{concept_id}")
 
             logger.info(f"Saved concept {concept_id}: {concept_text}")
@@ -1336,7 +1369,6 @@ class DataAccess:
                         "segment_id": segment["segment_id"],
                         "start_time": segment.get("start_time", 0),
                         "end_time": segment.get("end_time", 0),
-                        "context_type": segment.get("context_type", "mixed"),
                         "context_text": segment.get("text", "")
                     })
         else:
@@ -1362,7 +1394,6 @@ class DataAccess:
                             "segment_id": segment["segment_id"],
                             "start_time": segment.get("start_time", 0),
                             "end_time": segment.get("end_time", 0),
-                            "context_type": segment.get("context_type", "mixed"),
                             "context_text": segment.get("text", "")
                         })
 
@@ -1431,8 +1462,8 @@ class DataAccess:
             query = """
             INSERT INTO occurrences (
                 occurrence_id, concept_id, video_id, segment_id,
-                start_time, end_time, context_type, context_text
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                start_time, end_time, context_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """
 
             params_list = []
@@ -1451,7 +1482,6 @@ class DataAccess:
                     segment_id,
                     occurrence.get("start_time", 0.0),
                     occurrence.get("end_time", 0.0),
-                    occurrence.get("context_type", "mixed"),
                     occurrence.get("context_text", "")
                 ))
 
@@ -1481,21 +1511,22 @@ class DataAccess:
     def get_concepts_for_video(
         self,
         video_id: str,
-        context_type: Optional[str] = None
+        min_educational_value: Optional[float] = None
     ) -> List[Dict[str, Any]]:
         """
         Get concepts extracted from a video with caching.
         Only returns canonical concepts (not duplicates/variants).
+        Updated to use educational_value instead of context_type.
 
         Args:
             video_id: Video ID
-            context_type: Optional context type filter
+            min_educational_value: Optional minimum educational value
 
         Returns:
             List of concept dictionaries with occurrence information
         """
         # Check cache first
-        cache_key = self._get_cache_key("video_concepts", (video_id, context_type))
+        cache_key = self._get_cache_key("video_concepts", (video_id, min_educational_value))
         cached_result = self._get_from_cache(cache_key)
         if cached_result is not None:
             return cached_result
@@ -1514,7 +1545,7 @@ class DataAccess:
             logger.warning(f"No concept occurrences found for video {video_id}")
             return []
 
-        # Query for concepts in this video
+        # Query for concepts in this video with educational filtering
         query = """
         SELECT c.*, COUNT(o.occurrence_id) as occurrence_count,
                MAX(o.start_time) as last_occurrence_time
@@ -1525,11 +1556,11 @@ class DataAccess:
         """
         params = [video_id]
 
-        if context_type:
-            query += " AND o.context_type = ?"
-            params.append(context_type)
+        if min_educational_value is not None:
+            query += " AND c.educational_weight >= ?"
+            params.append(min_educational_value)
 
-        query += " GROUP BY c.concept_id ORDER BY occurrence_count DESC, last_occurrence_time"
+        query += " GROUP BY c.concept_id ORDER BY c.educational_weight DESC, occurrence_count DESC"
 
         results = self.execute_query(query, tuple(params))
 
@@ -1541,21 +1572,22 @@ class DataAccess:
     def get_video_concepts(
         self,
         video_id: str,
-        context_type: Optional[str] = None
+        min_educational_value: Optional[float] = None
     ) -> Optional[Dict[str, Any]]:
         """
-        Get concepts extracted from a video with separate theoretical and practical lists.
+        Get concepts extracted from a video.
+        Updated to use educational_value instead of theoretical/practical categories.
 
         Args:
             video_id: YouTube video ID
-            context_type: Optional context type filter
+            min_educational_value: Optional minimum educational value filter
 
         Returns:
             Dictionary with video concepts or None if not found
         """
         try:
             # Check cache first
-            cache_key = self._get_cache_key("video_concepts", (video_id, context_type))
+            cache_key = self._get_cache_key("video_concept_data", (video_id, min_educational_value))
             cached_result = self._get_from_cache(cache_key)
             if cached_result is not None:
                 return cached_result
@@ -1565,16 +1597,16 @@ class DataAccess:
             count_result = self.execute_query(count_query)
             if count_result and count_result[0]["count"] == 0:
                 logger.warning("No concepts found in database")
-                return []
+                return {}
 
             # Check if there are any occurrences for this video
             occurrence_count_query = "SELECT COUNT(*) as count FROM occurrences WHERE video_id = ?"
             occurrence_count = self.execute_query(occurrence_count_query, (video_id,))
             if occurrence_count and occurrence_count[0]["count"] == 0:
                 logger.warning(f"No concept occurrences found for video {video_id}")
-                return []
+                return {}
 
-            # Query for concepts in this video
+            # Query for concepts in this video with educational filtering
             query = """
             SELECT c.*, COUNT(o.occurrence_id) as occurrence_count,
                 MAX(o.start_time) as last_occurrence_time
@@ -1585,25 +1617,25 @@ class DataAccess:
             """
             params = [video_id]
 
-            if context_type:
-                query += " AND c.concept_class = ?"
-                params.append(context_type)
+            if min_educational_value is not None:
+                query += " AND c.educational_weight >= ?"
+                params.append(min_educational_value)
 
-            query += " GROUP BY c.concept_id ORDER BY occurrence_count DESC, last_occurrence_time"
+            query += " GROUP BY c.concept_id ORDER BY c.educational_weight DESC, occurrence_count DESC"
 
             all_concepts = self.execute_query(query, tuple(params))
 
-            # Separate into theoretical and practical concepts
-            theoretical_concepts = [c for c in all_concepts if c.get("concept_class") == "theoretical"]
-            practical_concepts = [c for c in all_concepts if c.get("concept_class") == "practical"]
+            # Separate concepts based on educational value
+            educational_concepts = [c for c in all_concepts if c.get("is_educational") == 1]
+            passing_concepts = [c for c in all_concepts if c.get("is_educational") == 0]
 
             video = self.get_video(video_id)
 
             result = {
                 "video": video,
                 "concepts": all_concepts,
-                "theoretical_concepts": theoretical_concepts,
-                "practical_concepts": practical_concepts,
+                "educational_concepts": educational_concepts,
+                "passing_concepts": passing_concepts,
                 "theory_practice_ratio": video.get("theory_practice_ratio", 0.5)
             }
 
@@ -1751,8 +1783,8 @@ class DataAccess:
 
     def search(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Perform enhanced search using SQLite FTS with multilingual support.
-        Improved handling of canonical concept relationships and text-based deduplication.
+        Perform enhanced search using SQLite FTS.
+        Updated to use educational_weight instead of context_type.
 
         Args:
             query: Query parameters dictionary
@@ -1769,6 +1801,7 @@ class DataAccess:
             theory_practice_ratio = query.get("theory_practice_ratio")
             domain = query.get("domain")
             language = query.get("language")  # Extract language filter
+            educational_only = query.get("educational_only", False)  # Add educational filter
             pagination = query.get("pagination", {})
 
             offset = pagination.get("offset", 0)
@@ -1782,7 +1815,7 @@ class DataAccess:
                 }
 
             # Generate cache key
-            cache_key = f"search_{query_text}_{domain}_{theory_practice_ratio}_{offset}_{limit}_{language}"
+            cache_key = f"search_{query_text}_{domain}_{theory_practice_ratio}_{offset}_{limit}_{language}_{educational_only}"
             if filters:
                 cache_key += f"_filters:{hash(str(filters))}"
 
@@ -1791,14 +1824,107 @@ class DataAccess:
                 logger.info(f"Using cached search results for query: {query_text}")
                 return cached_result
 
-            # Build enhanced search query for non-exact matching
-            search_query = self.build_enhanced_search_query(query_text, domain, language)
+            # First check if the search index has any entries
+            check_query = "SELECT COUNT(*) as count FROM search_index"
+            check_result = self.execute_query(check_query)
+            has_search_index = check_result and check_result[0]["count"] > 0
 
-            # Check first if there are any items in the search index
+            if not has_search_index:
+                # Search index is empty - let's reindex everything to rebuild it
+                logger.warning("Search index is empty. Rebuilding index from existing data...")
+
+                # Get all videos
+                videos_query = "SELECT video_id FROM videos WHERE processing_status = 'completed'"
+                videos = self.execute_query(videos_query)
+
+                if videos:
+                    # Rebuild index for each video
+                    for video in videos:
+                        video_id = video["video_id"]
+
+                        # Get all concepts for this video
+                        concepts_query = """
+                        SELECT DISTINCT c.*
+                        FROM concepts c
+                        JOIN occurrences o ON c.concept_id = o.concept_id
+                        WHERE o.video_id = ?
+                        """
+                        concepts = self.execute_query(concepts_query, (video_id,))
+
+                        # Reindex each concept
+                        for concept in concepts:
+                            concept_id = concept["concept_id"]
+
+                            # Add to search index
+                            index_query = """
+                            INSERT INTO search_index (id, text, domain, item_type, video_id, language, educational_weight)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """
+                            self.execute_update(
+                                index_query,
+                                (
+                                    concept_id,
+                                    concept["text"],
+                                    concept["domain"],
+                                    "concept",
+                                    video_id,
+                                    concept["language"],
+                                    concept["educational_weight"]
+                                )
+                            )
+
+                    # Check if segments table has domain column
+                    try:
+                        segments_columns = self.execute_query("PRAGMA table_info(segments)")
+                        segment_column_names = [col["name"] for col in segments_columns]
+                        has_domain_column = "domain" in segment_column_names
+                    except:
+                        has_domain_column = False
+
+                    # Also reindex segments
+                    if has_domain_column:
+                        segments_query = "SELECT segment_id, video_id, text, domain, language, educational_value FROM segments"
+                    else:
+                        # Use video's domain if segment doesn't have it
+                        segments_query = """
+                        SELECT s.segment_id, s.video_id, s.text, v.domain, s.language, s.educational_value
+                        FROM segments s
+                        JOIN videos v ON s.video_id = v.video_id
+                        """
+
+                    try:
+                        segments = self.execute_query(segments_query)
+
+                        for segment in segments:
+                            # Add to search index
+                            index_query = """
+                            INSERT INTO search_index (id, text, domain, item_type, video_id, language, educational_weight)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """
+                            self.execute_update(
+                                index_query,
+                                (
+                                    segment["segment_id"],
+                                    segment["text"],
+                                    segment.get("domain", "unknown"),
+                                    "segment",
+                                    segment["video_id"],
+                                    segment.get("language", "en"),
+                                    segment.get("educational_value", 0)
+                                )
+                            )
+
+                        logger.info(f"Rebuilt search index with {len(concepts)} concepts and {len(segments)} segments")
+                    except Exception as e:
+                        logger.error(f"Error indexing segments: {e}")
+                else:
+                    logger.warning("No videos found to rebuild search index")
+
+            # Check if we have any items in the search index after rebuilding
             count_query = "SELECT COUNT(*) as count FROM search_index"
             count_result = self.execute_query(count_query)
             if count_result and count_result[0]["count"] == 0:
-                logger.warning("No items in search index")
+                logger.warning("Search index still empty after rebuild attempt")
                 return {
                     "results": [],
                     "totalResults": 0,
@@ -1807,284 +1933,193 @@ class DataAccess:
                     "message": "No content has been indexed yet"
                 }
 
-            # Build SQL query with improved deduplication
-            sql = """
-            WITH matched_items AS (
-                SELECT si.id, si.text, si.domain, si.context_type, si.item_type, si.video_id,
-                    si.language, rank
-                FROM search_index si
-                WHERE search_index MATCH ?
-            ),
-            -- Enhanced canonical concept handling with text-based deduplication
-            concept_relationships AS (
-                -- Get canonical relationships for matched concepts
-                SELECT
-                    c.concept_id,
-                    c.text,
-                    LOWER(c.text) as text_lower, -- Add normalized text for grouping
-                    c.normalized_text,
-                    c.domain,
-                    c.concept_class,
-                    c.language,
-                    c.canonical_concept_id,
-                    CASE WHEN c.canonical_concept_id IS NULL OR c.canonical_concept_id = ''
-                        THEN c.concept_id ELSE c.canonical_concept_id END as effective_canonical_id
-                FROM concepts c
-                WHERE c.concept_id IN (SELECT id FROM matched_items WHERE item_type = 'concept')
-            ),
-            canonical_concepts AS (
-                -- Get canonical concepts data
-                SELECT
-                    c.concept_id,
-                    c.text,
-                    LOWER(c.text) as text_lower, -- Add normalized text for grouping
-                    c.normalized_text,
-                    c.domain,
-                    c.concept_class,
-                    c.language
-                FROM concepts c
-                WHERE c.concept_id IN (
-                    SELECT DISTINCT effective_canonical_id FROM concept_relationships
-                )
-                AND (c.canonical_concept_id IS NULL OR c.canonical_concept_id = '')
-            ),
-            -- Group results by text and language to prevent duplicates
-            text_grouped_results AS (
-                SELECT
-                    mi.id,
-                    mi.text,
-                    LOWER(mi.text) as text_lower,
-                    mi.item_type,
-                    mi.domain,
-                    mi.context_type,
-                    mi.video_id,
-                    mi.language,
-                    mi.rank,
-                    -- For concepts, use canonical concept ID if available
-                    CASE WHEN mi.item_type = 'concept' THEN
-                        CASE WHEN cr.canonical_concept_id IS NOT NULL
-                            THEN cr.canonical_concept_id ELSE cr.concept_id END
-                        ELSE mi.id
-                    END as effective_id,
-                    -- Create a text-language group key for deduplication
-                    CASE WHEN mi.item_type = 'concept' THEN
-                        LOWER(
-                            CASE WHEN cr.canonical_concept_id IS NOT NULL
-                            THEN cc.text ELSE mi.text END
-                        ) || '_' || COALESCE(mi.language, '')
-                        ELSE mi.id -- For non-concepts, use ID as group key
-                    END as text_lang_key
-                FROM matched_items mi
-                LEFT JOIN concept_relationships cr ON mi.item_type = 'concept' AND mi.id = cr.concept_id
-                LEFT JOIN canonical_concepts cc ON cr.effective_canonical_id = cc.concept_id
-                WHERE (mi.item_type != 'concept' OR
-                    (mi.item_type = 'concept' AND
-                    (cr.concept_id IS NOT NULL OR
-                        mi.id NOT IN (SELECT concept_id FROM concept_relationships))))
-            ),
-            -- Get best result for each text-language group
-            deduplicated_results AS (
-                SELECT
-                    text_lang_key,
-                    MIN(rank) as min_rank,
-                    -- Prefer canonical concepts over variants
-                    MAX(CASE WHEN item_type = 'concept' AND effective_id = id THEN 1 ELSE 0 END) as is_canonical
-                FROM text_grouped_results
-                GROUP BY text_lang_key
-            )
+            # Build enhanced search query for non-exact matching
+            search_query = self.build_enhanced_search_query(query_text, domain, language)
+            logger.info(f"Using search query: {search_query}")
 
-            -- Main query with improved deduplication
-            SELECT
-                tgr.id,
-                tgr.text,
-                tgr.domain,
-                tgr.context_type,
-                tgr.item_type,
-                tgr.video_id,
-                tgr.language,
-                v.title as video_title,
-                CASE WHEN tgr.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
-                CASE WHEN tgr.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
-                CASE WHEN tgr.item_type = 'segment' THEN s.text ELSE tgr.text END as context_text,
-                tgr.effective_id,
-                CASE WHEN tgr.effective_id != tgr.id THEN tgr.effective_id ELSE NULL END as canonical_concept_id,
-                tgr.rank
-            FROM text_grouped_results tgr
-            JOIN deduplicated_results dr ON
-                tgr.text_lang_key = dr.text_lang_key AND
-                (tgr.rank = dr.min_rank OR (dr.is_canonical = 1 AND tgr.effective_id = tgr.id))
-            LEFT JOIN videos v ON tgr.video_id = v.video_id
-            LEFT JOIN segments s ON tgr.item_type = 'segment' AND tgr.id = s.segment_id
+            # Simplify the search query to debug issues
+            simple_query = f'"{query_text.lower()}"'
+
+            # Build a basic query to see if anything matches
+            debug_sql = """
+            SELECT COUNT(*) as count FROM search_index
+            WHERE search_index MATCH ?
             """
+            debug_result = self.execute_query(debug_sql, (simple_query,))
+            debug_count = debug_result[0]["count"] if debug_result else 0
+            logger.info(f"Simple query '{simple_query}' matches {debug_count} items")
 
-            params = [search_query]
+            # If simple query doesn't match anything, try an even simpler approach
+            if debug_count == 0:
+                # Use the raw text as is without any preprocessing
+                raw_query = query_text.lower()
+                debug_sql = "SELECT COUNT(*) as count FROM search_index WHERE lower(text) LIKE ?"
+                debug_result = self.execute_query(debug_sql, (f"%{raw_query}%",))
+                debug_count = debug_result[0]["count"] if debug_result else 0
+                logger.info(f"Raw LIKE query '%{raw_query}%' matches {debug_count} items")
+
+                # If we found matches with the raw LIKE query, use that approach
+                if debug_count > 0:
+                    logger.info(f"Using raw LIKE query instead of FTS for better results")
+                    search_query = raw_query
+                    use_fts = False
+                else:
+                    # Try with just the first word of the query
+                    if " " in query_text:
+                        first_word = query_text.split()[0].lower()
+                        debug_sql = "SELECT COUNT(*) as count FROM search_index WHERE lower(text) LIKE ?"
+                        debug_result = self.execute_query(debug_sql, (f"%{first_word}%",))
+                        debug_count = debug_result[0]["count"] if debug_result else 0
+                        logger.info(f"First word LIKE query '%{first_word}%' matches {debug_count} items")
+
+                        if debug_count > 0:
+                            search_query = first_word
+                            use_fts = False
+                        else:
+                            use_fts = True
+                    else:
+                        use_fts = True
+            else:
+                use_fts = True
+
+            # Use appropriate SQL based on whether we're using FTS or regular LIKE
+            if use_fts:
+                # Use FTS query
+                sql = """
+                SELECT
+                    si.id, si.text, si.domain, si.item_type, si.video_id,
+                    si.language, si.educational_weight,
+                    v.title as video_title,
+                    CASE WHEN si.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
+                    CASE WHEN si.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
+                    CASE WHEN si.item_type = 'segment' THEN s.text ELSE si.text END as context_text,
+                    CASE WHEN si.item_type = 'concept' AND c.canonical_concept_id IS NOT NULL
+                        THEN c.canonical_concept_id ELSE NULL END as canonical_concept_id
+                FROM search_index si
+                LEFT JOIN videos v ON si.video_id = v.video_id
+                LEFT JOIN segments s ON si.item_type = 'segment' AND si.id = s.segment_id
+                LEFT JOIN concepts c ON si.item_type = 'concept' AND si.id = c.concept_id
+                WHERE search_index MATCH ?
+                """
+                params = [search_query]
+            else:
+                # Use LIKE query instead of FTS
+                sql = """
+                SELECT
+                    si.id, si.text, si.domain, si.item_type, si.video_id,
+                    si.language, si.educational_weight,
+                    v.title as video_title,
+                    CASE WHEN si.item_type = 'segment' THEN s.start_time ELSE NULL END as start_time,
+                    CASE WHEN si.item_type = 'segment' THEN s.end_time ELSE NULL END as end_time,
+                    CASE WHEN si.item_type = 'segment' THEN s.text ELSE si.text END as context_text,
+                    CASE WHEN si.item_type = 'concept' AND c.canonical_concept_id IS NOT NULL
+                        THEN c.canonical_concept_id ELSE NULL END as canonical_concept_id
+                FROM search_index si
+                LEFT JOIN videos v ON si.video_id = v.video_id
+                LEFT JOIN segments s ON si.item_type = 'segment' AND si.id = s.segment_id
+                LEFT JOIN concepts c ON si.item_type = 'concept' AND si.id = c.concept_id
+                WHERE lower(si.text) LIKE ?
+                """
+                params = [f"%{search_query}%"]
 
             # Apply filters
             where_clauses = []
 
             if domain:
-                where_clauses.append("tgr.domain = ?")
+                where_clauses.append("si.domain = ?")
                 params.append(domain)
 
             if language:
-                where_clauses.append("(tgr.language = ? OR tgr.language IS NULL)")
+                where_clauses.append("(si.language = ? OR si.language IS NULL)")
                 params.append(language)
 
             if "video_id" in filters:
-                where_clauses.append("tgr.video_id = ?")
+                where_clauses.append("si.video_id = ?")
                 params.append(filters["video_id"])
 
             if "video_ids" in filters and filters["video_ids"]:
                 placeholders = ", ".join(["?"] * len(filters["video_ids"]))
-                where_clauses.append(f"tgr.video_id IN ({placeholders})")
+                where_clauses.append(f"si.video_id IN ({placeholders})")
                 params.extend(filters["video_ids"])
 
+            # Apply educational content filter if requested
+            if educational_only:
+                where_clauses.append("si.educational_weight >= 2.5")
+
             if where_clauses:
-                sql += " WHERE " + " AND ".join(where_clauses)
+                if "WHERE" in sql:
+                    sql = sql.replace("WHERE", "WHERE " + " AND ".join(where_clauses) + " AND ")
+                else:
+                    sql += " WHERE " + " AND ".join(where_clauses)
 
-            # Apply theory/practice ratio filter
-            context_type_order = ""
+            # Apply theory/practice ratio filter (using video-level ratio)
             if theory_practice_ratio is not None:
-                if theory_practice_ratio > 0.7:
-                    context_type_order = " ORDER BY CASE WHEN tgr.context_type = 'theoretical' THEN 1 ELSE 2 END, tgr.rank"
-                elif theory_practice_ratio < 0.3:
-                    context_type_order = " ORDER BY CASE WHEN tgr.context_type = 'practical' THEN 1 ELSE 2 END, tgr.rank"
+                # Add theory_practice_ratio filter
+                if "WHERE" in sql:
+                    if theory_practice_ratio > 0.7:
+                        sql += " AND v.theory_practice_ratio >= 0.7"
+                    elif theory_practice_ratio < 0.3:
+                        sql += " AND v.theory_practice_ratio <= 0.3"
+                    else:
+                        sql += " AND v.theory_practice_ratio BETWEEN 0.3 AND 0.7"
+                else:
+                    if theory_practice_ratio > 0.7:
+                        sql += " WHERE v.theory_practice_ratio >= 0.7"
+                    elif theory_practice_ratio < 0.3:
+                        sql += " WHERE v.theory_practice_ratio <= 0.3"
+                    else:
+                        sql += " WHERE v.theory_practice_ratio BETWEEN 0.3 AND 0.7"
 
-            # Apply ordering - use FTS5 rank for relevance
-            if context_type_order:
-                sql += context_type_order
-            else:
-                sql += " ORDER BY tgr.rank"
+            # Apply ordering by educational weight
+            sql += " ORDER BY si.educational_weight DESC, si.rowid"
 
             # Apply pagination
             sql += f" LIMIT {limit} OFFSET {offset}"
 
             # Execute search query
             results = self.execute_query(sql, tuple(params))
+            logger.info(f"Search found {len(results)} results")
 
-            # Count total results more efficiently
-            count_sql = """
-            WITH matched_items AS (
-                SELECT si.id, si.item_type, si.text, si.language
-                FROM search_index si
-                WHERE search_index MATCH ?
-            ),
-            -- Text-based deduplication for counting
-            text_based_dedup AS (
-                SELECT
-                    LOWER(text) || '_' || COALESCE(language, '') as text_lang_key
-                FROM matched_items
-                WHERE item_type = 'concept'
-
-                UNION
-
-                SELECT id as text_lang_key
-                FROM matched_items
-                WHERE item_type != 'concept'
-            )
-            SELECT COUNT(DISTINCT text_lang_key) as count
-            FROM text_based_dedup
-            """
-
-            count_params = [search_query]
-
-            if domain:
-                count_sql = """
-                WITH matched_items AS (
-                    SELECT si.id, si.item_type, si.text, si.language, si.domain
-                    FROM search_index si
-                    WHERE search_index MATCH ? AND si.domain = ?
-                ),
-                -- Text-based deduplication for counting
-                text_based_dedup AS (
-                    SELECT
-                        LOWER(text) || '_' || COALESCE(language, '') as text_lang_key
-                    FROM matched_items
-                    WHERE item_type = 'concept'
-
-                    UNION
-
-                    SELECT id as text_lang_key
-                    FROM matched_items
-                    WHERE item_type != 'concept'
-                )
-                SELECT COUNT(DISTINCT text_lang_key) as count
-                FROM text_based_dedup
-                """
-                count_params.append(domain)
-
-            if language:
-                if domain:
-                    count_sql = count_sql.replace("WHERE search_index MATCH ? AND si.domain = ?",
-                                                "WHERE search_index MATCH ? AND si.domain = ? AND (si.language = ? OR si.language IS NULL)")
+            # Get total count (simplified for better performance)
+            total_count = len(results)
+            if offset == 0 and len(results) < limit:
+                # If we got fewer results than the limit on the first page,
+                # we know the total count is just the number of results
+                pass
+            else:
+                # Otherwise, we need a separate count query
+                if use_fts:
+                    count_sql = "SELECT COUNT(*) as count FROM search_index WHERE search_index MATCH ?"
+                    count_params = [search_query]
                 else:
-                    count_sql = count_sql.replace("WHERE search_index MATCH ?",
-                                                "WHERE search_index MATCH ? AND (si.language = ? OR si.language IS NULL)")
-                count_params.append(language)
+                    count_sql = "SELECT COUNT(*) as count FROM search_index WHERE lower(text) LIKE ?"
+                    count_params = [f"%{search_query}%"]
 
-            if "video_id" in filters:
-                if "WHERE" in count_sql:
-                    if "AND" in count_sql:
-                        count_sql = count_sql.replace("WHERE search_index MATCH ?", f"WHERE search_index MATCH ? AND si.video_id = ?")
-                    else:
-                        count_sql = count_sql.replace("WHERE search_index MATCH ?", f"WHERE search_index MATCH ? AND si.video_id = ?")
-                else:
-                    count_sql = count_sql.replace("FROM search_index si", f"FROM search_index si WHERE si.video_id = ?")
-                count_params.append(filters["video_id"])
-
-            count_result = self.execute_query(count_sql, tuple(count_params))
-            total_count = count_result[0]["count"] if count_result else 0
-
-            # Final post-processing deduplication
-            # Create a dictionary to track which concepts we've already seen by text+language
-            seen_concepts = {}
-            filtered_results = []
-
-            for result in results:
-                if result["item_type"] == "concept":
-                    # Create a unique key for this concept based on text and language
-                    key = f"{result['text'].lower()}_{result.get('language', '')}"
-
-                    # If we've already seen this concept, skip it
-                    if key in seen_concepts:
-                        continue
-
-                    # Otherwise, mark it as seen and include it
-                    seen_concepts[key] = True
-
-                # Include this result
-                filtered_results.append(result)
-
-            # Count theoretical and practical results
-            theoretical_count = 0
-            practical_count = 0
-
-            for r in filtered_results:
-                if r["context_type"] == "theoretical":
-                    theoretical_count += 1
-                elif r["context_type"] == "practical":
-                    practical_count += 1
+                count_result = self.execute_query(count_sql, tuple(count_params))
+                total_count = count_result[0]["count"] if count_result else 0
 
             # Format the results
             formatted_results = []
-            for r in filtered_results:
+            for r in results:
                 result = {
                     "result_type": r["item_type"],
                     "text": r["text"],
                     "domain": r["domain"],
-                    "context_type": r["context_type"],
                     "video_id": r["video_id"],
                     "video_title": r["video_title"],
                     "start_time": r["start_time"],
                     "end_time": r["end_time"],
                     "context_text": r["context_text"],
-                    "language": r["language"]  # Include language in result
+                    "language": r["language"],
+                    "educational_weight": r["educational_weight"]
                 }
 
                 # Add additional data for concepts
                 if r["item_type"] == "concept":
                     result["concept_id"] = r["id"]
-                    result["concept_class"] = r["context_type"]  # Use context_type as concept_class
+
+                    # Calculate is_educational from educational_weight
+                    result["is_educational"] = r["educational_weight"] >= 2.5
 
                     # Add canonical relationship info if available
                     if r.get("canonical_concept_id"):
@@ -2093,13 +2128,22 @@ class DataAccess:
 
                 formatted_results.append(result)
 
+            # Count educational vs passing concepts
+            educational_count = sum(1 for r in formatted_results
+                                if r.get("result_type") == "concept" and
+                                    r.get("educational_weight", 0) >= 2.5)
+
+            passing_count = sum(1 for r in formatted_results
+                            if r.get("result_type") == "concept" and
+                                r.get("educational_weight", 0) < 2.5)
+
             execution_time_ms = int((time.time() - start_time) * 1000)
 
             search_result = {
                 "results": formatted_results,
                 "totalResults": total_count,
-                "theoreticalResults": theoretical_count,
-                "practicalResults": practical_count,
+                "educationalResults": educational_count,
+                "passingResults": passing_count,
                 "executionTimeMs": execution_time_ms
             }
 
@@ -2110,6 +2154,8 @@ class DataAccess:
 
         except Exception as e:
             logger.error(f"Error executing search: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             execution_time_ms = int((time.time() - start_time) * 1000)
 
             return {
@@ -2122,6 +2168,7 @@ class DataAccess:
     def index_content(self, processed_result: Dict[str, Any]) -> bool:
         """
         Index processed content for search with improved error handling and batching.
+        Modified to use educational_weight instead of context_type.
 
         Args:
             processed_result: Processing result dictionary
@@ -2139,6 +2186,13 @@ class DataAccess:
             metadata = processed_result.get("metadata", {})
             transcript = processed_result.get("transcript", {})
             domain_features = processed_result.get("domain_features", {})
+
+            # Extract educational concepts
+            concepts = domain_features.get("concepts", [])
+
+            # Extract theory_practice_ratio
+            theory_practice_results = processed_result.get("theory_practice_results", {})
+            theory_practice_ratio = theory_practice_results.get("theory_practice_ratio", 0.5)
 
             # Clear existing content for this video to avoid duplicates
             self.execute_update("DELETE FROM segments WHERE video_id = ?", (video_id,))
@@ -2159,9 +2213,7 @@ class DataAccess:
                 "language": metadata.get("language", ""),
                 "domain": metadata.get("domain", "unknown"),
                 "domain_confidence": metadata.get("domain_confidence", 0.0),
-                "theory_practice_ratio": processed_result.get("theory_practice_results", {}).get("theory_practice_ratio", 0.5),
-                "theoretical_segments": processed_result.get("theory_practice_results", {}).get("theoretical_segments", 0),
-                "practical_segments": processed_result.get("theory_practice_results", {}).get("practical_segments", 0),
+                "theory_practice_ratio": theory_practice_ratio,
                 "processing_status": "completed",
                 "indexed_at": time.strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -2178,28 +2230,46 @@ class DataAccess:
                 logger.error(f"Failed to save segments for {video_id}")
                 return False
 
-            # Save concepts in batches
-            key_concepts = domain_features.get("key_concepts", [])
-
-            if not key_concepts:
+            # Save concepts
+            if not concepts:
                 logger.warning(f"No concepts found for video {video_id}")
-                return True
+                return True  # Still return success as the segments were saved
 
-            # Process concepts in batches of 20 for better performance
+            # Process concepts in batches for better performance
             batch_size = 20
             successful_concepts = 0
+            concept_ids = []
 
-            for i in range(0, len(key_concepts), batch_size):
-                batch = key_concepts[i:i + batch_size]
+            for i in range(0, len(concepts), batch_size):
+                batch = concepts[i:i + batch_size]
                 for concept in batch:
                     concept_data = concept.copy()
                     concept_data["video_id"] = video_id
+
+                    # Ensure educational metadata is present
+                    if "educational_weight" not in concept_data:
+                        concept_data["educational_weight"] = 0.0
+                    if "is_educational" not in concept_data:
+                        concept_data["is_educational"] = concept_data["educational_weight"] > 2.5
+
                     concept_id = self.save_concept(concept_data)
                     if concept_id:
                         successful_concepts += 1
+                        concept_ids.append(concept_id)
+
+                        # Process occurrences if available
+                        occurrences = concept.get("occurrences", [])
+                        if occurrences:
+                            # Ensure each occurrence has the right concept_id and video_id
+                            for occurrence in occurrences:
+                                occurrence["concept_id"] = concept_id
+                                occurrence["video_id"] = video_id
+
+                            # Save occurrences
+                            self.save_occurrences(concept_id, occurrences)
 
             # Log success and clear related caches
-            logger.info(f"Successfully indexed {successful_concepts}/{len(key_concepts)} concepts for video {video_id}")
+            logger.info(f"Successfully indexed {successful_concepts}/{len(concepts)} concepts for video {video_id}")
 
             # Clear caches related to this video
             self.clear_cache(f"video_{video_id}")
@@ -2207,8 +2277,9 @@ class DataAccess:
             self.clear_cache(f"video_concepts_{video_id}")
             self.clear_cache(f"video_concept_data_{video_id}")
 
-            # Optimize database if appropriate
-            self._maybe_optimize_database()
+            # Clear search cache
+            from cache_manager import cache_clear
+            cache_clear("search")
 
             return True
 
@@ -2220,18 +2291,6 @@ class DataAccess:
             logger.debug(f"Indexing error details: {traceback.format_exc()}")
 
             return False
-
-    def _maybe_optimize_database(self) -> None:
-        """Occasionally optimize database for better performance."""
-        # Only optimize occasionally based on random chance (approx. 5%)
-        import random
-        if random.random() < 0.05:
-            try:
-                logger.info("Running periodic database optimization")
-                self.execute_update("PRAGMA optimize")
-                self.execute_update("INSERT INTO search_index(search_index) VALUES('optimize')")
-            except Exception as e:
-                logger.warning(f"Optimization failed: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -2268,15 +2327,15 @@ class DataAccess:
             )
             stats["domains"] = domains
 
-            # Get theory/practice distribution
-            theory_practice = self.execute_query("""
+            # Get educational content distribution
+            educational_stats = self.execute_query("""
                 SELECT
-                    SUM(CASE WHEN concept_class = 'theoretical' THEN 1 ELSE 0 END) as theoretical,
-                    SUM(CASE WHEN concept_class = 'practical' THEN 1 ELSE 0 END) as practical
+                    SUM(CASE WHEN is_educational = 1 THEN 1 ELSE 0 END) as educational,
+                    SUM(CASE WHEN is_educational = 0 THEN 1 ELSE 0 END) as passing
                 FROM concepts
                 WHERE canonical_concept_id IS NULL OR canonical_concept_id = ''
             """)
-            stats["concepts"] = theory_practice[0] if theory_practice else {}
+            stats["educational_distribution"] = educational_stats[0] if educational_stats else {}
 
             # Get language distribution
             languages = self.execute_query(

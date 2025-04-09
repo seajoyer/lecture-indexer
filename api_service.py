@@ -50,7 +50,8 @@ app = FastAPI(
     - **Video Processing**: Submit YouTube videos for processing and indexing
     - **Search**: Find educational content across indexed videos
     - **Concept Exploration**: Explore concepts and their relationships
-    - **Theory vs. Practice**: Distinguish between theoretical and practical content
+    - **Theory vs. Practice**: Filter by video-level theory/practice ratio preference
+    - **Educational Content**: Distinguish between substantial educational content and passing mentions
 
     ## Authentication
 
@@ -116,7 +117,7 @@ class SearchQuery(BaseModel):
     query: str = Field(..., min_length=1, description="Search query text")
     filters: FilterOptions = Field(default_factory=FilterOptions, description="Filter options")
     theory_practice_ratio: Optional[float] = Field(None, ge=0, le=1,
-                                                  description="Desired theory/practice ratio (0=practical, 1=theoretical)")
+                                                  description="Desired theory/practice ratio for videos (0=practical, 1=theoretical)")
     educational_only: Optional[bool] = Field(None, description="Filter to only show educational content (not passing mentions)")
     pagination: Pagination = Field(default_factory=Pagination, description="Pagination options")
 
@@ -347,9 +348,12 @@ async def process_video(url: str, language: str):
         if result.get("status") == "completed":
             success = search_engine.index_content(result)
             if success:
-                theoretical_count = len(result.get("domain_features", {}).get("theoretical_concepts", []))
-                practical_count = len(result.get("domain_features", {}).get("practical_concepts", []))
-                logger.info(f"Successfully processed and indexed video {result.get('video_id')}: {theoretical_count} theoretical and {practical_count} practical concepts")
+                total_concepts = len(result.get("domain_features", {}).get("concepts", []))
+                educational_concepts = sum(1 for c in result.get("domain_features", {}).get("concepts", [])
+                                         if c.get("is_educational", False))
+
+                logger.info(f"Successfully processed and indexed video {result.get('video_id')}: "
+                          f"{total_concepts} concepts ({educational_concepts} educational)")
             else:
                 logger.error(f"Failed to index video: {result.get('video_id')}")
         else:
@@ -451,8 +455,6 @@ async def get_video_status(
             "domain": video.get("domain", "unknown"),
             "domain_confidence": video.get("domain_confidence", 0),
             "theory_practice_ratio": video.get("theory_practice_ratio", 0.5),
-            "theoretical_segments": video.get("theoretical_segments", 0),
-            "practical_segments": video.get("practical_segments", 0),
             "indexed_at": video.get("indexed_at", ""),
             "video_url": f"https://www.youtube.com/watch?v={video_id}"
         }
@@ -473,7 +475,7 @@ async def search_content(
 
     - **query**: Search query text
     - **filters**: Filter criteria
-    - **theory_practice_ratio**: Ratio of theoretical to practical content
+    - **theory_practice_ratio**: Desired ratio of theoretical to practical content in videos
     - **educational_only**: Filter to only show educational content
     - **pagination**: Pagination options
     """
@@ -525,18 +527,18 @@ async def search_content(
 @app.get("/api/v1/videos/{video_id}/concepts", response_model=Dict[str, Any])
 async def get_video_concepts(
     video_id: str,
-    context_type: Optional[str] = Query(None, description="Content type filter (theoretical, practical, mixed)"),
+    min_educational_value: Optional[float] = Query(None, description="Minimum educational value threshold"),
     api_key: str = Depends(get_api_key)
 ):
     """
     Get concepts extracted from a specific video.
 
     - **video_id**: YouTube video ID
-    - **context_type**: Content type filter
+    - **min_educational_value**: Minimum educational value threshold
     """
     try:
         # Get video concepts
-        concepts = search_engine.get_video_concepts(video_id, context_type)
+        concepts = search_engine.get_video_concepts(video_id, min_educational_value)
         if not concepts:
             raise HTTPException(status_code=404, detail=f"Video not found or not processed: {video_id}")
 
@@ -581,7 +583,7 @@ async def create_learning_path(
     Create a learning path from a set of concepts.
 
     - **concept_ids**: List of concept IDs to include
-    - **theory_practice_ratio**: Desired ratio of theoretical to practical content
+    - **theory_practice_ratio**: Desired ratio of theoretical to practical content in videos
     - **domain**: Optional domain filter
     """
     try:
@@ -617,8 +619,8 @@ async def list_domains(
         # Query domains from database
         domains_query = """
         SELECT domain, COUNT(DISTINCT video_id) as video_count,
-               SUM(CASE WHEN concept_class = 'theoretical' THEN 1 ELSE 0 END) as theoretical_concepts,
-               SUM(CASE WHEN concept_class = 'practical' THEN 1 ELSE 0 END) as practical_concepts
+               COUNT(*) as total_concepts,
+               SUM(CASE WHEN is_educational = 1 THEN 1 ELSE 0 END) as educational_concepts
         FROM concepts
         GROUP BY domain
         ORDER BY video_count DESC
@@ -874,11 +876,12 @@ async def deduplicate_concepts(
                 # Determine canonical concept
                 candidates = [concept] + similar
 
-                # Sort candidates by quality (score, frequency, word count)
+                # Sort candidates by quality (score, frequency, word count, educational weight)
                 candidates.sort(key=lambda c: (
-                    c.get("score", 0) * 0.4 +
+                    c.get("score", 0) * 0.3 +
                     c.get("frequency", 0) * 0.3 +
-                    len(c.get("text", "").split()) * 0.3
+                    len(c.get("text", "").split()) * 0.2 +
+                    c.get("educational_weight", 0) * 0.2
                 ), reverse=True)
 
                 # Use the best concept as canonical

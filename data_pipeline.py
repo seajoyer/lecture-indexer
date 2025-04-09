@@ -1,7 +1,7 @@
 """
 Enhanced data pipeline for the Lecture Video Content Indexer.
 Coordinates the end-to-end process of video extraction, transcript processing,
-and concept extraction using the hybrid global+local processing approach.
+and concept extraction using a unified approach with video-level theory/practice ratio.
 """
 
 import os
@@ -26,9 +26,7 @@ logger = logging.getLogger(__name__)
 class DataPipeline:
     """
     Coordinates the end-to-end process of lecture video data acquisition,
-    transcript processing, and concept extraction using the hybrid
-    global+local processing approach for improved educational content
-    identification.
+    transcript processing, and concept extraction with video-level theory/practice ratio.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -47,7 +45,7 @@ class DataPipeline:
         # Initialize components
         self._init_components()
 
-        logger.info("DataPipeline initialized with hybrid global+local concept processing")
+        logger.info("DataPipeline initialized with unified concept processing approach")
 
     def _init_components(self):
         """Initialize pipeline components."""
@@ -68,7 +66,6 @@ class DataPipeline:
     def process_video(self, video_url: str, language_preference: List[str] = ['en', 'ru']) -> Dict[str, Any]:
         """
         Process a YouTube video through the entire pipeline.
-        Uses the hybrid global+local approach for improved concept extraction.
 
         Args:
             video_url: YouTube video URL
@@ -115,30 +112,38 @@ class DataPipeline:
             raw_transcript = self.youtube_extractor.extract_transcript(video_id, language_preference)
             logger.info(f"Extracted transcript with {len(raw_transcript)} segments")
 
-            # Step 4: Process transcript using hybrid approach
+            # Step 4: Process transcript
             processed_transcript = self.transcript_processor.process_transcript(raw_transcript, metadata)
             logger.info(f"Processed transcript with {len(processed_transcript['segments'])} segments")
 
-            # Step 5: Calculate theory/practice ratio from processed segments
-            from transcript_processor import calculate_theory_practice_ratio
-            theory_practice_results = calculate_theory_practice_ratio(processed_transcript['segments'])
-            logger.info(f"Calculated theory/practice ratio: {theory_practice_results['theory_practice_ratio']:.2f}")
+            # Step 5: Calculate theory/practice ratio from processed transcript
+            theory_practice_results = processed_transcript.get("global_analysis", {})
+            if not theory_practice_results:
+                # If global analysis not found, calculate directly
+                theory_practice_results = {
+                    "theory_practice_ratio": 0.5,  # Default balanced ratio
+                    "theoretical_indicators": 0,
+                    "practical_indicators": 0
+                }
+
+            logger.info(f"Video-level theory/practice ratio: {theory_practice_results.get('theory_practice_ratio', 0.5):.2f}")
 
             # Record detected language
             detected_language = processed_transcript.get("language", "en")
 
-            # Step 6: Extract concepts using enhanced unified extractor
+            # Step 6: Extract concepts using unified concept extractor
             concept_start_time = time.time()
-
-            # Note: The concept extractor now uses the full processed transcript
-            # with both global and segment-level information
             domain_features = self.concept_extractor.extract_concepts_from_transcript(processed_transcript)
-
             concept_time = time.time() - concept_start_time
 
+            # Get concepts from the unified list
+            concepts = domain_features.get('concepts', [])
+
             # Log concept statistics
-            total_concepts = len(domain_features.get('theoretical_concepts', [])) + len(domain_features.get('practical_concepts', []))
-            logger.info(f"Extracted {total_concepts} concepts in {concept_time:.2f}s")
+            total_concepts = len(concepts)
+            educational_concepts = sum(1 for c in concepts if c.get('is_educational', False))
+
+            logger.info(f"Extracted {total_concepts} concepts ({educational_concepts} educational) in {concept_time:.2f}s")
 
             # Prepare result
             result = {
@@ -153,19 +158,17 @@ class DataPipeline:
                 "theory_practice_results": theory_practice_results
             }
 
-            # Step 7: Apply concept deduplication with enhanced algorithm
+            # Step 7: Apply concept deduplication
             dedup_start_time = time.time()
-            logger.info(f"Applying enhanced concept deduplication for language: {detected_language}")
+            logger.info(f"Applying concept deduplication for language: {detected_language}")
             deduplicated_result = apply_concept_deduplication(result, detected_language)
             dedup_time = time.time() - dedup_start_time
 
             # Log deduplication statistics
-            theoretical_before = len(domain_features.get('theoretical_concepts', []))
-            practical_before = len(domain_features.get('practical_concepts', []))
-            theoretical_after = len(deduplicated_result['domain_features'].get('theoretical_concepts', []))
-            practical_after = len(deduplicated_result['domain_features'].get('practical_concepts', []))
+            concepts_before = len(concepts)
+            concepts_after = len(deduplicated_result['domain_features'].get('concepts', []))
 
-            logger.info(f"Deduplication complete: {theoretical_before + practical_before} → {theoretical_after + practical_after} concepts in {dedup_time:.2f}s")
+            logger.info(f"Deduplication complete: {concepts_before} → {concepts_after} concepts in {dedup_time:.2f}s")
 
             # Calculate processing time
             processing_time = timer.stop() / 1000  # Convert from ms to seconds
@@ -174,10 +177,10 @@ class DataPipeline:
             # Add deduplication stats to result
             if "deduplication_stats" not in deduplicated_result:
                 deduplicated_result["deduplication_stats"] = {
-                    "original_total": theoretical_before + practical_before,
-                    "deduplicated_total": theoretical_after + practical_after,
-                    "reduction_percentage": round(((theoretical_before + practical_before) - (theoretical_after + practical_after)) /
-                                            max((theoretical_before + practical_before), 1) * 100, 2),
+                    "original_total": concepts_before,
+                    "deduplicated_total": concepts_after,
+                    "reduction_percentage": round((concepts_before - concepts_after) /
+                                            max(concepts_before, 1) * 100, 2),
                     "processing_time": dedup_time
                 }
 
@@ -335,6 +338,20 @@ class DataPipeline:
                         "error": str(e)
                     })
 
+            # Calculate playlist statistics
+            successful_videos = sum(1 for r in video_results if r.get("status") == "completed")
+            total_concepts = sum(
+                len(r.get("domain_features", {}).get("concepts", []))
+                for r in video_results if r.get("status") == "completed"
+            )
+
+            # Calculate average theory/practice ratio
+            theory_practice_ratios = [
+                r.get("theory_practice_results", {}).get("theory_practice_ratio", 0.5)
+                for r in video_results if r.get("status") == "completed"
+            ]
+            avg_theory_practice_ratio = sum(theory_practice_ratios) / len(theory_practice_ratios) if theory_practice_ratios else 0.5
+
             # Create playlist result
             playlist_result = {
                 "status": "completed",
@@ -343,7 +360,9 @@ class DataPipeline:
                 "playlist_title": playlist_metadata.get("title", ""),
                 "playlist_channel": playlist_metadata.get("channel", ""),
                 "video_count": len(playlist_videos),
-                "processed_count": len(video_results),
+                "processed_count": successful_videos,
+                "total_concepts": total_concepts,
+                "avg_theory_practice_ratio": avg_theory_practice_ratio,
                 "videos": video_results,
                 "timestamp": datetime.now().isoformat()
             }
@@ -358,7 +377,7 @@ class DataPipeline:
             except Exception as e:
                 logger.error(f"Error saving playlist result to file: {e}")
 
-            logger.info(f"Playlist processing completed for {playlist_id} with {len(video_results)} videos")
+            logger.info(f"Playlist processing completed for {playlist_id} with {successful_videos} videos")
             return playlist_result
 
         except Exception as e:

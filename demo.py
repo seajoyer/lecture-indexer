@@ -3,6 +3,7 @@
 Enhanced demo script for the Lecture Video Content Indexer.
 Provides various commands to demonstrate and test the system.
 Added support for processing video playlists with automatic URL detection.
+Updated to use unified concept structure with video-level theory/practice ratio.
 """
 
 import argparse
@@ -83,70 +84,73 @@ class Demo:
             logger.error(f"Error initializing demo: {e}")
             raise e
 
-    def print_concepts_by_category(self, theoretical_concepts: List[Dict[str, Any]], practical_concepts: List[Dict[str, Any]], limit: int = 25) -> None:
+    def print_concepts(self, concepts: List[Dict[str, Any]], limit: int = 25) -> None:
         """
-        Print concepts organized by category.
+        Print concepts organized by educational value.
 
         Args:
-            theoretical_concepts: List of theoretical concepts
-            practical_concepts: List of practical concepts
-            limit: Maximum number of concepts to display per category
+            concepts: List of concepts
+            limit: Maximum number of concepts to display
         """
-        # Sort concepts by score and frequency
-        theoretical_concepts = sorted(theoretical_concepts, key=lambda x: (
-            x.get("score", 0) * 0.6 + x.get("frequency", 0) * 0.4
-        ), reverse=True)
-
-        practical_concepts = sorted(practical_concepts, key=lambda x: (
-            x.get("score", 0) * 0.6 + x.get("frequency", 0) * 0.4
-        ), reverse=True)
-
-        # Prepare and print theoretical concepts table
-        if theoretical_concepts:
-            headers = ["#", "Concept", "Score", "Frequency"]
-            rows = []
-
-            for i, concept in enumerate(theoretical_concepts[:limit]):
-                # Build the row
-                row = [
-                    i+1,
-                    concept.get("text", "N/A"),
-                    f"{concept.get('score', 0):.2f}",
-                    concept.get("frequency", 0),
-                ]
-                rows.append(row)
-
-            # Print table
-            print("\n=== Top Theoretical Concepts ===")
-            print(tabulate(rows, headers=headers, tablefmt="pretty"))
-
-            if len(theoretical_concepts) > limit:
-                print(f"...and {len(theoretical_concepts) - limit} more theoretical concepts")
-
-        # Prepare and print practical concepts table
-        if practical_concepts:
-            headers = ["#", "Concept", "Score", "Frequency"]
-            rows = []
-
-            for i, concept in enumerate(practical_concepts[:limit]):
-                # Build the row
-                row = [
-                    i+1,
-                    concept.get("text", "N/A"),
-                    f"{concept.get('score', 0):.2f}",
-                    concept.get("frequency", 0),
-                ]
-                rows.append(row)
-
-            # Print table
-            print("\n=== Top Practical Concepts ===")
-            print(tabulate(rows, headers=headers, tablefmt="pretty"))
-
-            if len(practical_concepts) > limit:
-                print(f"...and {len(practical_concepts) - limit} more practical concepts")
-
-        if not theoretical_concepts and not practical_concepts:
+        if not concepts:
             print("\nNo concepts found.")
+            return
+
+        # Sort concepts by educational weight and score
+        concepts = sorted(concepts, key=lambda x: (
+            x.get("educational_weight", 0) * 0.6 +
+            x.get("score", 0) * 0.2 +
+            x.get("frequency", 0) * 0.2
+        ), reverse=True)
+
+        # Separate educational and passing mention concepts
+        educational_concepts = [c for c in concepts if c.get("is_educational", False)]
+        passing_concepts = [c for c in concepts if not c.get("is_educational", False)]
+
+        # Prepare and print educational concepts table
+        if educational_concepts:
+            headers = ["#", "Concept", "Educational Weight", "Score", "Frequency"]
+            rows = []
+
+            for i, concept in enumerate(educational_concepts[:limit]):
+                # Build the row
+                row = [
+                    i+1,
+                    concept.get("text", "N/A"),
+                    f"{concept.get('educational_weight', 0):.2f}",
+                    f"{concept.get('score', 0):.2f}",
+                    concept.get("frequency", 0),
+                ]
+                rows.append(row)
+
+            # Print table
+            print("\n=== Educational Concepts ===")
+            print(tabulate(rows, headers=headers, tablefmt="pretty"))
+
+            if len(educational_concepts) > limit:
+                print(f"...and {len(educational_concepts) - limit} more educational concepts")
+
+        # Prepare and print passing mention concepts table
+        if passing_concepts:
+            headers = ["#", "Concept", "Score", "Frequency"]
+            rows = []
+
+            for i, concept in enumerate(passing_concepts[:limit]):
+                # Build the row
+                row = [
+                    i+1,
+                    concept.get("text", "N/A"),
+                    f"{concept.get('score', 0):.2f}",
+                    concept.get("frequency", 0),
+                ]
+                rows.append(row)
+
+            # Print table
+            print("\n=== Passing Mentions ===")
+            print(tabulate(rows, headers=headers, tablefmt="pretty"))
+
+            if len(passing_concepts) > limit:
+                print(f"...and {len(passing_concepts) - limit} more passing mentions")
 
     def process_video(self, url: str, language_preference: List[str] = None, auto_index: bool = True) -> None:
         """
@@ -174,11 +178,15 @@ class Demo:
                 metadata = result.get("metadata", {})
                 transcript = result.get("transcript", {})
                 domain_features = result.get("domain_features", {})
+                theory_practice_results = result.get("theory_practice_results", {})
 
-                # Get concept counts directly from theoretical and practical lists
-                theoretical_concepts = domain_features.get("theoretical_concepts", [])
-                practical_concepts = domain_features.get("practical_concepts", [])
-                total_concepts = len(theoretical_concepts) + len(practical_concepts)
+                # Get concepts from the unified list
+                concepts = domain_features.get("concepts", [])
+                total_concepts = len(concepts)
+
+                # Count educational concepts
+                educational_concepts = [c for c in concepts if c.get("is_educational", False)]
+                educational_count = len(educational_concepts)
 
                 print("\n=== Video Processed Successfully ===")
                 print(f"Video ID: {result.get('video_id')}")
@@ -188,8 +196,8 @@ class Demo:
                 print(f"Language: {transcript.get('language', 'unknown')}")
                 print(f"Segments: {len(transcript.get('segments', []))}")
                 print(f"Total Concepts: {total_concepts}")
-                print(f"Theoretical Concepts: {len(theoretical_concepts)}")
-                print(f"Practical Concepts: {len(practical_concepts)}")
+                print(f"Educational Concepts: {educational_count}")
+                print(f"Theory/Practice Ratio: {theory_practice_results.get('theory_practice_ratio', 0.5):.2f}")
                 print(f"Processing Time: {processing_time:.2f} seconds")
 
                 # Automatically index content if requested
@@ -204,8 +212,8 @@ class Demo:
                     else:
                         print(f"Failed to index content")
 
-                # Print concepts by category
-                self.print_concepts_by_category(theoretical_concepts, practical_concepts)
+                # Print concepts
+                self.print_concepts(concepts)
 
                 return result
             else:
@@ -348,11 +356,19 @@ class Demo:
                         logger.error(f"Error processing video: {e}")
                         failed += 1
 
+            # Calculate average theory/practice ratio across all videos
+            theory_practice_ratios = [
+                r.get("theory_practice_results", {}).get("theory_practice_ratio", 0.5)
+                for r in results if r.get("status") == "completed"
+            ]
+            avg_theory_practice_ratio = sum(theory_practice_ratios) / len(theory_practice_ratios) if theory_practice_ratios else 0.5
+
             # Print summary
             print("\n=== Playlist Processing Summary ===")
             print(f"Total videos: {len(playlist_videos)}")
             print(f"Successfully processed: {successful}")
             print(f"Failed: {failed}")
+            print(f"Average theory/practice ratio: {avg_theory_practice_ratio:.2f}")
 
             # If we have data access, save playlist information
             if self.data_access:
@@ -394,7 +410,7 @@ class Demo:
             print(f"Error: {e}")
             return []
 
-    def list_concepts(self, domain: str = None, limit: int = 20) -> None:
+    def list_concepts(self, domain: str = None, limit: int = 100) -> None:
         """
         List concepts in the database with domain filter.
 
@@ -406,24 +422,24 @@ class Demo:
             # Get concepts from database
             concepts = self.data_access.list_concepts(domain_filter=domain)
 
-            # Group concepts
-            theoretical = [c for c in concepts if c.get("concept_class") == "theoretical"]
-            practical = [c for c in concepts if c.get("concept_class") == "practical"]
+            # Group concepts by educational value
+            educational_concepts = [c for c in concepts if c.get("is_educational") == 1]
+            passing_concepts = [c for c in concepts if c.get("is_educational") == 0]
 
-            total_count = len(theoretical) + len(practical)
+            total_count = len(educational_concepts) + len(passing_concepts)
 
             print("\n=== Concepts Summary ===")
             print(f"Total Concepts: {total_count}")
-            print(f"Theoretical Concepts: {len(theoretical)}")
-            print(f"Practical Concepts: {len(practical)}")
+            print(f"Educational Concepts: {len(educational_concepts)}")
+            print(f"Passing Mentions: {len(passing_concepts)}")
 
-            # Print theoretical concepts
-            print("\nTheoretical Concepts:")
-            self.print_concept_list(theoretical, limit)
+            # Print educational concepts
+            print("\nEducational Concepts:")
+            self.print_concept_list(educational_concepts, limit)
 
-            # Print practical concepts
-            print("\nPractical Concepts:")
-            self.print_concept_list(practical, limit)
+            # Print passing mentions
+            print("\nPassing Mentions:")
+            self.print_concept_list(passing_concepts, limit)
 
         except Exception as e:
             logger.error(f"Error listing concepts: {e}")
@@ -484,9 +500,10 @@ class Demo:
             print("  No concepts found.")
             return
 
-        # Sort by frequency and score
+        # Sort by educational weight and frequency
         concepts = sorted(concepts, key=lambda x: (
-            x.get("frequency", 0) * 0.6 + x.get("score", 0) * 0.4
+            x.get("educational_weight", 0) * 0.6 +
+            x.get("frequency", 0) * 0.4
         ), reverse=True)
 
         # Limit the number of concepts to display
@@ -494,74 +511,40 @@ class Demo:
 
         # Print in a formatted way
         for i, concept in enumerate(display_concepts):
-            print(f"  {i+1}. {concept.get('text', 'N/A')} (ID: {concept.get('concept_id', 'N/A')})")
+            edu_weight = concept.get("educational_weight", 0)
+            print(f"  {i+1}. {concept.get('text', 'N/A')} "
+                  f"(ID: {concept.get('concept_id', 'N/A')}, "
+                  f"Educational Weight: {edu_weight:.2f})")
 
         if len(concepts) > limit:
             print(f"  ... and {len(concepts) - limit} more")
 
-    def print_concepts(self, concepts: List[Dict[str, Any]], limit: int = 20) -> None:
-        """
-        Print concepts in a detailed tabular format.
-
-        Args:
-            concepts: List of concept dictionaries
-            limit: Maximum number of concepts to display
-        """
-        if not concepts:
-            print("No concepts found.")
-            return
-
-        # Sort by score and frequency
-        concepts = sorted(concepts, key=lambda x: (
-            x.get("score", 0) * 0.6 + x.get("frequency", 0) * 0.4
-        ), reverse=True)
-
-        # Limit the number of concepts to display
-        display_concepts = concepts[:limit]
-
-        # Prepare table data
-        headers = ["#", "Concept", "Class", "Score", "Frequency"]
-        rows = []
-
-        for i, concept in enumerate(display_concepts):
-            # Build the row
-            row = [
-                i+1,
-                concept.get("text", "N/A"),
-                concept.get("concept_class", "N/A"),
-                f"{concept.get('score', 0):.2f}",
-                concept.get("frequency", 0),
-            ]
-            rows.append(row)
-
-        # Print table
-        print("\n=== Top Concepts ===")
-        print(tabulate(rows, headers=headers, tablefmt="pretty"))
-
-        if len(concepts) > limit:
-            print(f"...and {len(concepts) - limit} more concepts")
-
-    def search(self, query: str, domain: str = None) -> None:
+    def search(self, query: str, domain: str = None, theory_practice_ratio: float = None) -> None:
         """
         Search for content with improved results formatting.
 
         Args:
             query: Search query text
             domain: Optional domain filter
+            theory_practice_ratio: Optional theory/practice ratio preference
         """
         try:
             # Build search query
             search_query = {
                 "original_text": query,
                 "filters": {},
-                "pagination": {"page": 1, "limit": 10}
+                "pagination": {"page": 1, "limit": 10},
+                "theory_practice_ratio": theory_practice_ratio
             }
 
             if domain:
                 search_query["filters"]["domain"] = domain
 
             # Execute search
-            print(f"\nSearching for: {query}" + (f" in domain: {domain}" if domain else ""))
+            print(f"\nSearching for: {query}" +
+                  (f" in domain: {domain}" if domain else "") +
+                  (f" with theory/practice ratio: {theory_practice_ratio}" if theory_practice_ratio is not None else ""))
+
             results = self.search_engine.search(search_query)
 
             # Print results
@@ -574,10 +557,19 @@ class Demo:
             # Format and print each result
             for i, result in enumerate(results.get("results", [])):
                 result_type = result.get("result_type", "unknown")
-                print(f"\n{i+1}. [{result_type.upper()}] {result.get('text', 'N/A')}")
+                is_educational = result.get("is_educational", False)
+
+                # Mark educational content
+                edu_indicator = "[EDUCATIONAL] " if is_educational else ""
+
+                print(f"\n{i+1}. [{result_type.upper()}] {edu_indicator}{result.get('text', 'N/A')}")
 
                 if "video_title" in result:
                     print(f"   Video: {result.get('video_title', 'N/A')}")
+
+                if "theory_practice_ratio" in result:
+                    tp_ratio = result.get("theory_practice_ratio", 0.5)
+                    print(f"   Theory/Practice Ratio: {tp_ratio:.2f}")
 
                 if "context_text" in result:
                     # Format and truncate context text
@@ -595,6 +587,9 @@ class Demo:
 
                 if "concept_id" in result:
                     print(f"   Concept ID: {result.get('concept_id', 'N/A')}")
+
+                if "educational_weight" in result:
+                    print(f"   Educational Weight: {result.get('educational_weight', 0):.2f}")
 
         except Exception as e:
             logger.error(f"Error executing search: {e}")
@@ -645,14 +640,21 @@ class Demo:
             # Print learning path
             print("\n=== Learning Path ===")
             print(f"Total Concepts: {learning_path.get('total_concepts', 0)}")
-            print(f"Theoretical: {learning_path.get('theoretical_concepts', 0)}")
-            print(f"Practical: {learning_path.get('practical_concepts', 0)}")
+            print(f"Educational Concepts: {learning_path.get('educational_concepts', 0)}")
+            print(f"Theory/Practice Ratio: {learning_path.get('theory_practice_ratio', 0.5)}")
 
             # Print concepts in order
             print("\nConcepts in Order:")
             for i, concept in enumerate(learning_path.get("concepts", [])):
-                print(f"\n{i+1}. {concept.get('text', 'N/A')} "
-                      f"({concept.get('concept_class', 'unknown')})")
+                educational_info = ""
+                if concept.get("is_educational", False):
+                    educational_info = " [EDUCATIONAL]"
+
+                print(f"\n{i+1}. {concept.get('text', 'N/A')}{educational_info}")
+
+                # Print educational weight if available
+                if "educational_weight" in concept:
+                    print(f"   Educational Weight: {concept.get('educational_weight', 0):.2f}")
 
                 # Print recommended videos
                 if "recommended_videos" in concept and concept["recommended_videos"]:
@@ -671,6 +673,24 @@ class Demo:
 
                     if prereq_texts:
                         print(f"   Prerequisites: {', '.join(prereq_texts)}")
+
+            # Print sections if available
+            if "sections" in learning_path:
+                print("\n=== Learning Path Sections ===")
+                for i, section in enumerate(learning_path.get("sections", [])):
+                    print(f"\nSection {i+1}: {section.get('title', 'Section')}")
+                    print(f"   {section.get('description', '')}")
+
+                    # Print concepts in this section
+                    concepts_in_section = []
+                    for idx in section.get("concept_indices", []):
+                        if idx < len(learning_path.get("concepts", [])):
+                            concepts_in_section.append(learning_path["concepts"][idx]["text"])
+
+                    if concepts_in_section:
+                        print(f"   Concepts: {', '.join(concepts_in_section[:5])}")
+                        if len(concepts_in_section) > 5:
+                            print(f"   ...and {len(concepts_in_section) - 5} more")
 
         except Exception as e:
             logger.error(f"Error generating learning path: {e}")
@@ -740,7 +760,7 @@ class Demo:
                 "video_id": video_id,
                 "metadata": {"domain": video_concepts.get("video", {}).get("domain", "unknown")},
                 "transcript": {"segments": video_concepts.get("timeline", [])},
-                "domain_features": {"key_concepts": concepts}
+                "domain_features": {"concepts": concepts}
             }
 
             # Generate signatures
@@ -761,6 +781,7 @@ class Demo:
                 print(f"   Signature Pattern: {signature.get('signature_pattern', [])}")
                 print(f"   Hierarchy Score: {signature.get('hierarchy_score', 0):.3f}")
                 print(f"   Confidence: {signature.get('confidence', 0):.3f}")
+                print(f"   Educational Weight: {signature.get('educational_weight', 0):.3f}")
 
                 # Print related concepts
                 related = signature.get("related_concepts", {})
@@ -804,13 +825,15 @@ def main():
     # List concepts command
     list_parser = subparsers.add_parser("list-concepts", help="List concepts in the database")
     list_parser.add_argument("--domain", "-d", help="Filter concepts by domain")
-    list_parser.add_argument("--limit", "-l", type=int, default=20,
+    list_parser.add_argument("--limit", "-l", type=int, default=500,
                             help="Maximum number of concepts to display per category")
 
     # Search command
     search_parser = subparsers.add_parser("search", help="Search for content")
     search_parser.add_argument("query", help="Search query text")
     search_parser.add_argument("--domain", "-d", help="Filter results by domain")
+    search_parser.add_argument("--theory-practice-ratio", "-t", type=float,
+                              help="Theory/practice ratio preference (0.0-1.0)")
 
     # Extract concepts command
     extract_parser = subparsers.add_parser("extract", help="Extract concepts from text")
@@ -853,7 +876,7 @@ def main():
         elif args.command == "list-concepts":
             demo.list_concepts(args.domain, args.limit)
         elif args.command == "search":
-            demo.search(args.query, args.domain)
+            demo.search(args.query, args.domain, args.theory_practice_ratio)
         elif args.command == "extract":
             demo.extract_concepts_from_text(args.text, args.domain, args.language)
         elif args.command == "path":

@@ -1,6 +1,7 @@
 """
 Redesigned transcript processor for the Lecture Video Content Indexer.
-Implements a hybrid global+local processing approach for improved accuracy and performance.
+Implements a hybrid global processing approach for improved accuracy and performance,
+with focus on video-level analysis rather than segment classification.
 """
 
 import re
@@ -49,13 +50,13 @@ from performance_utils import time_function, Timer
 logger = logging.getLogger(__name__)
 
 # Cache version - increment when processing logic changes
-CACHE_VERSION = "1.0.0"
+CACHE_VERSION = "2.0.0"
 
 class TranscriptProcessor:
     """
-    Processes YouTube video transcripts using a hybrid global+local approach.
-    First processes the complete transcript as a unified document to establish
-    global context, then applies that knowledge to individual segments.
+    Processes YouTube video transcripts using a global approach.
+    Processes the complete transcript as a unified document to establish
+    global context and calculate video-level theory/practice ratio.
     """
 
     def __init__(self):
@@ -75,7 +76,7 @@ class TranscriptProcessor:
         # Set maximum workers for parallel processing
         self.max_workers = os.cpu_count() or 4
 
-        logger.info("TranscriptProcessor initialized with hybrid processing approach")
+        logger.info("TranscriptProcessor initialized with global processing approach")
 
     def _load_basic_resources(self):
         """Load minimal language resources for basic operations."""
@@ -91,8 +92,8 @@ class TranscriptProcessor:
             'ru': {'и', 'в', 'на', 'с', 'по', 'к', 'у', 'от', 'из', 'для', 'это', 'так', 'что', 'как'}
         }
 
-        # Content classification indicators
-        self.classification_indicators = {
+        # Content type indicators
+        self.content_type_indicators = {
             "theoretical": {
                 "en": ["definition", "concept", "theory", "principle", "defined as", "refers to", "means"],
                 "ru": ["определение", "концепция", "теория", "принцип", "определяется как", "означает"]
@@ -150,6 +151,7 @@ class TranscriptProcessor:
                 model_name = 'en_core_web_sm' if language == 'en' else 'ru_core_news_sm'
                 try:
                     self._spacy_models[language] = spacy.load(model_name)
+                    logger.info(f"Loaded spaCy model: {model_name}")
                 except OSError:
                     logger.warning(f"Spacy model {model_name} not found. Make sure it's installed in your Nix environment.")
                     # Don't try to download - it won't work in NixOS
@@ -202,9 +204,9 @@ class TranscriptProcessor:
     @time_function(5000)  # Log warning if takes more than 5 seconds
     def process_transcript(self, raw_segments: List[Dict], video_metadata: Dict) -> Dict:
         """
-        Process raw transcript segments into a structured format using hybrid approach.
-        First processes the complete transcript as a unified document, then
-        processes individual segments with that global context.
+        Process raw transcript segments into a structured format using global approach.
+        Processes the complete transcript as a unified document to establish global context
+        and calculate video-level theory/practice ratio.
 
         Args:
             raw_segments: List of raw transcript segments
@@ -257,6 +259,10 @@ class TranscriptProcessor:
         # 1.4: Global text analysis
         global_analysis = self._analyze_global_text(global_text, language, domain)
 
+        # 1.5: Calculate theory/practice ratio for the entire video
+        theory_practice_ratio = self._calculate_theory_practice_ratio(global_analysis)
+        logger.info(f"Calculated theory/practice ratio: {theory_practice_ratio}")
+
         # STAGE 2: Segment Processing
         # 2.1: Normalize segments
         normalized_segments = self._normalize_segments(raw_segments, language)
@@ -264,17 +270,12 @@ class TranscriptProcessor:
         # 2.2: Sentence segmentation - convert transcript segments to sentence segments
         sentence_segments = self._create_sentence_segments(normalized_segments, language)
 
-        # 2.3: Classify segments using global context
-        classified_segments = self._classify_segments(
-            sentence_segments,
-            global_analysis,
-            domain,
-            language
-        )
+        # 2.3: Extract educational significance for segments
+        processed_segments = self._process_segments_educational_value(sentence_segments, global_analysis, language)
 
         # Prepare result with both global and segment-level information
         result = {
-            "segments": classified_segments,
+            "segments": processed_segments,
             "global_analysis": {
                 "language": language,
                 "domain": domain,
@@ -282,7 +283,8 @@ class TranscriptProcessor:
                 "sentence_count": global_analysis.get("sentence_count", 0),
                 "key_terms": global_analysis.get("key_terms", []),
                 "theoretical_indicators": global_analysis.get("theoretical_indicators", 0),
-                "practical_indicators": global_analysis.get("practical_indicators", 0)
+                "practical_indicators": global_analysis.get("practical_indicators", 0),
+                "theory_practice_ratio": theory_practice_ratio
             },
             "language": language,
             "domain": domain,
@@ -433,7 +435,7 @@ class TranscriptProcessor:
     def _analyze_global_text(self, text: str, language: str, domain: str) -> Dict[str, Any]:
         """
         Perform comprehensive analysis on the global text to extract features
-        that will inform segment-level processing.
+        that will inform segment-level processing and determine theory/practice ratio.
 
         Args:
             text: Full transcript text
@@ -540,8 +542,8 @@ class TranscriptProcessor:
             analysis["key_terms"] = [term for term, _ in word_counter.most_common(20)]
 
         # Count theoretical and practical indicators
-        theoretical_patterns = self.classification_indicators["theoretical"].get(language, [])
-        practical_patterns = self.classification_indicators["practical"].get(language, [])
+        theoretical_patterns = self.content_type_indicators["theoretical"].get(language, [])
+        practical_patterns = self.content_type_indicators["practical"].get(language, [])
         educational_indicators = self.educational_indicators.get(language, [])
 
         text_lower = text.lower()
@@ -550,14 +552,6 @@ class TranscriptProcessor:
         analysis["theoretical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in theoretical_patterns)
         analysis["practical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in practical_patterns)
         analysis["educational_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in educational_indicators)
-
-        # Determine overall content type based on indicators ratio
-        content_type_ratio = 0.5  # Default balanced
-        if analysis["theoretical_indicators"] + analysis["practical_indicators"] > 0:
-            content_type_ratio = analysis["theoretical_indicators"] / (analysis["theoretical_indicators"] + analysis["practical_indicators"])
-
-        analysis["content_type_ratio"] = content_type_ratio
-        analysis["primary_content_type"] = "theoretical" if content_type_ratio > 0.6 else "practical" if content_type_ratio < 0.4 else "mixed"
 
         return analysis
 
@@ -746,563 +740,119 @@ class TranscriptProcessor:
         # Fallback to simple regex-based tokenization
         return lambda text: re.split(r'(?<=[.!?])\s+', text)
 
-    def _classify_segments(
+    def _process_segments_educational_value(
         self,
         segments: List[Dict],
         global_analysis: Dict,
-        domain: str,
         language: str
     ) -> List[Dict]:
         """
-        Classify segments as theoretical or practical, and score educational significance,
-        using both local features and global context.
+        Process segments to determine their educational value.
 
         Args:
             segments: List of sentence segments
             global_analysis: Global text analysis results
-            domain: Content domain
             language: Language code
 
         Returns:
-            List of classified segments
+            List of processed segments with educational values
         """
-        # Extract global context that will inform classification
-        global_context = {
-            "primary_content_type": global_analysis.get("primary_content_type", "mixed"),
-            "content_type_ratio": global_analysis.get("content_type_ratio", 0.5),
-            "key_terms": set(global_analysis.get("key_terms", [])),
-            "educational_indicators": global_analysis.get("educational_indicators", 0)
-        }
+        processed_segments = []
 
-        # Determine if parallel processing is beneficial and safe
-        # Deactivate parallel processing for Russian to avoid potential spaCy issues
-        use_parallel = (len(segments) > 20 and
-                    self.max_workers > 1 and
-                    language != "ru")  # Skip parallel for Russian
+        # Process each segment to determine educational value
+        for segment in segments:
+            processed_segment = segment.copy()
 
-        if use_parallel:
-            try:
-                # Process segments in parallel for better performance
-                with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    # Create tasks for each segment
-                    futures = {
-                        executor.submit(
-                            self._classify_single_segment,
-                            segment,
-                            global_context,
-                            domain,
-                            language
-                        ): segment for segment in segments
-                    }
+            # Calculate educational value
+            educational_value = self._calculate_educational_value(
+                segment.get("text", ""),
+                global_analysis,
+                language
+            )
 
-                    # Set a timeout for the entire operation
-                    timeout = 60  # 60 seconds timeout to prevent hanging
+            # Add educational value to segment
+            processed_segment["educational_value"] = educational_value
+            processed_segment["is_educational"] = educational_value > 2.5
 
-                    # Collect results as they complete
-                    classified_segments = []
+            processed_segments.append(processed_segment)
 
-                    try:
-                        for future in concurrent.futures.as_completed(futures, timeout=timeout):
-                            try:
-                                classified_segment = future.result(timeout=2)  # 2 second timeout per segment
-                                classified_segments.append(classified_segment)
-                            except Exception as e:
-                                logger.error(f"Error classifying segment: {e}")
-                                # If classification fails, include the original segment
-                                segment = futures[future]
-                                segment["content_type"] = "mixed"
-                                segment["classification_confidence"] = 0.5
-                                segment["educational_score"] = 0.0
-                                classified_segments.append(segment)
-                    except concurrent.futures.TimeoutError:
-                        logger.warning("Timeout in parallel segment classification, falling back to sequential")
-                        # If we got a timeout, use the results we have and process the rest sequentially
-                        processed_ids = {s.get("id") for s in classified_segments}
-                        remaining = [s for s in segments if s.get("id") not in processed_ids]
+        return processed_segments
 
-                        # Process remaining segments sequentially
-                        for segment in remaining:
-                            try:
-                                classified_segment = self._classify_single_segment(
-                                    segment,
-                                    global_context,
-                                    domain,
-                                    language
-                                )
-                                classified_segments.append(classified_segment)
-                            except Exception as e:
-                                logger.error(f"Error in sequential fallback: {e}")
-                                segment["content_type"] = "mixed"
-                                segment["classification_confidence"] = 0.5
-                                segment["educational_score"] = 0.0
-                                classified_segments.append(segment)
-
-                    # Sort by start time to maintain order
-                    classified_segments.sort(key=lambda x: x.get("start_time", 0))
-            except Exception as e:
-                logger.error(f"Parallel processing error: {e}, falling back to sequential")
-                use_parallel = False  # Fall back to sequential
-
-        # If parallel processing is disabled or failed, use sequential processing
-        if not use_parallel:
-            # Process segments sequentially
-            classified_segments = []
-            for segment in segments:
-                try:
-                    classified_segment = self._classify_single_segment(
-                        segment,
-                        global_context,
-                        domain,
-                        language
-                    )
-                    classified_segments.append(classified_segment)
-                except Exception as e:
-                    logger.error(f"Error classifying segment: {e}")
-                    # If classification fails, include the original segment
-                    segment["content_type"] = "mixed"
-                    segment["classification_confidence"] = 0.5
-                    segment["educational_score"] = 0.0
-                    classified_segments.append(segment)
-
-        # Second pass: enhance classification with context from adjacent segments
-        enhanced_segments = self._enhance_with_context(classified_segments)
-
-        return enhanced_segments
-
-    def _classify_single_segment(
-        self,
-        segment: Dict,
-        global_context: Dict,
-        domain: str,
-        language: str
-    ) -> Dict:
-        """
-        Classify a single segment based on its content and global context.
-
-        Args:
-            segment: Segment dictionary
-            global_context: Global context information
-            domain: Content domain
-            language: Language code
-
-        Returns:
-            Classified segment dictionary
-        """
-        # Copy segment to avoid modifying original
-        result = segment.copy()
-        text = segment.get("text", "")
-
-        # Skip empty segments
-        if not text.strip():
-            result["content_type"] = "mixed"
-            result["classification_confidence"] = 0.5
-            result["educational_score"] = 0.0
-            return result
-
-        # Extract features for classification
-        features = self._extract_segment_features(text, language)
-
-        # Combine local features with global context
-        classification = self._classify_with_features(
-            features,
-            global_context,
-            domain,
-            language
-        )
-
-        # Calculate educational significance
-        educational_score = self._calculate_educational_score(
-            text,
-            features,
-            global_context,
-            domain,
-            language
-        )
-
-        # Update segment with classification
-        result["content_type"] = classification["content_type"]
-        result["classification_confidence"] = classification["confidence"]
-        result["educational_score"] = educational_score
-        result["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
-
-        # Save extracted features for debugging/visualization
-        result["features"] = {
-            "theoretical_score": classification.get("theoretical_score", 0),
-            "practical_score": classification.get("practical_score", 0),
-            "key_terms": features.get("key_terms", []),
-            "domain_terms": features.get("domain_terms", [])
-        }
-
-        return result
-
-    def _extract_segment_features(self, text: str, language: str) -> Dict[str, Any]:
-        """
-        Extract features from a segment for classification.
-
-        Args:
-            text: Segment text
-            language: Language code
-
-        Returns:
-            Dictionary of features
-        """
-        # Initialize features
-        features = {
-            "word_count": 0,
-            "key_terms": [],
-            "domain_terms": [],
-            "theoretical_indicators": 0,
-            "practical_indicators": 0,
-            "educational_indicators": 0,
-            "tokens": [],
-            "word_counts": {}
-        }
-
-        if not text.strip():
-            return features
-
-        # Use spaCy for feature extraction if available
-        if SPACY_AVAILABLE and language in self._spacy_models:
-            try:
-                # Process with spaCy
-                nlp = self._spacy_models[language]
-                doc = nlp(text)
-
-                # Extract tokens
-                features["tokens"] = [token.text.lower() for token in doc
-                                    if not token.is_punct and not token.is_space]
-                features["word_count"] = len(features["tokens"])
-
-                # Extract key terms - handle language-specific differences
-                key_terms = []
-
-                # Check if noun_chunks attribute is available
-                has_noun_chunks = True
-                try:
-                    # Just test if we can iterate through noun chunks
-                    next(iter(doc.noun_chunks), None)
-                except (ValueError, AttributeError):
-                    has_noun_chunks = False
-
-                if has_noun_chunks:
-                    # Use noun chunks for languages that support it
-                    for chunk in doc.noun_chunks:
-                        if len(chunk.text) > 2:
-                            key_terms.append(chunk.text.lower())
-                else:
-                    # For languages without noun chunks (like Russian),
-                    # extract nouns and noun+adjective combinations
-                    for token in doc:
-                        # Extract single nouns
-                        if token.pos_ == "NOUN" and len(token.text) > 2:
-                            key_terms.append(token.text.lower())
-
-                        # Extract adjective+noun combinations
-                        if token.pos_ == "NOUN" and token.i > 0:
-                            prev_token = doc[token.i - 1]
-                            if prev_token.pos_ == "ADJ":
-                                phrase = f"{prev_token.text} {token.text}".lower()
-                                key_terms.append(phrase)
-
-                features["key_terms"] = key_terms
-
-                # Count words
-                features["word_counts"] = Counter(features["tokens"])
-
-            except Exception as e:
-                logger.warning(f"spaCy feature extraction failed: {e} - using fallback")
-
-        # Fallback feature extraction
-        if not features["word_count"]:
-            # Basic tokenization
-            tokens = re.findall(r'\b\w+\b', text.lower())
-            features["tokens"] = tokens
-            features["word_count"] = len(tokens)
-            features["word_counts"] = Counter(tokens)
-
-        # Count theoretical and practical indicators
-        theoretical_patterns = self.classification_indicators["theoretical"].get(language, [])
-        practical_patterns = self.classification_indicators["practical"].get(language, [])
-        educational_indicators = self.educational_indicators.get(language, [])
-
-        text_lower = text.lower()
-
-        # Count pattern occurrences
-        features["theoretical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in theoretical_patterns)
-        features["practical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in practical_patterns)
-        features["educational_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in educational_indicators)
-
-        return features
-
-    def _classify_with_features(
-        self,
-        features: Dict[str, Any],
-        global_context: Dict,
-        domain: str,
-        language: str
-    ) -> Dict[str, Any]:
-        """
-        Classify segment based on features and global context.
-
-        Args:
-            features: Segment features
-            global_context: Global context information
-            domain: Content domain
-            language: Language code
-
-        Returns:
-            Classification result dictionary
-        """
-        # Calculate theoretical and practical scores
-        theoretical_score = 0.0
-        practical_score = 0.0
-
-        # 1. Score based on indicator patterns
-        theoretical_score += features["theoretical_indicators"] * 1.0
-        practical_score += features["practical_indicators"] * 1.0
-
-        # 2. Score based on domain-specific keywords
-        # Domain-specific keywords for theoretical/practical scoring
-        domain_keywords = {
-            "physics": {
-                "theoretical": {
-                    "en": ["theory", "principle", "law", "equation", "model", "concept"],
-                    "ru": ["теория", "принцип", "закон", "уравнение", "модель", "концепция"]
-                },
-                "practical": {
-                    "en": ["example", "experiment", "demonstration", "application", "measurement"],
-                    "ru": ["пример", "эксперимент", "демонстрация", "применение", "измерение"]
-                }
-            },
-            "mathematics": {
-                "theoretical": {
-                    "en": ["theorem", "proof", "definition", "lemma", "corollary", "axiom"],
-                    "ru": ["теорема", "доказательство", "определение", "лемма", "следствие", "аксиома"]
-                },
-                "practical": {
-                    "en": ["example", "problem", "calculation", "application", "solution"],
-                    "ru": ["пример", "задача", "вычисление", "применение", "решение"]
-                }
-            },
-            "programming": {
-                "theoretical": {
-                    "en": ["concept", "paradigm", "principle", "architecture", "algorithm"],
-                    "ru": ["концепция", "парадигма", "принцип", "архитектура", "алгоритм"]
-                },
-                "practical": {
-                    "en": ["code", "implementation", "example", "function", "method"],
-                    "ru": ["код", "реализация", "пример", "функция", "метод"]
-                }
-            }
-        }
-
-        # Get domain-specific keywords
-        theoretical_keywords = domain_keywords.get(domain, {}).get("theoretical", {}).get(language, [])
-        practical_keywords = domain_keywords.get(domain, {}).get("practical", {}).get(language, [])
-
-        # Score based on domain keywords
-        text_lower = " ".join(features["tokens"]).lower()
-        theoretical_score += sum(text_lower.count(kw.lower()) for kw in theoretical_keywords) * 0.5
-        practical_score += sum(text_lower.count(kw.lower()) for kw in practical_keywords) * 0.5
-
-        # 3. Consider global context
-        # Bias classification based on global primary content type
-        if global_context["primary_content_type"] == "theoretical":
-            theoretical_score += 0.5
-        elif global_context["primary_content_type"] == "practical":
-            practical_score += 0.5
-
-        # 4. Normalize scores based on text length to avoid bias towards longer segments
-        word_count = features["word_count"]
-        if word_count > 0:
-            normalization_factor = 1.0 / (0.5 + 0.05 * min(word_count, 50))  # Cap for very long segments
-            theoretical_score *= normalization_factor
-            practical_score *= normalization_factor
-
-        # Determine classification and confidence
-        content_type = "mixed"
-        confidence = 0.5
-
-        if theoretical_score > practical_score:
-            content_type = "theoretical"
-            margin = theoretical_score - practical_score
-            confidence = min(0.5 + margin / 4, 0.95)  # Cap confidence at 0.95
-        elif practical_score > theoretical_score:
-            content_type = "practical"
-            margin = practical_score - theoretical_score
-            confidence = min(0.5 + margin / 4, 0.95)  # Cap confidence at 0.95
-
-        return {
-            "content_type": content_type,
-            "confidence": confidence,
-            "theoretical_score": theoretical_score,
-            "practical_score": practical_score
-        }
-
-    def _calculate_educational_score(
+    def _calculate_educational_value(
         self,
         text: str,
-        features: Dict,
-        global_context: Dict,
-        domain: str,
+        global_analysis: Dict,
         language: str
     ) -> float:
         """
-        Calculate an educational significance score for a segment.
-        Determines whether this is a substantive explanation vs. passing mention.
+        Calculate the educational value of a text segment.
 
         Args:
             text: Segment text
-            features: Segment features
-            global_context: Global context information
-            domain: Content domain
+            global_analysis: Global text analysis
             language: Language code
 
         Returns:
-            Educational score (higher = more educational significance)
+            Educational value score
         """
-        # Start with no educational significance
-        educational_score = 0.0
+        # Initialize educational value
+        educational_value = 0.0
 
-        # Factor 1: Length of content - longer segments tend to have more educational value
-        word_count = features["word_count"]
-        if word_count > 0:
-            # Logarithmic scale to give diminishing returns for very long segments
-            import math
-            length_score = min(1.0 + math.log10(word_count / 10 + 1), 2.0)
-            educational_score += length_score
+        # Skip empty text
+        if not text.strip():
+            return educational_value
 
-        # Factor 2: Educational markers presence
-        educational_score += features["educational_indicators"] * 0.5
+        # Get appropriate language for markers
+        lang = language if language in self.educational_indicators else 'en'
 
-        # Factor 3: Domain-specific term density
-        # Higher density of domain terms indicates educational content
-        domain_keywords = {
-            "physics": {
-                "en": ["quantum", "mechanics", "energy", "force", "particle", "wave", "theory"],
-                "ru": ["квантовый", "механика", "энергия", "сила", "частица", "волна", "теория"]
-            },
-            "mathematics": {
-                "en": ["theorem", "proof", "equation", "function", "derivative", "integral"],
-                "ru": ["теорема", "доказательство", "уравнение", "функция", "производная", "интеграл"]
-            },
-            "programming": {
-                "en": ["algorithm", "function", "class", "object", "method", "variable"],
-                "ru": ["алгоритм", "функция", "класс", "объект", "метод", "переменная"]
-            }
-        }
+        # Check for educational content markers in the text
+        text_lower = text.lower()
+        edu_markers = self.educational_indicators.get(lang, [])
 
-        # Get domain terms
-        domain_terms = domain_keywords.get(domain, {}).get(language, [])
+        # Count educational markers found in text
+        marker_count = sum(1 for marker in edu_markers if marker in text_lower)
 
-        # Count domain terms in text
-        domain_term_count = sum(text.lower().count(term) for term in domain_terms)
+        # Add educational value based on markers
+        educational_value += marker_count * 0.8
 
-        # Calculate domain term density
-        if word_count > 0:
-            domain_density = domain_term_count / word_count
-            domain_score = min(domain_density * 5.0, 2.0)  # Cap at 2.0
-            educational_score += domain_score
+        # Length factor - longer segments tend to be more educational
+        words = len(text.split())
+        length_value = min(words / 20, 2.0)  # Cap at 2.0
+        educational_value += length_value
 
-        # Factor 4: Contains key terms from global context
-        segment_terms = set(features["key_terms"])
-        global_terms = global_context["key_terms"]
+        # Check for domain terms (higher frequency = more educational)
+        key_terms = global_analysis.get("key_terms", [])
+        term_count = sum(1 for term in key_terms if term in text_lower)
+        educational_value += term_count * 0.5
 
-        # If segment contains global key terms, it's more likely to be educational
-        shared_terms = segment_terms.intersection(global_terms)
-        if shared_terms:
-            term_score = min(len(shared_terms) * 0.3, 1.0)
-            educational_score += term_score
+        return educational_value
 
-        # Factor 5: Contains terminology patterns that suggest explanation
-        explanation_patterns = {
-            'en': [
-                r'(is|are) defined as', r'refers to', r'means that', r'represents',
-                r'consists of', r'comprises', r'described as', r'characterized by',
-                r'explanation of', r'understanding of', r'concept of'
-            ],
-            'ru': [
-                r'определяется как', r'означает', r'обозначает', r'представляет',
-                r'состоит из', r'включает в себя', r'описывается как', r'характеризуется',
-                r'объяснение', r'понимание', r'концепция'
-            ]
-        }
-
-        # Count explanatory patterns
-        explanation_patterns_lang = explanation_patterns.get(language, explanation_patterns['en'])
-        explanation_score = 0
-
-        for pattern in explanation_patterns_lang:
-            if re.search(pattern, text.lower()):
-                explanation_score += 0.5
-
-        educational_score += min(explanation_score, 1.5)  # Cap at 1.5
-
-        return educational_score
-
-    def _enhance_with_context(self, segments: List[Dict]) -> List[Dict]:
+    def _calculate_theory_practice_ratio(self, global_analysis: Dict) -> float:
         """
-        Enhance segment classification by considering context from adjacent segments.
+        Calculate theory/practice ratio for the entire video based on global indicators.
 
         Args:
-            segments: List of classified segments
+            global_analysis: Global text analysis results
 
         Returns:
-            Enhanced segments with improved classification
+            Theory/practice ratio (0.0 = fully practical, 1.0 = fully theoretical)
         """
-        if len(segments) <= 1:
-            return segments
+        theoretical_indicators = global_analysis.get("theoretical_indicators", 0)
+        practical_indicators = global_analysis.get("practical_indicators", 0)
 
-        enhanced_segments = []
+        # Calculate ratio only if we have indicators
+        total_indicators = theoretical_indicators + practical_indicators
 
-        # Use a sliding window approach to consider context
-        for i, segment in enumerate(segments):
-            # Get original values
-            content_type = segment.get("content_type", "mixed")
-            confidence = segment.get("classification_confidence", 0.5)
-            educational_score = segment.get("educational_score", 0.0)
+        if total_indicators > 0:
+            ratio = theoretical_indicators / total_indicators
 
-            # Get preceding and following segments when available
-            preceding = segments[i-1] if i > 0 else None
-            following = segments[i+1] if i < len(segments)-1 else None
+            # Apply sigmoid normalization to avoid extreme values
+            # This gives a smoother distribution with most values between 0.2 and 0.8
+            normalized_ratio = 1 / (1 + 2.5 * pow(2.71828, -5 * (ratio - 0.5)))
+            return normalized_ratio
 
-            # Enhance confidence based on adjacent segments with same classification
-            if preceding and following:
-                # If both adjacent segments have same classification, boost confidence
-                if (preceding.get("content_type") == content_type and
-                    following.get("content_type") == content_type):
-                    confidence = min(confidence + 0.15, 0.95)
-
-                # If part of a continuous educational section, boost educational score
-                if (preceding.get("is_educational", False) and
-                    following.get("is_educational", False)):
-                    educational_score += 0.5
-            elif preceding:
-                # If only preceding segment matches, small boost
-                if preceding.get("content_type") == content_type:
-                    confidence = min(confidence + 0.05, 0.95)
-
-                # Educational content boost if preceded by educational content
-                if preceding.get("is_educational", False):
-                    educational_score += 0.2
-            elif following:
-                # If only following segment matches, small boost
-                if following.get("content_type") == content_type:
-                    confidence = min(confidence + 0.05, 0.95)
-
-                # Educational content boost if followed by educational content
-                if following.get("is_educational", False):
-                    educational_score += 0.2
-
-            # Update segment with enhanced values
-            enhanced_segment = segment.copy()
-            enhanced_segment["classification_confidence"] = confidence
-            enhanced_segment["educational_score"] = educational_score
-            enhanced_segment["is_educational"] = educational_score > 2.5  # Threshold for educational vs passing mention
-
-            enhanced_segments.append(enhanced_segment)
-
-        return enhanced_segments
+        # Default to balanced ratio if no indicators found
+        return 0.5
 
     def _normalize_english_text(self, text: str) -> str:
         """
@@ -1368,95 +918,39 @@ class TranscriptProcessor:
         # Common problematic phrases in Russian transcripts
         text = text.replace("то обсуждений давайте", "")
         text = text.replace("то состояние второго определённо такое", "")
-        text = text.replace("вакуумное состояние оно", "вакуумное состояние")
-        text = text.replace("эрмитово оператора", "эрмитов оператор")
-        text = text.replace("любое собственное состояние оно", "собственное состояние")
+        text = text.replace("некоторого некоторой", "")
+        text = text.replace("состояние едини на2", "")
+        text = text.replace("сейчас скажу", "")
+        text = text.replace("потом обсужу", "")
+        text = text.replace("можно убедиться", "")
+        text = text.replace("второго определённо", "")
 
         return text.strip()
 
-# Helper functions for testing and standalone usage
-def calculate_theory_practice_ratio(segments: List[Dict]) -> Dict[str, Any]:
+# Function to calculate video-level theory/practice ratio
+def calculate_theory_practice_ratio(global_analysis: Dict) -> Dict[str, Any]:
     """
-    Calculate theory/practice ratio from classified segments.
+    Calculate theory/practice ratio for a video based on global analysis.
 
     Args:
-        segments: Classified transcript segments
+        global_analysis: Global analysis data
 
     Returns:
-        Dictionary with theory/practice analysis
+        Dictionary with theory practice analysis
     """
-    if not segments:
-        return {
-            "classification": "unknown",
-            "confidence": 0.0,
-            "theoretical_segments": 0,
-            "practical_segments": 0,
-            "mixed_segments": 0,
-            "theory_practice_ratio": 0.5
-        }
+    # Extract theoretical and practical indicators
+    theoretical_indicators = global_analysis.get("theoretical_indicators", 0)
+    practical_indicators = global_analysis.get("practical_indicators", 0)
 
-    # Count segment types with confidence weighting
-    theoretical_count = 0
-    practical_count = 0
-    mixed_count = 0
+    # Calculate ratio
+    total_indicators = theoretical_indicators + practical_indicators
+    theory_practice_ratio = 0.5  # Default balanced ratio
 
-    # Track total confidence-weighted counts
-    theoretical_weighted = 0
-    practical_weighted = 0
-    mixed_weighted = 0
+    if total_indicators > 0:
+        theory_practice_ratio = theoretical_indicators / total_indicators
 
-    # Track time distribution
-    total_duration = 0
-    theoretical_duration = 0
-    practical_duration = 0
-    mixed_duration = 0
-
-    for segment in segments:
-        segment_type = segment.get("content_type", "mixed")
-        confidence = segment.get("classification_confidence", 0.6)  # Default confidence if not present
-
-        # Calculate segment duration
-        start_time = segment.get("start_time", 0)
-        end_time = segment.get("end_time", 0)
-        duration = end_time - start_time
-        total_duration += duration
-
-        if segment_type == "theoretical":
-            theoretical_count += 1
-            theoretical_weighted += confidence
-            theoretical_duration += duration
-        elif segment_type == "practical":
-            practical_count += 1
-            practical_weighted += confidence
-            practical_duration += duration
-        else:  # mixed
-            mixed_count += 1
-            mixed_weighted += confidence
-            mixed_duration += duration
-
-    total_segments = theoretical_count + practical_count + mixed_count
-
-    # Calculate theory/practice ratio with improved weighting
-    if total_segments > 0:
-        # Apply a weighted formula with confidence
-        total_weighted = theoretical_weighted + practical_weighted + mixed_weighted
-
-        if total_weighted > 0:
-            # Apply confidence-weighted formula
-            theory_weight = theoretical_weighted + (mixed_weighted * 0.5)
-            theory_practice_ratio = theory_weight / total_weighted
-        else:
-            theory_practice_ratio = 0.5
-
-        # Factor in duration-based ratio
-        if total_duration > 0:
-            duration_theory_ratio = (theoretical_duration + (mixed_duration * 0.5)) / total_duration
-
-            # Final ratio is an average of count-based and duration-based ratios
-            theory_practice_ratio = (theory_practice_ratio + duration_theory_ratio) / 2
-
-    else:
-        theory_practice_ratio = 0.5
+        # Apply sigmoid normalization for smoother distribution
+        theory_practice_ratio = 1 / (1 + 2.5 * pow(2.71828, -5 * (theory_practice_ratio - 0.5)))
 
     # Determine overall classification
     if theory_practice_ratio > 0.7:
@@ -1473,16 +967,10 @@ def calculate_theory_practice_ratio(segments: List[Dict]) -> Dict[str, Any]:
     return {
         "classification": classification,
         "confidence": confidence,
-        "theoretical_segments": theoretical_count,
-        "practical_segments": practical_count,
-        "mixed_segments": mixed_count,
         "theory_practice_ratio": theory_practice_ratio,
-        "duration_analysis": {
-            "total_duration": total_duration,
-            "theoretical_duration": theoretical_duration,
-            "practical_duration": practical_duration,
-            "mixed_duration": mixed_duration
-        }
+        "theoretical_indicators": theoretical_indicators,
+        "practical_indicators": practical_indicators,
+        "total_indicators": total_indicators
     }
 
 def test_transcript_processor(raw_segments: List[Dict], video_metadata: Dict) -> Dict[str, Any]:
@@ -1512,8 +1000,9 @@ def test_transcript_processor(raw_segments: List[Dict], video_metadata: Dict) ->
         "output_segments": len(result["segments"])
     }
 
-    # Calculate theory/practice ratio for the processed segments
-    theory_practice_results = calculate_theory_practice_ratio(result["segments"])
+    # Calculate theory/practice ratio for the video
+    global_analysis = result.get("global_analysis", {})
+    theory_practice_results = calculate_theory_practice_ratio(global_analysis)
     result["theory_practice_results"] = theory_practice_results
 
     return result
