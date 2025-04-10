@@ -896,6 +896,9 @@ class TranscriptProcessor:
         Returns:
             Normalized text
         """
+        # Replace all 'ё' with 'е' for better matching
+        text = text.replace('ё', 'е').replace('Ё', 'Е')
+
         # Remove excessive whitespace
         text = re.sub(r'\s+', ' ', text.strip())
 

@@ -36,6 +36,7 @@
             spacy
             spacy-models.en_core_web_sm
             spacy-models.ru_core_news_sm
+            rapidfuzz
 
             # Google API
             google-api-python-client
