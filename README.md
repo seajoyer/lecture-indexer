@@ -2,7 +2,7 @@
 
 > **⚠️ DISCLAIMER ⚠️**
 > 
-> *This project was developed with extensive use of AI assistance. The AI wrote almost all of the code based on specifications and requirements, implementing the complex algorithms and system architecture.*
+> *This project was developed with extensive use of AI assistance. The AI wrote almost all of the code based on specifications and requirements, implementing the complex algorithms and system architecture. Use with caution :)*
 > 
 > ---
 
