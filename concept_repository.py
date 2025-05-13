@@ -11,6 +11,7 @@ import glob
 import uuid
 import logging
 import time
+import re
 from datetime import datetime
 from typing import Dict, List, Set, Optional, Tuple, Any, Union
 from pathlib import Path
@@ -51,6 +52,7 @@ class ConceptRepository:
         self.concepts = {}  # concept_id -> concept data
         self.representation_index = {}  # normalized text -> set of concept_ids
         self.language_index = defaultdict(set)  # language -> set of concept_ids
+        self.variant_index = defaultdict(set)  # variant form -> set of concept_ids
 
         # Ensure concepts directory exists
         os.makedirs(self.concepts_dir, exist_ok=True)
@@ -93,6 +95,7 @@ class ConceptRepository:
         self.concepts = {}
         self.representation_index = {}
         self.language_index = defaultdict(set)
+        self.variant_index = defaultdict(set)  # Clear variant index too
 
         # Find all JSONL files
         file_pattern = os.path.join(self.concepts_dir, "*.jsonl")
@@ -111,6 +114,9 @@ class ConceptRepository:
 
         # Build the concept relationship graph
         self._build_relationship_graph()
+
+        # Build the variant index for all concepts
+        self._build_variant_index()
 
         load_time = time.time() - start_time
         logger.info(f"Loaded {concept_count} concepts in {load_time:.2f} seconds")
@@ -228,6 +234,231 @@ class ConceptRepository:
 
                 self.representation_index[normalized_text].add(concept_id)
 
+    def _build_variant_index(self):
+        """
+        Build an index of morphological variants for all concepts.
+        This helps in matching different forms of the same concept.
+        """
+        logger.info("Building morphological variant index...")
+
+        # Process each concept and its representations
+        for concept_id, concept in self.concepts.items():
+            representations = concept.get('representations', {})
+
+            for language, texts in representations.items():
+                for text in texts:
+                    if not text:
+                        continue
+
+                    # Generate morphological variants based on language
+                    variants = self._generate_variants(text, language)
+
+                    # Add each variant to the index, pointing to this concept
+                    for variant in variants:
+                        variant_normalized = self._normalize_text(variant, language)
+                        if variant_normalized:
+                            self.variant_index[variant_normalized].add(concept_id)
+
+        logger.info(f"Variant index built with {len(self.variant_index)} entries")
+
+    def _generate_variants(self, text: str, language: str) -> Set[str]:
+        """
+        Generate common morphological variants of a concept text.
+
+        Args:
+            text: Original concept text
+            language: Language code
+
+        Returns:
+            Set of possible variants
+        """
+        variants = {text}  # Always include the original text
+
+        # Apply language-specific variant generation
+        if language == 'ru':
+            # Russian has complex morphology, generate common variants
+
+            # Split into words to handle multi-word concepts
+            words = text.split()
+
+            if len(words) > 1:
+                # For multi-word concepts like "соотношение неопределенности"
+
+                # Common singular/plural and case variations for last word
+                last_word = words[-1]
+                word_variants = self._generate_russian_word_variants(last_word)
+
+                # Common case variations for all but last word
+                prefix_words = words[:-1]
+                prefix_variants = []
+
+                for i, word in enumerate(prefix_words):
+                    # Generate variants for each word in the prefix
+                    word_vars = self._generate_russian_word_variants(word)
+
+                    # For the first iteration, just add each variant
+                    if i == 0:
+                        prefix_variants = [[v] for v in word_vars]
+                    else:
+                        # Combine with existing variants
+                        new_variants = []
+                        for existing in prefix_variants:
+                            for var in word_vars:
+                                new_variants.append(existing + [var])
+                        prefix_variants = new_variants
+
+                # Combine prefix variants with last word variants
+                if prefix_variants:
+                    for prefix in prefix_variants:
+                        for last_var in word_variants:
+                            variant = ' '.join(prefix + [last_var])
+                            variants.add(variant)
+            else:
+                # For single-word concepts
+                variants.update(self._generate_russian_word_variants(text))
+
+        elif language == 'en':
+            # English has simpler morphology, but still handle common variants
+            variants.update(self._generate_english_word_variants(text))
+
+        # Add lowercase variant for all languages
+        variants.add(text.lower())
+
+        return variants
+
+    def _generate_russian_word_variants(self, word: str) -> Set[str]:
+        """
+        Generate common Russian morphological variants for a single word.
+
+        Args:
+            word: Russian word
+
+        Returns:
+            Set of possible variants
+        """
+        variants = {word}
+
+        # Common singular/plural and case ending variations
+        if len(word) > 3:  # Only process words of meaningful length
+            # Handle common singular/plural alterations
+            if word.endswith('ие'):
+                variants.add(word[:-2] + 'ия')  # ие -> ия (case change)
+                variants.add(word[:-2] + 'ий')  # ие -> ий (case change)
+                variants.add(word[:-2] + 'ием')  # ие -> ием (instrumental case)
+                variants.add(word + 'м')  # +м (instrumental case)
+            elif word.endswith('ия'):
+                variants.add(word[:-2] + 'ие')  # ия -> ие
+                variants.add(word[:-2] + 'ий')  # ия -> ий
+                variants.add(word[:-2] + 'ию')  # ия -> ию (accusative)
+                variants.add(word[:-2] + 'ией')  # ия -> ией (instrumental)
+            elif word.endswith('ть'):
+                variants.add(word[:-2] + 'ти')  # ть -> ти (infinitive variant)
+
+            # Handle common plural forms
+            if word.endswith('ость'):
+                variants.add(word[:-4] + 'ости')  # ость -> ости (genitive or plural)
+                variants.add(word[:-4] + 'остей')  # ость -> остей (plural genitive)
+                variants.add(word[:-4] + 'остью')  # ость -> остью (instrumental)
+            elif word.endswith('ство'):
+                variants.add(word[:-4] + 'ства')  # ство -> ства (genitive or plural)
+                variants.add(word[:-4] + 'ствам')  # ство -> ствам (plural dative)
+            elif word.endswith('ние'):
+                variants.add(word[:-2] + 'ия')  # ние -> ния (genitive)
+                variants.add(word[:-2] + 'ий')  # ние -> ний (plural genitive)
+                variants.add(word[:-3] + 'й')  # ние -> ний (shorter form)
+                variants.add(word + 'м')  # +м (instrumental case)
+            elif word.endswith('ика'):
+                variants.add(word[:-2] + 'ике')  # ика -> ике (locative)
+                variants.add(word[:-2] + 'ику')  # ика -> ику (accusative)
+                variants.add(word[:-2] + 'ики')  # ика -> ики (plural)
+            elif word.endswith('а'):
+                variants.add(word[:-1] + 'ы')  # а -> ы (plural)
+                variants.add(word[:-1] + 'у')  # а -> у (accusative)
+                variants.add(word[:-1] + 'е')  # а -> е (locative)
+            elif word.endswith('я'):
+                variants.add(word[:-1] + 'и')  # я -> и (plural or genitive)
+                variants.add(word[:-1] + 'ю')  # я -> ю (accusative)
+                variants.add(word[:-1] + 'е')  # я -> е (locative)
+            elif word.endswith('й'):
+                variants.add(word[:-1] + 'я')  # й -> я (genitive)
+                variants.add(word[:-1] + 'ю')  # й -> ю (accusative)
+                variants.add(word[:-1] + 'и')  # й -> и (plural)
+                variants.add(word[:-1] + 'ем')  # й -> ем (instrumental)
+
+            # Special case for words like "неопределенность" -> "неопределенностей"
+            if word.endswith('ь'):
+                variants.add(word[:-1] + 'и')  # ь -> и (plural)
+                variants.add(word[:-1] + 'ей')  # ь -> ей (plural genitive)
+                variants.add(word[:-1] + 'ью')  # ь -> ью (instrumental)
+
+            # Specific to the example "неопределенности" -> "неопределенностей"
+            if word.endswith('ти'):
+                variants.add(word[:-2] + 'тей')  # ти -> тей
+                variants.add(word[:-2] + 'ть')  # ти -> ть (nominative singular)
+
+            # Handle words like "неопределенностей"
+            if word.endswith('тей'):
+                variants.add(word[:-3] + 'ть')  # тей -> ть (singular)
+                variants.add(word[:-3] + 'ти')  # тей -> ти (genitive singular)
+
+        # Handle simple 2-3 letter prepositions and connectors
+        if word in {"от", "до", "на", "по", "за", "из", "под", "над", "при", "для",
+                   "и", "а", "но", "или", "что", "как", "так", "где", "кто"}:
+            # These words are invariant, no need to generate variants
+            pass
+
+        return variants
+
+    def _generate_english_word_variants(self, text: str) -> Set[str]:
+        """
+        Generate common English morphological variants.
+
+        Args:
+            text: English text
+
+        Returns:
+            Set of possible variants
+        """
+        variants = {text}
+
+        # Process multi-word phrases
+        words = text.split()
+
+        # Simple handling for multi-word phrases - for now, just add variants with/without "the", "a", "an"
+        if len(words) > 1:
+            # Remove leading articles if present
+            if words[0].lower() in {'the', 'a', 'an'}:
+                variants.add(' '.join(words[1:]))
+            # Add versions with articles if not present
+            elif words[0].lower() not in {'the', 'a', 'an'}:
+                variants.add('the ' + text)
+                if words[0][0].lower() in 'aeiou':
+                    variants.add('an ' + text)
+                else:
+                    variants.add('a ' + text)
+
+        # For single words or multi-word phrases, handle common morphological changes
+        for word in words:
+            if len(word) <= 3:
+                continue  # Skip very short words
+
+            # Common English endings - handle plurals and word forms
+            if word.endswith('s') and len(word) > 4:
+                variants.add(text.replace(word, word[:-1]))  # Remove trailing 's'
+            elif not word.endswith('s') and len(word) > 3:
+                variants.add(text.replace(word, word + 's'))  # Add trailing 's'
+
+            # Handle common verb forms
+            if word.endswith('ing') and len(word) > 5:
+                variants.add(text.replace(word, word[:-3]))  # Remove 'ing'
+                variants.add(text.replace(word, word[:-3] + 'e'))  # Remove 'ing', add 'e'
+            elif word.endswith('ed') and len(word) > 4:
+                variants.add(text.replace(word, word[:-2]))  # Remove 'ed'
+                variants.add(text.replace(word, word[:-1]))  # Remove 'd'
+                variants.add(text.replace(word, word[:-2] + 'e'))  # Remove 'ed', add 'e'
+
+        return variants
+
     def _normalize_text(self, text: str, language: str = 'en') -> str:
         """
         Normalize text for concept matching.
@@ -248,10 +479,45 @@ class ConceptRepository:
         # Remove extra whitespace
         normalized = ' '.join(normalized.split())
 
-        # Language-specific normalization could be added here
+        # Language-specific normalization
         if language == 'ru':
             # Russian normalization (example: replace 'ё' with 'е')
             normalized = normalized.replace('ё', 'е')
+
+            # Remove common noise words for more flexible matching
+            noise_words = {'это', 'вот', 'так', 'так называемое', 'так называемая',
+                         'который', 'которая', 'которые', 'которое'}
+
+            for word in noise_words:
+                normalized = re.sub(fr'\b{word}\b', '', normalized)
+
+            # Remove common punctuation
+            normalized = normalized.replace('-', ' ').replace('"', '').replace("'", '')
+
+            # Handle specific types of concepts
+            if 'соотношение' in normalized or 'принцип' in normalized:
+                # Special handling for uncertainty principle variations
+                normalized = re.sub(r'соотношени[яе]ми?', 'соотношение', normalized)
+                normalized = re.sub(r'неопределенносте[йи]', 'неопределенности', normalized)
+
+        elif language == 'en':
+            # Enhanced English normalization
+            # Remove common articles and determiners
+            for prefix in ['the ', 'a ', 'an ', 'this ', 'that ']:
+                if normalized.startswith(prefix):
+                    normalized = normalized[len(prefix):]
+
+            # Remove common noise words for more flexible matching
+            noise_words = {'so-called', 'so called', 'known as', 'called', 'which is', 'that is'}
+
+            for word in noise_words:
+                normalized = normalized.replace(word, '')
+
+            # Remove hyphens
+            normalized = normalized.replace('-', ' ')
+
+        # Remove extra whitespace again after all replacements
+        normalized = ' '.join(normalized.split())
 
         return normalized
 
@@ -262,48 +528,63 @@ class ConceptRepository:
         pass
 
     def find_concepts_by_text(
-        self,
-        text: str,
-        language: Optional[str] = None,
-        threshold: float = 0.8,
-        max_results: int = 10
-    ) -> List[Dict]:
-        """
-        Find concepts by text using exact and fuzzy matching.
+            self,
+            text: str,
+            language: Optional[str] = None,
+            threshold: float = 0.8,
+            max_results: int = 10
+        ) -> List[Dict]:
+            """
+            Find concepts by text using exact and fuzzy matching.
 
-        Args:
-            text: Text to search for
-            language: Optional language filter
-            threshold: Minimum similarity threshold (0.0-1.0)
-            max_results: Maximum number of results to return
+            Args:
+                text: Text to search for
+                language: Optional language filter
+                threshold: Minimum similarity threshold (0.0-1.0)
+                max_results: Maximum number of results to return
 
-        Returns:
-            List of matching concepts with similarity scores
-        """
-        if not text:
-            return []
+            Returns:
+                List of matching concepts with similarity scores
+            """
+            if not text:
+                return []
 
-        # Normalize query text
-        normalized_text = self._normalize_text(text, language or 'en')
+            # Normalize query text
+            normalized_text = self._normalize_text(text, language or 'en')
 
-        # Initialize results
-        matches = []
+            # Initialize results
+            matches = []
 
-        # First try exact match
-        exact_matches = self._find_exact_matches(normalized_text, language)
+            # First try exact match
+            exact_matches = self._find_exact_matches(normalized_text, language)
 
-        # If exact matches found, return them
-        if exact_matches:
-            return exact_matches[:max_results]
+            # Then try variant matches (which are still considered exact but use the variant index)
+            variant_matches = self._find_variant_matches(normalized_text, language)
 
-        # If no exact matches, try fuzzy matching
-        fuzzy_matches = self._find_fuzzy_matches(normalized_text, language, threshold)
+            # Deduplicate exact and variant matches
+            seen_concept_ids = set(match['concept_id'] for match in exact_matches)
+            deduplicated_variant_matches = []
 
-        # Combine and sort results
-        matches = exact_matches + fuzzy_matches
-        matches.sort(key=lambda x: x.get('similarity', 0), reverse=True)
+            for match in variant_matches:
+                if match['concept_id'] not in seen_concept_ids:
+                    seen_concept_ids.add(match['concept_id'])
+                    deduplicated_variant_matches.append(match)
 
-        return matches[:max_results]
+            # Combine deduplicated matches
+            combined_exact_matches = exact_matches + deduplicated_variant_matches
+
+            # If we found exact or variant matches, return them
+            if combined_exact_matches:
+                return combined_exact_matches[:max_results]
+
+            # If no exact or variant matches, try fuzzy matching
+            fuzzy_matches = self._find_fuzzy_matches(normalized_text, language, threshold)
+
+            # Combine and sort results
+            matches = combined_exact_matches + fuzzy_matches
+            matches.sort(key=lambda x: x.get('similarity', 0), reverse=True)
+
+            return matches[:max_results]
 
     def _find_exact_matches(self, normalized_text: str, language: Optional[str] = None) -> List[Dict]:
         """
@@ -334,6 +615,39 @@ class ConceptRepository:
                         'concept': concept,
                         'similarity': 1.0,
                         'match_type': 'exact'
+                    })
+
+        return results
+
+    def _find_variant_matches(self, normalized_text: str, language: Optional[str] = None) -> List[Dict]:
+        """
+        Find concepts that match morphological variants of the text.
+
+        Args:
+            normalized_text: Normalized text to match
+            language: Optional language filter
+
+        Returns:
+            List of matching concepts via their variants
+        """
+        results = []
+
+        # Check if there's a match in the variant index
+        if normalized_text in self.variant_index:
+            concept_ids = self.variant_index[normalized_text]
+
+            # Filter by language if specified
+            if language:
+                concept_ids = concept_ids.intersection(self.language_index.get(language, set()))
+
+            for concept_id in concept_ids:
+                concept = self.concepts.get(concept_id)
+                if concept:
+                    results.append({
+                        'concept_id': concept_id,
+                        'concept': concept,
+                        'similarity': 0.95,  # Slightly lower than exact match
+                        'match_type': 'variant'
                     })
 
         return results
@@ -499,11 +813,38 @@ class ConceptRepository:
         self.concepts[concept_id] = concept
         self._index_concept_representations(concept_id, concept)
 
+        # Update variant index for this concept
+        self._update_variant_index_for_concept(concept_id, concept)
+
         # Save to file
         self._save_concept(concept, file_category)
 
         logger.info(f"Added new concept: {concept_id}")
         return concept_id
+
+    def _update_variant_index_for_concept(self, concept_id: str, concept: Dict):
+        """
+        Update the variant index for a single concept.
+
+        Args:
+            concept_id: Concept ID
+            concept: Concept dictionary
+        """
+        representations = concept.get('representations', {})
+
+        for language, texts in representations.items():
+            for text in texts:
+                if not text:
+                    continue
+
+                # Generate morphological variants based on language
+                variants = self._generate_variants(text, language)
+
+                # Add each variant to the index, pointing to this concept
+                for variant in variants:
+                    variant_normalized = self._normalize_text(variant, language)
+                    if variant_normalized:
+                        self.variant_index[variant_normalized].add(concept_id)
 
     def add_representation(
         self,
@@ -551,6 +892,13 @@ class ConceptRepository:
 
         # Add to language index if needed
         self.language_index[language].add(concept_id)
+
+        # Update variant index
+        variants = self._generate_variants(text, language)
+        for variant in variants:
+            variant_normalized = self._normalize_text(variant, language)
+            if variant_normalized:
+                self.variant_index[variant_normalized].add(concept_id)
 
         # Update concept's last_updated timestamp
         concept['metadata']['last_updated'] = datetime.now().isoformat()
@@ -849,7 +1197,8 @@ class ConceptRepository:
             'relationships': {
                 'prerequisites_count': 0,
                 'related_count': 0
-            }
+            },
+            'variants': len(self.variant_index)
         }
 
         # Count concepts by language
@@ -870,6 +1219,10 @@ class ConceptRepository:
         for concept in self.concepts.values():
             stats['relationships']['prerequisites_count'] += len(concept.get('prerequisites', []))
             stats['relationships']['related_count'] += len(concept.get('related', []))
+
+        # Calculate average variants per concept
+        if len(self.concepts) > 0:
+            stats['avg_variants_per_concept'] = len(self.variant_index) / len(self.concepts)
 
         return stats
 

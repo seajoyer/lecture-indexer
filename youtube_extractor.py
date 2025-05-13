@@ -1,7 +1,7 @@
 """
 Enhanced YouTube data extractor for the Lecture Video Content Indexer.
 Handles extraction of video metadata and transcripts with improved multilingual support.
-Added support for playlist processing.
+Added support for playlist processing and more robust transcript extraction.
 """
 
 import re
@@ -14,6 +14,9 @@ import json
 import unicodedata
 import langdetect
 from langdetect.lang_detect_exception import LangDetectException
+import requests
+import time
+import random
 
 # Import simplified modules
 from cache_manager import cache_get, cache_set
@@ -45,6 +48,10 @@ class YouTubeExtractor:
 
         # Initialize language detection
         self._init_language_detection()
+
+        # Maximum retries for transcript fetching
+        self.max_retries = 3
+        self.retry_delay = 2  # seconds
 
         logger.info("YouTubeExtractor initialized with enhanced multilingual support and playlist handling")
 
@@ -683,6 +690,7 @@ class YouTubeExtractor:
     def extract_transcript(self, video_id: str, language_preference: List[str] = ['en', 'ru']) -> List[Dict]:
         """
         Extracts transcript for a YouTube video with improved multilingual support.
+        Enhanced with multiple extraction methods and fallbacks.
 
         Args:
             video_id: YouTube video ID
@@ -708,115 +716,386 @@ class YouTubeExtractor:
             cache_set("transcript", cache_key, mock_transcript)
             return mock_transcript
 
-        try:
-            # Get available transcript list
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        # Use multiple methods with fallbacks to extract transcript
+        transcript_data = None
 
-            # Get all available languages
-            available_langs = {
-                **transcript_list._manually_created_transcripts,
-                **transcript_list._generated_transcripts
+        # Method 1: Try official API first (most reliable but sometimes reports false negatives)
+        transcript_data = self._extract_transcript_with_api(video_id, language_preference)
+
+        # Method 2: If API fails, try alternate extraction methods
+        if not transcript_data:
+            transcript_data = self._extract_transcript_with_fallbacks(video_id, language_preference)
+
+        # If we have transcript data, format it and cache it
+        if transcript_data:
+            # Format the transcript
+            formatted_transcript = self._format_transcript(transcript_data, language_preference[0])
+            cache_set("transcript", cache_key, formatted_transcript)
+            return formatted_transcript
+
+        # Last resort: return mock data for test mode or raise error
+        if is_test_mode:
+            return self._get_mock_transcript()
+
+        # If still no transcript, raise error
+        raise ValueError(f"No transcript found for video: {video_id}")
+
+    def _extract_transcript_with_api(self, video_id: str, language_preference: List[str]) -> Optional[List[Dict]]:
+        """
+        Try to extract transcript using the YouTube Transcript API.
+
+        Args:
+            video_id: YouTube video ID
+            language_preference: List of language codes in order of preference
+
+        Returns:
+            Transcript data if successful, None otherwise
+        """
+        for attempt in range(self.max_retries):
+            try:
+                # Get available transcript list
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+                # Get all available languages
+                available_langs = {
+                    **transcript_list._manually_created_transcripts,
+                    **transcript_list._generated_transcripts
+                }
+
+                logger.info(f"Available transcript languages: {list(available_langs.keys())}")
+
+                # Expand language codes to include regional variants
+                expanded_preferences = []
+                for lang in language_preference:
+                    # Add base code
+                    expanded_preferences.append(lang)
+
+                    # Add known variants
+                    if lang in self.language_metadata:
+                        expanded_preferences.extend(self.language_metadata[lang]['codes'])
+
+                # Deduplicate
+                expanded_preferences = list(dict.fromkeys(expanded_preferences))
+
+                # Try to match preferred languages
+                for lang_code in expanded_preferences:
+                    # Try manually created transcripts first
+                    for available_lang in transcript_list._manually_created_transcripts:
+                        # Check if language code matches or starts with preferred code
+                        if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
+                            try:
+                                transcript = transcript_list._manually_created_transcripts[available_lang]
+                                logger.info(f"Found manually created transcript in {available_lang}")
+                                return transcript.fetch()
+                            except Exception as e:
+                                logger.debug(f"Error fetching manual transcript in {available_lang}: {e}")
+
+                    # Then try generated transcripts
+                    for available_lang in transcript_list._generated_transcripts:
+                        if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
+                            try:
+                                transcript = transcript_list._generated_transcripts[available_lang]
+                                logger.info(f"Found generated transcript in {available_lang}")
+                                result = transcript.fetch()
+
+                                # Add additional check: verify the result is not empty or malformed
+                                if not result or not isinstance(result, list) or len(result) == 0:
+                                    logger.warning(f"Transcript API returned empty or invalid result for {available_lang}")
+                                    continue
+
+                                return result
+                            except Exception as e:
+                                logger.debug(f"Error fetching generated transcript in {available_lang}: {e}")
+
+                # If no preferred language transcript is found, get any available transcript
+                if transcript_list._manually_created_transcripts:
+                    # Prefer manually created transcripts
+                    lang = list(transcript_list._manually_created_transcripts.keys())[0]
+                    transcript = transcript_list._manually_created_transcripts[lang]
+                    logger.info(f"Using fallback manual transcript in {lang}")
+                    result = transcript.fetch()
+
+                    # Verify result
+                    if not result or not isinstance(result, list) or len(result) == 0:
+                        logger.warning(f"Fallback manual transcript returned empty or invalid result")
+                        continue
+
+                    return result
+
+                elif transcript_list._generated_transcripts:
+                    # Use generated transcript if no manual one available
+                    lang = list(transcript_list._generated_transcripts.keys())[0]
+                    transcript = transcript_list._generated_transcripts[lang]
+                    logger.info(f"Using fallback generated transcript in {lang}")
+                    result = transcript.fetch()
+
+                    # Verify result
+                    if not result or not isinstance(result, list) or len(result) == 0:
+                        logger.warning(f"Fallback generated transcript returned empty or invalid result")
+                        continue
+
+                    return result
+
+                # If we get here, no transcript was found
+                logger.warning(f"No transcript found via API for video: {video_id}")
+                return None
+
+            except TranscriptsDisabled:
+                logger.warning(f"API reports transcripts are disabled for video: {video_id} (attempt {attempt+1}/{self.max_retries})")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+
+            except NoTranscriptFound:
+                logger.warning(f"API reports no transcript found for video: {video_id} (attempt {attempt+1}/{self.max_retries})")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+
+            except Exception as e:
+                logger.error(f"Error extracting transcript with API: {e} (attempt {attempt+1}/{self.max_retries})")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
+
+        # If we reach here, all attempts failed
+        return None
+
+    def _extract_transcript_with_fallbacks(self, video_id: str, language_preference: List[str]) -> Optional[List[Dict]]:
+        """
+        Extract transcript using alternative methods when the API fails.
+        This approach can sometimes work when the official API incorrectly reports that transcripts are disabled.
+
+        Args:
+            video_id: YouTube video ID
+            language_preference: List of language codes in order of preference
+
+        Returns:
+            Transcript data if successful, None otherwise
+        """
+        # Try multiple fallback methods
+
+        # Method 1: Direct transcript extraction using pattern matching
+        transcript_data = self._extract_transcript_direct(video_id, language_preference)
+        if transcript_data:
+            logger.info(f"Successfully extracted transcript using direct method for video: {video_id}")
+            return transcript_data
+
+        # Method 2: Timedtext API (used for auto-generated captions)
+        transcript_data = self._extract_transcript_timedtext(video_id, language_preference)
+        if transcript_data:
+            logger.info(f"Successfully extracted transcript using timedtext API for video: {video_id}")
+            return transcript_data
+
+        # All fallback methods failed
+        logger.warning(f"All transcript extraction methods failed for video: {video_id}")
+        return None
+
+    def _extract_transcript_direct(self, video_id: str, language_preference: List[str]) -> Optional[List[Dict]]:
+        """
+        Extract transcript directly from video page using pattern matching.
+        This can sometimes work when the API incorrectly reports that transcripts are disabled.
+
+        Args:
+            video_id: YouTube video ID
+            language_preference: List of language codes in order of preference
+
+        Returns:
+            Transcript data if successful, None otherwise
+        """
+        try:
+            # Try to fetch the video page
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
             }
 
-            logger.info(f"Available transcript languages: {list(available_langs.keys())}")
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                logger.warning(f"Failed to fetch video page for transcript extraction: {response.status_code}")
+                return None
+
+            content = response.text
+
+            # Look for the caption track data in the page
+            captions_regex = r'"captionTracks":\s*(\[.*?\])'
+            captions_match = re.search(captions_regex, content)
+
+            if not captions_match:
+                logger.warning("Could not find caption tracks in video page")
+                return None
+
+            captions_data = captions_match.group(1)
+            # Parse the JSON data
+            try:
+                captions_json = json.loads(captions_data.replace('\\u0026', '&').replace('\\', '\\\\'))
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse caption tracks data")
+                return None
+
+            # Find the best caption track based on language preference
+            best_track = None
 
             # Expand language codes to include regional variants
             expanded_preferences = []
             for lang in language_preference:
                 # Add base code
                 expanded_preferences.append(lang)
-
                 # Add known variants
                 if lang in self.language_metadata:
                     expanded_preferences.extend(self.language_metadata[lang]['codes'])
 
-            # Deduplicate
-            expanded_preferences = list(dict.fromkeys(expanded_preferences))
-
-            # Try to match preferred languages
+            # First try to find a track matching preferred languages
             for lang_code in expanded_preferences:
-                # Try manually created transcripts first
-                for available_lang in transcript_list._manually_created_transcripts:
-                    # Check if language code matches or starts with preferred code
-                    if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
-                        try:
-                            transcript = transcript_list._manually_created_transcripts[available_lang]
-                            logger.info(f"Found manually created transcript in {available_lang}")
+                for track in captions_json:
+                    track_lang = track.get('languageCode', '')
+                    is_auto = track.get('kind', '') == 'asr'  # Auto-generated captions
 
-                            # Extract base language code
-                            base_lang = lang_code.split('-')[0]
+                    if track_lang == lang_code or track_lang.startswith(f"{lang_code}-"):
+                        # Prefer manual captions over auto-generated
+                        if best_track is None or (is_auto and best_track.get('kind') != 'asr'):
+                            best_track = track
+                            break
 
-                            transcript_data = self._format_transcript(transcript.fetch(), base_lang)
-                            cache_set("transcript", cache_key, transcript_data)
-                            return transcript_data
-                        except Exception as e:
-                            logger.debug(f"Error fetching manual transcript in {available_lang}: {e}")
+            # If no preferred language found, use any available track
+            if best_track is None and captions_json:
+                best_track = captions_json[0]
 
-                # Then try generated transcripts
-                for available_lang in transcript_list._generated_transcripts:
-                    if available_lang == lang_code or available_lang.startswith(f"{lang_code}-"):
-                        try:
-                            transcript = transcript_list._generated_transcripts[available_lang]
-                            logger.info(f"Found generated transcript in {available_lang}")
+            if not best_track:
+                logger.warning("No suitable caption track found")
+                return None
 
-                            # Extract base language code
-                            base_lang = lang_code.split('-')[0]
+            # Get the caption track URL
+            track_url = best_track.get('baseUrl', '')
+            if not track_url:
+                logger.warning("Caption track URL not found")
+                return None
 
-                            transcript_data = self._format_transcript(transcript.fetch(), base_lang)
-                            cache_set("transcript", cache_key, transcript_data)
-                            return transcript_data
-                        except Exception as e:
-                            logger.debug(f"Error fetching generated transcript in {available_lang}: {e}")
+            # Fetch the caption track
+            track_response = requests.get(track_url, timeout=10)
+            if track_response.status_code != 200:
+                logger.warning(f"Failed to fetch caption track: {track_response.status_code}")
+                return None
 
-            # If no preferred language transcript is found, get any available transcript
-            if transcript_list._manually_created_transcripts:
-                # Prefer manually created transcripts
-                lang = list(transcript_list._manually_created_transcripts.keys())[0]
-                transcript = transcript_list._manually_created_transcripts[lang]
-                logger.info(f"Using fallback manual transcript in {lang}")
+            # Parse the caption data
+            caption_data = track_response.text
 
-                # Extract base language code
-                base_lang = lang.split('-')[0]
+            # Verify that the response is not empty
+            if not caption_data or len(caption_data.strip()) == 0:
+                logger.warning("Caption track response is empty")
+                return None
 
-                transcript_data = self._format_transcript(transcript.fetch(), base_lang)
-                cache_set("transcript", cache_key, transcript_data)
-                return transcript_data
-            elif transcript_list._generated_transcripts:
-                # Use generated transcript if no manual one available
-                lang = list(transcript_list._generated_transcripts.keys())[0]
-                transcript = transcript_list._generated_transcripts[lang]
-                logger.info(f"Using fallback generated transcript in {lang}")
+            # XML format parsing - simple approach for now
+            segments = []
 
-                # Extract base language code
-                base_lang = lang.split('-')[0]
+            # Verify this looks like XML before parsing
+            if not caption_data.strip().startswith('<?xml') and not caption_data.strip().startswith('<transcript'):
+                logger.warning("Caption track response doesn't appear to be valid XML")
+                logger.debug(f"First 100 chars of response: {caption_data[:100]}")
+                return None
 
-                transcript_data = self._format_transcript(transcript.fetch(), base_lang)
-                cache_set("transcript", cache_key, transcript_data)
-                return transcript_data
+            # Simple regex-based parsing for caption data
+            caption_regex = r'<text start="([\d\.]+)" dur="([\d\.]+)".*?>(.*?)</text>'
+            matches = list(re.finditer(caption_regex, caption_data))
 
-            # If we get here, no transcript was found
-            raise ValueError(f"No transcript found for video: {video_id}")
+            if not matches:
+                logger.warning("No caption segments found in the XML response")
+                return None
 
-        except TranscriptsDisabled:
-            error_message = f"Transcripts are disabled for video: {video_id}"
-            logger.warning(error_message)
-            if is_test_mode:
-                return self._get_mock_transcript()
-            raise ValueError(error_message)
+            for match in matches:
+                start = float(match.group(1))
+                duration = float(match.group(2))
+                text = match.group(3).strip()
 
-        except NoTranscriptFound:
-            error_message = f"No transcript found for video: {video_id}"
-            logger.warning(error_message)
-            if is_test_mode:
-                return self._get_mock_transcript()
-            raise ValueError(error_message)
+                # Clean up HTML entities
+                text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+
+                segments.append({
+                    'start': start,
+                    'duration': duration,
+                    'text': text
+                })
+
+            if segments:
+                return segments
+
+            logger.warning("Failed to extract segments from caption data")
+            return None
 
         except Exception as e:
-            error_message = f"Error extracting transcript: {e}"
-            logger.error(error_message)
-            if is_test_mode:
-                return self._get_mock_transcript()
-            raise ValueError(error_message)
+            logger.error(f"Error in direct transcript extraction: {e}")
+            return None
+
+    def _extract_transcript_timedtext(self, video_id: str, language_preference: List[str]) -> Optional[List[Dict]]:
+        """
+        Extract transcript using YouTube's timedtext API.
+        Used as a fallback method for auto-generated captions.
+
+        Args:
+            video_id: YouTube video ID
+            language_preference: List of language codes in order of preference
+
+        Returns:
+            Transcript data if successful, None otherwise
+        """
+        try:
+            # Try languages in order of preference
+            for lang in language_preference:
+                # Format for auto-generated captions
+                url = f"https://www.youtube.com/api/timedtext?lang={lang}&v={video_id}"
+
+                # Also try alternative format
+                alt_url = f"https://www.youtube.com/api/timedtext?lang={lang}&v={video_id}&fmt=srv3"
+
+                # Try both URLs
+                for try_url in [url, alt_url]:
+                    try:
+                        response = requests.get(try_url, timeout=10)
+                        if response.status_code == 200 and response.text:
+                            # Make sure the response is not empty and is valid XML
+                            caption_data = response.text
+
+                            if not caption_data or len(caption_data.strip()) == 0:
+                                continue
+
+                            # Verify this looks like XML before parsing
+                            if not caption_data.strip().startswith('<?xml') and not caption_data.strip().startswith('<transcript'):
+                                logger.debug(f"Response doesn't appear to be valid XML: {caption_data[:100]}")
+                                continue
+
+                            # Simple regex-based parsing for caption data
+                            segments = []
+                            caption_regex = r'<text start="([\d\.]+)" dur="([\d\.]+)".*?>(.*?)</text>'
+                            matches = list(re.finditer(caption_regex, caption_data))
+
+                            if not matches:
+                                logger.debug(f"No caption segments found in the XML response for {try_url}")
+                                continue
+
+                            for match in matches:
+                                start = float(match.group(1))
+                                duration = float(match.group(2))
+                                text = match.group(3).strip()
+
+                                # Clean up HTML entities
+                                text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+
+                                segments.append({
+                                    'start': start,
+                                    'duration': duration,
+                                    'text': text
+                                })
+
+                            if segments:
+                                return segments
+                    except Exception as e:
+                        logger.debug(f"Error in timedtext API call to {try_url}: {e}")
+
+            # If we get here, all attempts failed
+            logger.warning("Failed to extract transcript using timedtext API")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error in timedtext transcript extraction: {e}")
+            return None
 
     def _get_mock_transcript(self) -> List[Dict]:
         """
@@ -993,6 +1272,11 @@ class YouTubeExtractor:
         Returns:
             List of formatted transcript segments
         """
+        # Validate input to avoid errors
+        if not transcript_data or not isinstance(transcript_data, list):
+            logger.warning("Invalid transcript data format - returning empty transcript")
+            return []
+
         formatted_transcript = []
 
         # If language wasn't provided, try to detect from transcript text
@@ -1011,10 +1295,24 @@ class YouTubeExtractor:
         language = language[:2].lower()
 
         for segment in transcript_data:
+            # Validate segment format
+            if not isinstance(segment, dict):
+                logger.warning(f"Invalid segment format: {segment} - skipping")
+                continue
+
+            # Get segment fields with defaults
+            start = segment.get('start', 0.0)
+            duration = segment.get('duration', 0.0)
+            text = segment.get('text', '')
+
+            # Skip empty segments
+            if not text.strip():
+                continue
+
             formatted_segment = {
-                "start": segment.get('start', 0.0),
-                "duration": segment.get('duration', 0.0),
-                "text": segment.get('text', ''),
+                "start": start,
+                "duration": duration,
+                "text": text,
                 "language": language
             }
             formatted_transcript.append(formatted_segment)

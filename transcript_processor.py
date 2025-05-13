@@ -150,7 +150,16 @@ class TranscriptProcessor:
             try:
                 model_name = 'en_core_web_sm' if language == 'en' else 'ru_core_news_sm'
                 try:
+                    # Load the model
                     self._spacy_models[language] = spacy.load(model_name)
+
+                    # Add sentencizer for Russian to ensure sentence boundaries are set
+                    # This is particularly important when we disable the parser later
+                    if language == 'ru':
+                        if 'sentencizer' not in self._spacy_models[language].pipe_names:
+                            self._spacy_models[language].add_pipe('sentencizer')
+                            logger.info("Added sentencizer to Russian spaCy model")
+
                     logger.info(f"Loaded spaCy model: {model_name}")
                 except OSError:
                     logger.warning(f"Spacy model {model_name} not found. Make sure it's installed in your Nix environment.")
@@ -582,8 +591,13 @@ class TranscriptProcessor:
             for i in range(0, len(chunks), batch_size):
                 batch_text = " ".join(chunks[i:i+batch_size])
                 # For Russian specifically, disable parser to avoid noun_chunks errors
+                # but keep the sentencizer active for sentence boundary detection
                 if language == 'ru':
-                    # Temporarily disable parser for Russian to avoid the noun_chunks error
+                    # Make sure sentencizer is present before disabling parser
+                    if 'sentencizer' not in nlp.pipe_names:
+                        nlp.add_pipe('sentencizer')
+
+                    # Disable only the parser while keeping the sentencizer
                     with nlp.select_pipes(disable=["parser"]):
                         processed_docs.append(nlp(batch_text))
                 else:
@@ -594,8 +608,13 @@ class TranscriptProcessor:
             return processed_docs[0]
         else:
             # For Russian specifically, disable parser to avoid noun_chunks errors if not needed
+            # but keep the sentencizer active for sentence boundary detection
             if language == 'ru':
-                # Disable parser for Russian to avoid the noun_chunks error
+                # Make sure sentencizer is present before disabling parser
+                if 'sentencizer' not in nlp.pipe_names:
+                    nlp.add_pipe('sentencizer')
+
+                # Disable only the parser while keeping the sentencizer
                 with nlp.select_pipes(disable=["parser"]):
                     return nlp(text)
             else:

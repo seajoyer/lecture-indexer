@@ -1,8 +1,7 @@
 """
-Enhanced Unified Concept Extractor for the Lecture Video Content Indexer.
-
-Identifies concept occurrences in video transcripts by matching against the concept repository.
-Calculates educational significance to distinguish between passing mentions and comprehensive explanations.
+Enhanced concept extractor for the Lecture Video Content Indexer.
+Implements improved concept matching with morphological variant support for better recognition,
+especially for Russian language terms with different grammatical forms.
 """
 
 import re
@@ -24,6 +23,172 @@ except ImportError:
 # Configure logging
 logger = logging.getLogger(__name__)
 
+class MorphologicalVariantMatcher:
+    """
+    Helper class for matching concept variants with morphological differences.
+    Particularly useful for languages with rich morphology like Russian.
+    """
+
+    def __init__(self, language: str = "en"):
+        """
+        Initialize the variant matcher.
+
+        Args:
+            language: Language code ('en' or 'ru')
+        """
+        self.language = language
+        self._init_language_resources()
+
+    def _init_language_resources(self):
+        """Initialize language-specific resources for variant matching."""
+        # Common word endings to normalize for Russian
+        self.russian_endings = {
+            # Noun endings (singular -> plural, different cases)
+            'ие': ['ия', 'ий', 'ием'],
+            'ия': ['ие', 'ий', 'ию', 'ией'],
+            'ть': ['ти'],
+            'ость': ['ости', 'остей', 'остью'],
+            'ство': ['ства', 'ствам'],
+            'а': ['ы', 'у', 'е'],
+            'я': ['и', 'ю', 'е'],
+            'й': ['я', 'ю', 'и', 'ем'],
+            'ь': ['и', 'ей', 'ью']
+        }
+
+        # English plurals and verb forms
+        self.english_endings = {
+            's': [''],  # plural -> singular
+            '': ['s'],  # singular -> plural
+            'ing': ['', 'e'],  # running -> run, run
+            'ed': ['', 'e']    # played -> play, play
+        }
+
+    def generate_variants(self, text: str) -> Set[str]:
+        """
+        Generate possible morphological variants of a term.
+
+        Args:
+            text: The original text
+
+        Returns:
+            Set of possible variants
+        """
+        variants = {text}  # Always include the original
+
+        if self.language == 'ru':
+            variants.update(self._generate_russian_variants(text))
+        else:  # Default to English
+            variants.update(self._generate_english_variants(text))
+
+        return variants
+
+    def _generate_russian_variants(self, text: str) -> Set[str]:
+        """Generate Russian morphological variants."""
+        variants = set()
+        words = text.split()
+
+        # For single words, apply ending transformations
+        if len(words) == 1:
+            word = words[0]
+            for ending, replacements in self.russian_endings.items():
+                if word.endswith(ending) and len(word) > len(ending) + 2:  # Ensure word is long enough
+                    for replacement in replacements:
+                        variant = word[:-len(ending)] + replacement
+                        variants.add(variant)
+
+        # For multi-word terms like "соотношение неопределенности"
+        elif len(words) > 1:
+            # Often only the last word changes in Russian phrases
+            for ending, replacements in self.russian_endings.items():
+                if words[-1].endswith(ending) and len(words[-1]) > len(ending) + 2:
+                    base_words = words[:-1]  # All words except the last
+                    for replacement in replacements:
+                        new_last_word = words[-1][:-len(ending)] + replacement
+                        variant = ' '.join(base_words + [new_last_word])
+                        variants.add(variant)
+
+            # Generate variants where the first word changes too
+            for ending, replacements in self.russian_endings.items():
+                if words[0].endswith(ending) and len(words[0]) > len(ending) + 2:
+                    for replacement in replacements:
+                        new_first_word = words[0][:-len(ending)] + replacement
+                        variant = ' '.join([new_first_word] + words[1:])
+                        variants.add(variant)
+
+        return variants
+
+    def _generate_english_variants(self, text: str) -> Set[str]:
+        """Generate English morphological variants."""
+        variants = set()
+        words = text.split()
+
+        # For single words
+        if len(words) == 1:
+            word = words[0]
+            for ending, replacements in self.english_endings.items():
+                if word.endswith(ending) and len(word) > len(ending) + 2:
+                    for replacement in replacements:
+                        variant = word[:-len(ending)] + replacement
+                        variants.add(variant)
+
+        # For multi-word phrases, try changing one word at a time
+        elif len(words) > 1:
+            # Try variants of the last word
+            for ending, replacements in self.english_endings.items():
+                if words[-1].endswith(ending) and len(words[-1]) > len(ending) + 2:
+                    for replacement in replacements:
+                        new_last_word = words[-1][:-len(ending)] + replacement
+                        variant = ' '.join(words[:-1] + [new_last_word])
+                        variants.add(variant)
+
+        return variants
+
+    def match_variants(self, text: str, target: str) -> float:
+        """
+        Check if text matches any variant of the target.
+
+        Args:
+            text: Text to check
+            target: Target concept
+
+        Returns:
+            Similarity score (0.0-1.0), 1.0 if exact match
+        """
+        # If exact match, return perfect score
+        if text.lower() == target.lower():
+            return 1.0
+
+        # Generate variants of both texts
+        text_variants = self.generate_variants(text.lower())
+        target_variants = self.generate_variants(target.lower())
+
+        # Check for matches
+        for text_var in text_variants:
+            for target_var in target_variants:
+                if text_var == target_var:
+                    return 0.95  # Very high but not perfect score for variant matches
+
+        # If words have common stems but different endings, return medium score
+        text_words = text.lower().split()
+        target_words = target.lower().split()
+
+        if len(text_words) == len(target_words):
+            # Check if all words except the last one match
+            if len(text_words) > 1 and text_words[:-1] == target_words[:-1]:
+                # Check if last words are morphological variants
+                last_text = text_words[-1]
+                last_target = target_words[-1]
+
+                # Check if they share a common stem (3+ characters)
+                min_len = min(len(last_text), len(last_target))
+                stem_length = min(min_len - 2, 5)  # Use up to 5 chars but leave at least 2 for ending
+
+                if stem_length > 2 and last_text[:stem_length] == last_target[:stem_length]:
+                    return 0.85  # Good match score for different forms of the same word
+
+        # No variant match found
+        return 0.0
+
 class UnifiedConceptExtractor:
     """
     Enhanced concept extractor with robust concept matching and educational significance detection.
@@ -43,6 +208,9 @@ class UnifiedConceptExtractor:
         self.concept_repository = get_concept_repository()
         if not self.concept_repository:
             logger.warning("Concept repository not available - limited functionality")
+
+        # Initialize variant matcher for morphological matching
+        self.variant_matcher = MorphologicalVariantMatcher(language)
 
         # Load enhanced NLP resources
         self._load_nlp_resources()
@@ -181,6 +349,8 @@ class UnifiedConceptExtractor:
 
         # Set language for processing
         self.language = language
+        # Update variant matcher language
+        self.variant_matcher.language = language
 
         # Log input information
         logger.info(f"Extracting concepts from transcript: video_id={video_id}, language={language}, segments={len(segments)}")
@@ -240,6 +410,8 @@ class UnifiedConceptExtractor:
         """
         # Use specified language or default
         lang = language or self.language
+        # Update variant matcher language
+        self.variant_matcher.language = lang
 
         # Check if concept repository is available
         if not self.concept_repository:
@@ -270,7 +442,7 @@ class UnifiedConceptExtractor:
             if not segment_text.strip():
                 continue
 
-            # Find matching concepts in this segment
+            # Find matching concepts in this segment using enhanced morphological matching
             segment_matches = self._find_matching_concepts_in_text(
                 segment_text,
                 language=lang,
@@ -283,6 +455,9 @@ class UnifiedConceptExtractor:
                 concept = match.get("concept")
                 similarity = match.get("similarity", 0.0)
 
+                # Record the actual matched variant from the text
+                matched_variant = match.get("matched_variant", match.get("matched_representation", ""))
+
                 if not concept_id or not concept:
                     continue
 
@@ -290,7 +465,7 @@ class UnifiedConceptExtractor:
                 educational_significance = self._calculate_educational_significance(
                     segment,
                     concept,
-                    match.get("matched_representation", ""),
+                    matched_variant,
                     global_analysis
                 )
 
@@ -307,7 +482,8 @@ class UnifiedConceptExtractor:
                     "educational_significance": educational_significance,
                     "occurrence_type": occurrence_type,
                     "similarity": similarity,
-                    "context_text": segment_text
+                    "context_text": segment_text,
+                    "matched_variant": matched_variant  # Store the actual variant that was matched
                 }
 
                 # Add to matched concepts
@@ -360,7 +536,7 @@ class UnifiedConceptExtractor:
 
     def _find_matching_concepts_in_text(self, text: str, language: str, threshold: float = 0.7) -> List[Dict]:
         """
-        Find matching concepts in text using the concept repository.
+        Find matching concepts in text using the concept repository with enhanced morphological matching.
 
         Args:
             text: Text to search in
@@ -378,6 +554,10 @@ class UnifiedConceptExtractor:
             max_results=10  # Limit to avoid excessive processing
         )
 
+        # If no matches from standard repository search, try morphological variant matching
+        if not matches and language in ['ru', 'en']:
+            matches = self._find_morphological_variants_in_text(text, language, threshold)
+
         # Check if each matched concept exists in the database for valid foreign key relationships
         valid_matches = []
         for match in matches:
@@ -389,6 +569,64 @@ class UnifiedConceptExtractor:
             valid_matches.append(match)
 
         return valid_matches
+
+    def _find_morphological_variants_in_text(self, text: str, language: str, threshold: float = 0.7) -> List[Dict]:
+        """
+        Find concepts by checking for morphological variants in the text.
+        This helps match concepts even when they appear in different grammatical forms.
+
+        Args:
+            text: Text to search in
+            language: Language code
+            threshold: Similarity threshold
+
+        Returns:
+            List of matching concept dictionaries
+        """
+        matches = []
+
+        # Skip if no concept repository available
+        if not self.concept_repository:
+            return matches
+
+        # Get all concepts for the given language
+        concepts = self.concept_repository.list_concepts(language=language, limit=1000)
+
+        # For each concept, check if any of its variants appears in the text
+        for concept in concepts:
+            concept_id = concept.get("concept_id")
+            if not concept_id:
+                continue
+
+            # Get all representations for this concept
+            representations = concept.get("representations", {}).get(language, [])
+            if not representations:
+                continue
+
+            # Check each representation
+            for representation in representations:
+                # Generate variants for this representation
+                variants = self.variant_matcher.generate_variants(representation)
+
+                # Check if any variant appears in the text
+                for variant in variants:
+                    if variant.lower() in text.lower():
+                        # Found a variant match
+                        matches.append({
+                            "concept_id": concept_id,
+                            "concept": concept,
+                            "similarity": 0.9,  # High similarity for variant matches
+                            "match_type": "variant",
+                            "matched_representation": representation,
+                            "matched_variant": variant
+                        })
+                        break  # Found a match for this representation
+
+                # If a match was found for this representation, skip checking others
+                if matches and matches[-1]["concept_id"] == concept_id:
+                    break
+
+        return matches
 
     def _calculate_educational_significance(
         self,
