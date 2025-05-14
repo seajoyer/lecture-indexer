@@ -1,0 +1,28 @@
+{
+  "candidate_id": "653b75f4-cf15-4f0c-bc61-aa3bb2be759e",
+  "text": "непрерывными наблюдаемыми",
+  "score": 3.0,
+  "source_video_id": "fq-YEw83QnY",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №4 | 23.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "mathematics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:55.247450",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "непрерывными наблюдаемыми"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "fq-YEw83QnY",
+      "domain": "mathematics",
+      "created_at": "2025-05-14T21:06:55.247454"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "candidate_id": "98c165f3-0aea-471d-81f9-b687c836c9d8",
+  "text": "нижней границей",
+  "score": 3.0,
+  "source_video_id": "WiOpRSlRylU",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №3 | 16.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:42.958208",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "нижней границей"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "WiOpRSlRylU",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:42.958212"
+    }
+  }
+}

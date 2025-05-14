@@ -1,0 +1,28 @@
+{
+  "candidate_id": "65ead454-1a43-47d4-a577-28fdba8a5747",
+  "text": "плоская волна",
+  "score": 3.0,
+  "source_video_id": "WiOpRSlRylU",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №3 | 16.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:42.959962",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "плоская волна"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "WiOpRSlRylU",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:42.959965"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "candidate_id": "87466278-8e2e-47fc-84da-120ccc0d9dd5",
+  "text": "второго дифференцирования",
+  "score": 3.0,
+  "source_video_id": "WiOpRSlRylU",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №3 | 16.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:42.959384",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "второго дифференцирования"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "WiOpRSlRylU",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:42.959388"
+    }
+  }
+}

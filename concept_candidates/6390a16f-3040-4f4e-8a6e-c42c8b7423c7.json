@@ -1,0 +1,28 @@
+{
+  "candidate_id": "6390a16f-3040-4f4e-8a6e-c42c8b7423c7",
+  "text": "важнейших представлений",
+  "score": 3.0,
+  "source_video_id": "AkCH9SQ3LDw",
+  "source_video_title": "НИЯУ МИФИ | Попруженко С.В. - Квантовая механика | 5 семестр | Лекция № 5 |  30.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:07:04.945276",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "важнейших представлений"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "AkCH9SQ3LDw",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:07:04.945280"
+    }
+  }
+}

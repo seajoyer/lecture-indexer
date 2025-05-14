@@ -1,0 +1,28 @@
+{
+  "candidate_id": "fefaca17-5b62-4a9e-abd9-7dc23b2ede24",
+  "text": "линейную алгебру",
+  "score": 3.0,
+  "source_video_id": "mVs8ZzJS9y8",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №1 | 02.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:23.815184",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "линейную алгебру"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "mVs8ZzJS9y8",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:23.815188"
+    }
+  }
+}

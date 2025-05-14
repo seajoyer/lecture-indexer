@@ -1,0 +1,28 @@
+{
+  "candidate_id": "67b199ac-9b36-4ee2-80e5-3428aac1c0d7",
+  "text": "собственные функции",
+  "score": 3.0,
+  "source_video_id": "WiOpRSlRylU",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №3 | 16.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:42.959270",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "собственные функции"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "WiOpRSlRylU",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:42.959274"
+    }
+  }
+}

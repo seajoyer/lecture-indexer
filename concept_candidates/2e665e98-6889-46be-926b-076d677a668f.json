@@ -1,0 +1,28 @@
+{
+  "candidate_id": "2e665e98-6889-46be-926b-076d677a668f",
+  "text": "скалярным произведением",
+  "score": 3.0,
+  "source_video_id": "RzB6MljTCTo",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №2 | 09.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:33.637444",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "скалярным произведением"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "RzB6MljTCTo",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:33.637447"
+    }
+  }
+}

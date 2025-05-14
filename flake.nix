@@ -13,26 +13,6 @@
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true; # In case we need non-free dependencies
-          overlays = [
-            (self: super: {
-              mlcs_cpp = super.stdenv.mkDerivation {
-                pname = "mlcs-cpp";
-                version = "0.1.0";
-                src = ./mlcs_cpp;
-                nativeBuildInputs = with super; [
-                  cmake
-                ];
-                buildPhase = ''
-                  cmake -B build -DCMAKE_BUILD_TYPE=Release
-                  cmake --build build
-                '';
-                installPhase = ''
-                  mkdir -p $out/${super.python3.sitePackages}
-                  cp -r build/mlcs_cpp*.so $out/${super.python3.sitePackages}/mlcs_cpp.so
-                '';
-              };
-            })
-          ];
         };
 
         pythonEnv = pkgs.python3.withPackages (ps:
@@ -125,27 +105,22 @@
         packages = {
           default = self.packages.${system}.lecture-indexer;
 
-          mlcs-cpp = pkgs.mlcs_cpp;
-
           lecture-indexer = pkgs.stdenv.mkDerivation {
             pname = "lecture-indexer";
             version = "1.0.0";
             src = ./.;
 
-            buildInputs = [
-              pythonEnv
-              pkgs.mlcs_cpp
-            ];
+            buildInputs = [ pythonEnv ];
 
             buildPhase = ''
               mkdir -p $out/bin
-              mkdir -p $out/${pythonEnv.sitePackages}/lecture_indexer
-              cp -r . $out/${pythonEnv.sitePackages}/lecture_indexer
+              mkdir -p $out/lib/python3.10/site-packages/lecture_indexer
+              cp -r . $out/lib/python3.10/site-packages/lecture_indexer
 
               # Create wrapper script
               cat > $out/bin/lecture-indexer <<EOF
               #!/bin/sh
-              PYTHONPATH=$out/${pythonEnv.sitePackages}:${pkgs.mlcs_cpp}/${pythonEnv.sitePackages}:\$PYTHONPATH ${pythonEnv}/bin/python -m lecture_indexer.main "\$@"
+              PYTHONPATH=$out/lib/python3.10/site-packages:$PYTHONPATH ${pythonEnv}/bin/python -m lecture_indexer.main "\$@"
               EOF
 
               chmod +x $out/bin/lecture-indexer
@@ -183,18 +158,15 @@
         devShells.default = pkgs.mkShell {
           buildInputs = [
             pythonEnv
-            pkgs.mlcs_cpp
             pkgs.sqlite
 
             # Development tools
             pkgs.pre-commit
             pkgs.git
-            pkgs.cmake
-            pkgs.pybind11
           ];
 
           shellHook = ''
-            export PYTHONPATH="$PWD:${pkgs.mlcs_cpp}/${pythonEnv.sitePackages}:$PYTHONPATH"
+            export PYTHONPATH="$PWD:$PYTHONPATH"
 
             # Pass through YouTube API key from host environment if available
             if [ -n "$YOUTUBE_API_KEY" ]; then

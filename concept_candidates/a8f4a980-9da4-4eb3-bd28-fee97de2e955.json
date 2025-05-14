@@ -1,0 +1,28 @@
+{
+  "candidate_id": "a8f4a980-9da4-4eb3-bd28-fee97de2e955",
+  "text": "t константа",
+  "score": 3.5,
+  "source_video_id": "mVs8ZzJS9y8",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №1 | 02.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:23.812086",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "t константа"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "mVs8ZzJS9y8",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:23.812098"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "candidate_id": "81c5f85b-9f48-40be-bf33-ce8f72283efd",
+  "text": "прошлых лекциях",
+  "score": 3.0,
+  "source_video_id": "AkCH9SQ3LDw",
+  "source_video_title": "НИЯУ МИФИ | Попруженко С.В. - Квантовая механика | 5 семестр | Лекция № 5 |  30.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:07:04.943960",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "прошлых лекциях"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "AkCH9SQ3LDw",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:07:04.943964"
+    }
+  }
+}

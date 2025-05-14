@@ -1,0 +1,28 @@
+{
+  "candidate_id": "b4b6e3c8-3bdc-4e17-8a68-c8d4825c51d9",
+  "text": "электромагнитных волн",
+  "score": 3.0,
+  "source_video_id": "WiOpRSlRylU",
+  "source_video_title": "НИЯУ МИФИ | Воронова Н.С. - Квантовая механика | 5 семестр | Лекция №3 | 16.09.2024",
+  "source_segments": [],
+  "extraction_method": "spacy_noun_phrase",
+  "language": "ru",
+  "domain": "physics",
+  "status": "pending",
+  "created_at": "2025-05-14T21:06:42.959724",
+  "concept_data": {
+    "concept_id": "",
+    "representations": {
+      "ru": [
+        "электромагнитных волн"
+      ]
+    },
+    "prerequisites": [],
+    "related": [],
+    "metadata": {
+      "source_video_id": "WiOpRSlRylU",
+      "domain": "physics",
+      "created_at": "2025-05-14T21:06:42.959728"
+    }
+  }
+}
