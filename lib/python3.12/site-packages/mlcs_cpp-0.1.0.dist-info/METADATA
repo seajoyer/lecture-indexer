@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: mlcs_cpp
+Version: 0.1.0
+Summary: MLCS Algorithm C++ implementation with Python bindings
+Author: Lecture Video Content Indexer Team
+Author-email: info@example.com
+Requires-Python: >=3.6
+Dynamic: author
+Dynamic: author-email
+Dynamic: requires-python
+Dynamic: summary

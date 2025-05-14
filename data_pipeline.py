@@ -1,17 +1,11 @@
-"""
-Enhanced data pipeline for the Video Lecture Content Indexer.
-
-Coordinates the end-to-end process of video extraction, transcript processing,
-concept extraction, and content indexing with the new concept repository model.
-"""
-
 import os
 import logging
 import uuid
 import time
 import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Tuple, Any, Optional, Set
+import traceback
 
 # Import system components
 from youtube_extractor import YouTubeExtractor
@@ -19,6 +13,7 @@ from transcript_processor import TranscriptProcessor
 from unified_concept_extractor import UnifiedConceptExtractor
 from data_access import get_data_access
 from concept_repository import get_concept_repository
+from concept_candidate_extractor import get_concept_candidate_extractor
 
 # Configure logging
 logging.basicConfig(
@@ -49,7 +44,7 @@ class DataPipeline:
         # Initialize components
         self._init_components()
 
-        logger.info("DataPipeline initialized with repository-based concept processing")
+        logger.info("DataPipeline initialized with repository-based concept processing and candidate extraction")
 
     def _init_components(self):
         """Initialize pipeline components."""
@@ -65,6 +60,9 @@ class DataPipeline:
         self.concept_extractor = UnifiedConceptExtractor()
         self.data_access = get_data_access()
         self.concept_repository = get_concept_repository()
+
+        # Initialize the concept candidate extractor
+        self.candidate_extractor = get_concept_candidate_extractor()
 
         logger.info("Pipeline components initialized")
 
@@ -132,7 +130,17 @@ class DataPipeline:
                        f"({educational_concepts} educational, {passing_concepts} passing) "
                        f"in {concept_time:.2f}s")
 
-            # Step 6: Save results to database
+            # Step 6: Extract concept candidates
+            candidate_start_time = time.time()
+            candidates = self.candidate_extractor.extract_concept_candidates(
+                processed_transcript,
+                metadata
+            )
+            candidate_time = time.time() - candidate_start_time
+
+            logger.info(f"Extracted {len(candidates)} concept candidates in {candidate_time:.2f}s")
+
+            # Step 7: Save results to database
             database_start_time = time.time()
 
             # Save video metadata
@@ -152,7 +160,7 @@ class DataPipeline:
             # Save segments
             self.data_access.save_segments(video_id, processed_transcript.get("segments", []))
 
-            # Step 7: Make sure all repository concepts referenced by occurrences exist in the database
+            # Step 8: Make sure all repository concepts referenced by occurrences exist in the database
             # This ensures we meet foreign key constraints
             used_concept_ids = set()
             for concept in concepts:
@@ -226,10 +234,15 @@ class DataPipeline:
                     "educational": educational_concepts,
                     "passing": passing_concepts
                 },
+                "concept_candidates": {
+                    "total": len(candidates),
+                    "candidate_ids": [c.get("candidate_id") for c in candidates]
+                },
                 "processing_time": {
                     "concept_extraction_seconds": concept_time,
+                    "candidate_extraction_seconds": candidate_time,
                     "database_seconds": database_time,
-                    "total_seconds": concept_time + database_time
+                    "total_seconds": concept_time + candidate_time + database_time
                 },
                 "timestamp": datetime.now().isoformat()
             }
@@ -243,10 +256,11 @@ class DataPipeline:
         except Exception as e:
             logger.error(f"Error processing video {video_url}: {e}")
 
-            # Create error result
-            import traceback
+            # Log detailed traceback
             error_traceback = traceback.format_exc()
+            logger.error(f"Traceback: {error_traceback}")
 
+            # Create error result
             error_result = {
                 "job_id": job_id,
                 "status": "error",
@@ -395,6 +409,10 @@ class DataPipeline:
                 r.get("concepts", {}).get("educational", 0)
                 for r in video_results if r.get("status") == "completed"
             )
+            total_candidates = sum(
+                r.get("concept_candidates", {}).get("total", 0)
+                for r in video_results if r.get("status") == "completed"
+            )
 
             # Create playlist result
             playlist_result = {
@@ -408,6 +426,9 @@ class DataPipeline:
                 "concepts": {
                     "total": total_concepts,
                     "educational": educational_concepts
+                },
+                "concept_candidates": {
+                    "total": total_candidates
                 },
                 "videos": video_results,
                 "timestamp": datetime.now().isoformat()

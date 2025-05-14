@@ -4,7 +4,7 @@ Video Lecture Content Indexer - Demo CLI.
 
 This script provides a command-line interface for the Video Lecture Content Indexer,
 allowing users to process videos, search for concepts, generate learning paths,
-and manage the concept repository.
+manage the concept repository, and review concept candidates.
 """
 
 import os
@@ -13,12 +13,16 @@ import argparse
 import logging
 import json
 import time
+import uuid
 from typing import List, Dict, Any, Optional, TextIO, Tuple
 from datetime import datetime
 
 # Import system components
 from concept_repository import get_concept_repository
 from learning_path_generator import get_learning_path_generator
+
+# Import concept candidate extractor
+from concept_candidate_extractor import get_concept_candidate_extractor
 
 # Try to import optional components with graceful fallbacks
 try:
@@ -54,13 +58,16 @@ class ConceptIndexerCLI:
     Command-line interface for the Video Lecture Content Indexer.
 
     This class provides commands for processing videos, searching for concepts,
-    generating learning paths, and managing the concept repository.
+    generating learning paths, managing the concept repository, and reviewing concept candidates.
     """
 
     def __init__(self):
         """Initialize the CLI with necessary components."""
         self.concept_repository = get_concept_repository()
         self.learning_path_generator = get_learning_path_generator()
+
+        # Initialize concept candidate extractor
+        self.candidate_extractor = get_concept_candidate_extractor()
 
         # Initialize video processing components if available
         self.data_pipeline = None
@@ -92,6 +99,7 @@ Video Lecture Content Indexer - CLI Demo
 {'='*80}
 Version 1.0.0
 Concepts loaded: {len(self.concept_repository.concepts)}
+Concept candidates: {len(self.candidate_extractor.candidates)}
 {'='*80}
 """
         self._print_colorized(banner, Fore.CYAN)
@@ -214,6 +222,108 @@ Concepts loaded: {len(self.concept_repository.concepts)}
                 self._print_info("Metadata:")
                 for key, value in metadata.items():
                     self._print_colorized(f"  {key}: {value}", Fore.WHITE)
+
+        print()  # Empty line
+
+    def _print_candidate(self, candidate: Dict[str, Any], detailed: bool = False):
+        """
+        Print concept candidate information.
+
+        Args:
+            candidate: Candidate dictionary
+            detailed: Whether to print detailed information
+        """
+        candidate_id = candidate.get('candidate_id', 'unknown')
+        status = candidate.get('status', 'pending')
+
+        # Choose color based on status
+        if status == 'approved':
+            status_color = Fore.GREEN
+        elif status == 'rejected':
+            status_color = Fore.RED
+        else:  # pending
+            status_color = Fore.YELLOW
+
+        # Print candidate ID and status
+        self._print_colorized(f"Candidate: {candidate_id} [{status.upper()}]", status_color)
+
+        # Print text
+        text = candidate.get('text', '')
+        language = candidate.get('language', 'en')
+        domain = candidate.get('domain', 'unknown')
+        score = candidate.get('score', 0.0)
+
+        self._print_colorized(f"  Text: {text}", Fore.WHITE)
+        self._print_colorized(f"  Language: {language.upper()}", Fore.WHITE)
+        self._print_colorized(f"  Domain: {domain}", Fore.WHITE)
+        self._print_colorized(f"  Score: {score:.2f}", Fore.WHITE)
+
+        # Print source information
+        source_video_id = candidate.get('source_video_id', '')
+        source_video_title = candidate.get('source_video_title', '')
+
+        if source_video_id:
+            self._print_colorized(f"  Source: {source_video_title} ({source_video_id})", Fore.BLUE)
+
+        # Print detailed information if requested
+        if detailed:
+            # Print extraction method
+            extraction_method = candidate.get('extraction_method', '')
+            if extraction_method:
+                self._print_colorized(f"  Extraction Method: {extraction_method}", Fore.WHITE)
+
+            # Print created timestamp
+            created_at = candidate.get('created_at', '')
+            if created_at:
+                self._print_colorized(f"  Created: {created_at}", Fore.WHITE)
+
+            # Print source segments if available
+            source_segments = candidate.get('source_segments', [])
+            if source_segments:
+                self._print_colorized(f"  Source Segments: {', '.join(source_segments[:3])}"
+                                    f"{' and more...' if len(source_segments) > 3 else ''}", Fore.WHITE)
+
+            # If concept_data is available and has prerequisites/related, show them
+            concept_data = candidate.get('concept_data', {})
+
+            # Show prerequisites
+            prerequisites = concept_data.get('prerequisites', [])
+            if prerequisites:
+                self._print_info(f"  Prerequisites ({len(prerequisites)}):")
+                for prereq_id in prerequisites:
+                    prereq = self.concept_repository.get_concept(prereq_id)
+                    if prereq:
+                        # Try to get an English representation if available
+                        prereq_text = "unknown"
+                        if 'en' in prereq.get('representations', {}):
+                            prereq_text = prereq['representations']['en'][0]
+                        elif next(iter(prereq.get('representations', {}).values()), []):
+                            # Fallback to first representation in any language
+                            first_lang = next(iter(prereq['representations']))
+                            prereq_text = prereq['representations'][first_lang][0]
+
+                        self._print_colorized(f"    {prereq_id} ({prereq_text})", Fore.BLUE)
+                    else:
+                        self._print_colorized(f"    {prereq_id} (not found)", Fore.RED)
+
+            # Show related concepts
+            related = concept_data.get('related', [])
+            if related:
+                self._print_info(f"  Related Concepts ({len(related)}):")
+                for related_id in related:
+                    related_concept = self.concept_repository.get_concept(related_id)
+                    if related_concept:
+                        related_text = "unknown"
+                        if 'en' in related_concept.get('representations', {}):
+                            related_text = related_concept['representations']['en'][0]
+                        elif next(iter(related_concept.get('representations', {}).values()), []):
+                            # Fallback to first representation in any language
+                            first_lang = next(iter(related_concept['representations']))
+                            related_text = related_concept['representations'][first_lang][0]
+
+                        self._print_colorized(f"    {related_id} ({related_text})", Fore.BLUE)
+                    else:
+                        self._print_colorized(f"    {related_id} (not found)", Fore.RED)
 
         print()  # Empty line
 
@@ -352,9 +462,20 @@ Concepts loaded: {len(self.concept_repository.concepts)}
                 educational_concepts = result.get('concepts', {}).get('educational', 0)
                 passing_concepts = result.get('concepts', {}).get('passing', 0)
 
-                self._print_info(f"Extracted {total_concepts} concepts:")
+                self._print_info(f"Extracted {total_concepts} known concepts:")
                 self._print_colorized(f"  Educational concepts: {educational_concepts}", Fore.GREEN)
                 self._print_colorized(f"  Passing mentions: {passing_concepts}", Fore.YELLOW)
+
+                # Print concept candidate statistics
+                total_candidates = result.get('concept_candidates', {}).get('total', 0)
+                candidate_ids = result.get('concept_candidates', {}).get('candidate_ids', [])
+
+                self._print_info(f"\nExtracted {total_candidates} new concept candidates")
+                if candidate_ids:
+                    self._print_info("Use 'candidates' command to review them")
+                    # Print a few candidate IDs as examples if available
+                    if len(candidate_ids) > 0:
+                        self._print_colorized(f"  Example candidate ID: {candidate_ids[0]}", Fore.YELLOW)
 
                 # Get detailed concept information if available
                 video_concepts = self.data_access.get_video_concepts(video_id)
@@ -423,9 +544,13 @@ Concepts loaded: {len(self.concept_repository.concepts)}
                 total_concepts = result.get('concepts', {}).get('total', 0)
                 educational_concepts = result.get('concepts', {}).get('educational', 0)
 
-                self._print_info(f"Extracted {total_concepts} concepts:")
+                # Print candidate statistics
+                total_candidates = result.get('concept_candidates', {}).get('total', 0)
+
+                self._print_info(f"Extracted {total_concepts} known concepts:")
                 self._print_colorized(f"  Educational concepts: {educational_concepts}", Fore.GREEN)
                 self._print_colorized(f"  Passing mentions: {total_concepts - educational_concepts}", Fore.YELLOW)
+                self._print_info(f"Extracted {total_candidates} new concept candidates")
 
                 # Print processed video details
                 video_results = result.get('videos', [])
@@ -437,9 +562,10 @@ Concepts loaded: {len(self.concept_repository.concepts)}
                         video_id = video.get('video_id', 'unknown')
                         title = video.get('metadata', {}).get('title', 'Unknown Title')
                         concepts = video.get('concepts', {}).get('total', 0)
+                        candidates = video.get('concept_candidates', {}).get('total', 0)
 
                         self._print_colorized(
-                            f"{i:2d}. {title} ({video_id}) - {concepts} concepts",
+                            f"{i:2d}. {title} ({video_id}) - {concepts} concepts, {candidates} candidates",
                             Fore.CYAN
                         )
 
@@ -828,9 +954,9 @@ Concepts loaded: {len(self.concept_repository.concepts)}
         # Prepare representations
         representations = {}
         if en_representation:
-            representations['en'] = [en_representation]
+            representations['en'] = [en_representation.lower()]
         if ru_representation:
-            representations['ru'] = [ru_representation]
+            representations['ru'] = [ru_representation.lower()]
 
         if not representations:
             self._print_error("At least one representation (--en or --ru) must be provided")
@@ -865,7 +991,7 @@ Concepts loaded: {len(self.concept_repository.concepts)}
         """
         concept_id = args.concept_id
         language = args.lang
-        text = args.text
+        text = args.text.lower()  # Convert to lowercase
 
         if not language or not text:
             self._print_error("Both language (--lang) and text (--text) must be provided")
@@ -938,6 +1064,137 @@ Concepts loaded: {len(self.concept_repository.concepts)}
         except Exception as e:
             self._print_error(f"Error adding relationship: {e}")
 
+    def edit_concept(self, args):
+        """
+        Edit a concept with comprehensive modifications.
+
+        Args:
+            args: Command-line arguments
+        """
+        concept_id = args.concept_id
+        new_concept_id = args.new_id
+        category = args.category
+
+        # Get add representations
+        add_representations = {}
+        if args.add_en:
+            add_representations['en'] = [rep.strip().lower() for rep in args.add_en.split(',')]
+        if args.add_ru:
+            add_representations['ru'] = [rep.strip().lower() for rep in args.add_ru.split(',')]
+
+        # Get remove representations
+        remove_representations = {}
+        if args.remove_en:
+            remove_representations['en'] = [rep.strip().lower() for rep in args.remove_en.split(',')]
+        if args.remove_ru:
+            remove_representations['ru'] = [rep.strip().lower() for rep in args.remove_ru.split(',')]
+
+        # Get add/remove prerequisites
+        add_prerequisites = args.add_prereqs.split(',') if args.add_prereqs else None
+        remove_prerequisites = args.remove_prereqs.split(',') if args.remove_prereqs else None
+
+        # Get add/remove related concepts
+        add_related = args.add_related.split(',') if args.add_related else None
+        remove_related = args.remove_related.split(',') if args.remove_related else None
+
+        # Check if concept exists
+        concept = self.concept_repository.get_concept(concept_id)
+        if not concept:
+            self._print_error(f"Concept not found: {concept_id}")
+            return
+
+        # Show current concept
+        self._print_info("Current concept:")
+        self._print_concept(concept)
+
+        # Confirm if nothing to change
+        if not any([new_concept_id, category, add_representations, remove_representations,
+                   add_prerequisites, remove_prerequisites, add_related, remove_related]):
+            self._print_warning("No changes specified. Use --help to see available options.")
+            return
+
+        # Show changes that will be made
+        self._print_info("\nChanges to be applied:")
+
+        if new_concept_id:
+            self._print_colorized(f"- Rename concept ID to: {new_concept_id}", Fore.YELLOW)
+
+        if category:
+            self._print_colorized(f"- Move to category: {category}", Fore.YELLOW)
+
+        if add_representations:
+            self._print_colorized("- Add representations:", Fore.YELLOW)
+            for lang, reps in add_representations.items():
+                self._print_colorized(f"  {lang.upper()}: {', '.join(reps)}", Fore.WHITE)
+
+        if remove_representations:
+            self._print_colorized("- Remove representations:", Fore.YELLOW)
+            for lang, reps in remove_representations.items():
+                self._print_colorized(f"  {lang.upper()}: {', '.join(reps)}", Fore.WHITE)
+
+        if add_prerequisites:
+            prereq_str = ", ".join(add_prerequisites)
+            self._print_colorized(f"- Add prerequisites: {prereq_str}", Fore.YELLOW)
+
+        if remove_prerequisites:
+            prereq_str = ", ".join(remove_prerequisites)
+            self._print_colorized(f"- Remove prerequisites: {prereq_str}", Fore.YELLOW)
+
+        if add_related:
+            related_str = ", ".join(add_related)
+            self._print_colorized(f"- Add related concepts: {related_str}", Fore.YELLOW)
+
+        if remove_related:
+            related_str = ", ".join(remove_related)
+            self._print_colorized(f"- Remove related concepts: {related_str}", Fore.YELLOW)
+
+        # Confirm changes
+        user_input = input("\nApply these changes? (y/n): ")
+        if user_input.lower() != 'y':
+            self._print_info("Edit cancelled.")
+            return
+
+        # Apply changes
+        try:
+            # Call the repository edit method
+            success = self.concept_repository.edit_concept(
+                concept_id=concept_id,
+                new_concept_id=new_concept_id,
+                add_representations=add_representations,
+                remove_representations=remove_representations,
+                add_prerequisites=add_prerequisites,
+                remove_prerequisites=remove_prerequisites,
+                add_related=add_related,
+                remove_related=remove_related,
+                file_category=category
+            )
+
+            if success:
+                # Get the updated concept ID (might have changed)
+                updated_id = new_concept_id if new_concept_id else concept_id
+
+                self._print_success(f"Successfully edited concept: {updated_id}")
+
+                # Show the updated concept
+                updated_concept = self.concept_repository.get_concept(updated_id)
+                if updated_concept:
+                    self._print_info("\nUpdated concept:")
+                    self._print_concept(updated_concept)
+
+                    # If this concept is in the database, update it there too
+                    if self.data_access:
+                        try:
+                            # Save to database
+                            self.data_access.save_repository_concept(updated_concept)
+                            self._print_info("Updated concept in database as well")
+                        except Exception as db_err:
+                            self._print_warning(f"Note: The concept was updated in the repository but an error occurred updating it in the database: {db_err}")
+            else:
+                self._print_error(f"Failed to edit concept {concept_id}")
+
+        except Exception as e:
+            self._print_error(f"Error editing concept: {e}")
+
     def find_candidates(self, args):
         """
         Find potential new concept candidates.
@@ -1009,11 +1266,58 @@ Concepts loaded: {len(self.concept_repository.concepts)}
                         f"  Related: {relationships.get('related_count', 0)}",
                         Fore.YELLOW
                     )
+
+                # Print candidate statistics
+                candidate_stats = self.get_candidate_statistics()
+                if candidate_stats:
+                    self._print_info("Concept Candidates:")
+                    self._print_colorized(
+                        f"  Total candidates: {candidate_stats.get('total', 0)}",
+                        Fore.YELLOW
+                    )
+                    self._print_colorized(
+                        f"  Pending: {candidate_stats.get('pending', 0)}",
+                        Fore.YELLOW
+                    )
+                    self._print_colorized(
+                        f"  Approved: {candidate_stats.get('approved', 0)}",
+                        Fore.YELLOW
+                    )
+                    self._print_colorized(
+                        f"  Rejected: {candidate_stats.get('rejected', 0)}",
+                        Fore.YELLOW
+                    )
             else:
                 self._print_warning("No statistics available")
 
         except Exception as e:
             self._print_error(f"Error getting statistics: {e}")
+
+    def get_candidate_statistics(self) -> Dict[str, int]:
+        """
+        Get statistics about concept candidates.
+
+        Returns:
+            Dictionary with candidate statistics
+        """
+        try:
+            # Get candidates
+            all_candidates = list(self.candidate_extractor.candidates.values())
+
+            # Count by status
+            pending = sum(1 for c in all_candidates if c.get('status') == 'pending')
+            approved = sum(1 for c in all_candidates if c.get('status') == 'approved')
+            rejected = sum(1 for c in all_candidates if c.get('status') == 'rejected')
+
+            return {
+                'total': len(all_candidates),
+                'pending': pending,
+                'approved': approved,
+                'rejected': rejected
+            }
+        except Exception as e:
+            logger.error(f"Error getting candidate statistics: {e}")
+            return {}
 
     def find_path(self, args):
         """
@@ -1052,6 +1356,265 @@ Concepts loaded: {len(self.concept_repository.concepts)}
         except Exception as e:
             self._print_error(f"Error finding path: {e}")
 
+    def list_candidates(self, args):
+        """
+        List concept candidates.
+
+        Args:
+            args: Command-line arguments
+        """
+        status = args.status
+        limit = args.limit
+        offset = args.offset
+
+        # List candidates
+        try:
+            candidates = self.candidate_extractor.list_candidates(
+                status=status,
+                limit=limit,
+                offset=offset
+            )
+
+            if candidates:
+                status_str = f" with status '{status}'" if status else ""
+                self._print_success(f"Found {len(candidates)} concept candidates{status_str}:")
+                self._print_info(f"Showing results {offset+1}-{offset+len(candidates)}")
+                print()
+
+                for i, candidate in enumerate(candidates, offset + 1):
+                    candidate_id = candidate.get('candidate_id', 'unknown')
+                    text = candidate.get('text', '')
+                    status = candidate.get('status', 'pending')
+                    score = candidate.get('score', 0.0)
+                    language = candidate.get('language', '')
+                    domain = candidate.get('domain', '')
+
+                    # Choose color based on status
+                    if status == 'approved':
+                        status_color = Fore.GREEN
+                    elif status == 'rejected':
+                        status_color = Fore.RED
+                    else:  # pending
+                        status_color = Fore.YELLOW
+
+                    self._print_colorized(f"{i:4d}. {text} ({candidate_id})", status_color)
+                    self._print_colorized(f"       Status: {status.upper()}", status_color)
+                    self._print_colorized(f"       Score: {score:.2f} | Language: {language.upper()} | Domain: {domain}", Fore.WHITE)
+
+                    # Print source video if available
+                    source_video_id = candidate.get('source_video_id', '')
+                    source_video_title = candidate.get('source_video_title', '')
+                    if source_video_id:
+                        self._print_colorized(f"       Source: {source_video_title} ({source_video_id})", Fore.BLUE)
+
+                    print()  # Empty line
+            else:
+                filter_str = f" with status '{status}'" if status else ""
+                self._print_warning(f"No concept candidates found{filter_str}")
+
+        except Exception as e:
+            self._print_error(f"Error listing candidates: {e}")
+
+    def view_candidate(self, args):
+        """
+        View detailed information about a concept candidate.
+
+        Args:
+            args: Command-line arguments
+        """
+        candidate_id = args.candidate_id
+
+        # Get the candidate
+        candidate = self.candidate_extractor.get_candidate(candidate_id)
+        if not candidate:
+            self._print_error(f"Candidate not found: {candidate_id}")
+            return
+
+        # Print detailed candidate information
+        self._print_candidate(candidate, detailed=True)
+
+    def approve_candidate(self, args):
+        """
+        Approve a concept candidate and add it to the repository.
+
+        Args:
+            args: Command-line arguments
+        """
+        candidate_id = args.candidate_id
+        concept_id = args.concept_id
+
+        # Get the candidate
+        candidate = self.candidate_extractor.get_candidate(candidate_id)
+        if not candidate:
+            self._print_error(f"Candidate not found: {candidate_id}")
+            return
+
+        # Check if already approved
+        if candidate.get('status') == 'approved':
+            self._print_warning(f"Candidate {candidate_id} is already approved")
+
+            # Check if it's been added to repository
+            concept_data = candidate.get('concept_data', {})
+            existing_concept_id = concept_data.get('concept_id', '')
+
+            if existing_concept_id:
+                self._print_info(f"Concept ID: {existing_concept_id}")
+
+                # Check if concept exists in repository
+                concept = self.concept_repository.get_concept(existing_concept_id)
+                if concept:
+                    self._print_info("Concept exists in repository:")
+                    self._print_concept(concept)
+                else:
+                    self._print_warning(f"Concept {existing_concept_id} not found in repository")
+
+                    # Offer to add it
+                    user_input = input("Would you like to add it to the repository now? (y/n): ")
+                    if user_input.lower() == 'y':
+                        add_result = self.candidate_extractor.add_candidate_to_repository(candidate_id)
+                        if add_result:
+                            self._print_success(f"Added concept {add_result} to repository")
+                        else:
+                            self._print_error("Failed to add concept to repository")
+            return
+
+        # Update status to approved
+        success = self.candidate_extractor.update_candidate_status(
+            candidate_id,
+            'approved',
+            concept_id
+        )
+
+        if not success:
+            self._print_error(f"Failed to update candidate {candidate_id} status")
+            return
+
+        self._print_success(f"Approved candidate: {candidate_id}")
+
+        # Add to repository
+        add_result = self.candidate_extractor.add_candidate_to_repository(candidate_id)
+        if add_result:
+            self._print_success(f"Added concept {add_result} to repository")
+
+            # Show the new concept
+            new_concept = self.concept_repository.get_concept(add_result)
+            if new_concept:
+                self._print_concept(new_concept)
+        else:
+            self._print_error("Failed to add concept to repository")
+
+    def reject_candidate(self, args):
+        """
+        Reject a concept candidate.
+
+        Args:
+            args: Command-line arguments
+        """
+        candidate_id = args.candidate_id
+        reason = args.reason
+
+        # Get the candidate
+        candidate = self.candidate_extractor.get_candidate(candidate_id)
+        if not candidate:
+            self._print_error(f"Candidate not found: {candidate_id}")
+            return
+
+        # Check if already rejected
+        if candidate.get('status') == 'rejected':
+            self._print_warning(f"Candidate {candidate_id} is already rejected")
+            return
+
+        # Update status to rejected
+        success = self.candidate_extractor.update_candidate_status(
+            candidate_id,
+            'rejected'
+        )
+
+        if not success:
+            self._print_error(f"Failed to update candidate {candidate_id} status")
+            return
+
+        # Add rejection reason if provided
+        if reason:
+            # Add reason to candidate metadata
+            candidate = self.candidate_extractor.get_candidate(candidate_id)
+            if candidate:
+                if 'concept_data' not in candidate:
+                    candidate['concept_data'] = {}
+
+                if 'metadata' not in candidate['concept_data']:
+                    candidate['concept_data']['metadata'] = {}
+
+                candidate['concept_data']['metadata']['rejection_reason'] = reason
+
+                # Save updated candidate
+                self.candidate_extractor._save_candidate(candidate)
+
+        self._print_success(f"Rejected candidate: {candidate_id}")
+        if reason:
+            self._print_info(f"Rejection reason: {reason}")
+
+    def edit_candidate(self, args):
+        """
+        Edit a concept candidate.
+
+        Args:
+            args: Command-line arguments
+        """
+        candidate_id = args.candidate_id
+        new_text = args.text
+        new_domain = args.domain
+        prereq_ids = args.prereqs.split(',') if args.prereqs else None
+        related_ids = args.related.split(',') if args.related else None
+
+        # Get the candidate
+        candidate = self.candidate_extractor.get_candidate(candidate_id)
+        if not candidate:
+            self._print_error(f"Candidate not found: {candidate_id}")
+            return
+
+        # Edit the candidate
+        success = self.candidate_extractor.edit_candidate(
+            candidate_id,
+            new_text=new_text,
+            new_domain=new_domain,
+            prerequisites=prereq_ids,
+            related=related_ids
+        )
+
+        if success:
+            self._print_success(f"Updated candidate: {candidate_id}")
+
+            # Show the updated candidate
+            updated_candidate = self.candidate_extractor.get_candidate(candidate_id)
+            if updated_candidate:
+                self._print_candidate(updated_candidate, detailed=True)
+        else:
+            self._print_error(f"Failed to update candidate {candidate_id}")
+
+    def delete_candidate(self, args):
+        """
+        Delete a concept candidate.
+
+        Args:
+            args: Command-line arguments
+        """
+        candidate_id = args.candidate_id
+
+        # Confirm deletion
+        user_input = input(f"Are you sure you want to delete candidate {candidate_id}? (y/n): ")
+        if user_input.lower() != 'y':
+            self._print_info("Deletion cancelled")
+            return
+
+        # Delete the candidate
+        success = self.candidate_extractor.delete_candidate(candidate_id)
+
+        if success:
+            self._print_success(f"Deleted candidate: {candidate_id}")
+        else:
+            self._print_error(f"Failed to delete candidate {candidate_id}")
+
 
 def main():
     """Main entry point for the CLI application."""
@@ -1066,9 +1629,13 @@ Examples:
   python demo.py concept quantum_mechanics
   python demo.py path quantum_mechanics,wave_function
   python demo.py list-concepts --language en
+  python demo.py candidates
+  python demo.py candidate <candidate_id>
+  python demo.py approve-candidate <candidate_id>
   python demo.py add-concept new_concept --en "New Concept" --ru "Новая концепция"
   python demo.py add-representation quantum_mechanics --lang ru --text "квантовая механика"
   python demo.py add-relationship quantum_mechanics --prereq wave_function
+  python demo.py edit-concept quantum_mechanics --add-en "quantum physics,quantum theory"
   python demo.py stats
 """
     )
@@ -1166,6 +1733,40 @@ Examples:
     add_relationship_parser.add_argument("--prereq", help="Prerequisite concept ID")
     add_relationship_parser.add_argument("--related", help="Related concept ID")
 
+    # Edit concept command
+    edit_concept_parser = subparsers.add_parser(
+        "edit-concept", help="Edit a concept with comprehensive modifications"
+    )
+    edit_concept_parser.add_argument("concept_id", help="Concept ID to edit")
+    edit_concept_parser.add_argument("--new-id", help="New concept ID (to rename)")
+    edit_concept_parser.add_argument(
+        "--category", help="Move concept to new category file"
+    )
+    edit_concept_parser.add_argument(
+        "--add-en", help="Add English representations (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--add-ru", help="Add Russian representations (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--remove-en", help="Remove English representations (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--remove-ru", help="Remove Russian representations (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--add-prereqs", help="Add prerequisite concept IDs (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--remove-prereqs", help="Remove prerequisite concept IDs (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--add-related", help="Add related concept IDs (comma-separated)"
+    )
+    edit_concept_parser.add_argument(
+        "--remove-related", help="Remove related concept IDs (comma-separated)"
+    )
+
     # Find candidates command
     candidates_parser = subparsers.add_parser(
         "candidates", help="Find potential new concept candidates"
@@ -1185,6 +1786,69 @@ Examples:
     )
     find_path_parser.add_argument("source_id", help="Source concept ID")
     find_path_parser.add_argument("target_id", help="Target concept ID")
+
+    # List candidates command
+    list_candidates_parser = subparsers.add_parser(
+        "list-candidates", help="List concept candidates"
+    )
+    list_candidates_parser.add_argument(
+        "--status", choices=["pending", "approved", "rejected"],
+        help="Filter by status (pending, approved, rejected)"
+    )
+    list_candidates_parser.add_argument(
+        "--limit", type=int, default=20, help="Maximum number of candidates to list"
+    )
+    list_candidates_parser.add_argument(
+        "--offset", type=int, default=0, help="Pagination offset"
+    )
+
+    # View candidate command
+    view_candidate_parser = subparsers.add_parser(
+        "candidate", help="View detailed information about a concept candidate"
+    )
+    view_candidate_parser.add_argument("candidate_id", help="Candidate ID")
+
+    # Approve candidate command
+    approve_candidate_parser = subparsers.add_parser(
+        "approve-candidate", help="Approve a concept candidate and add it to the repository"
+    )
+    approve_candidate_parser.add_argument("candidate_id", help="Candidate ID")
+    approve_candidate_parser.add_argument(
+        "--concept-id", help="Optional concept ID to assign (generated if not provided)"
+    )
+
+    # Reject candidate command
+    reject_candidate_parser = subparsers.add_parser(
+        "reject-candidate", help="Reject a concept candidate"
+    )
+    reject_candidate_parser.add_argument("candidate_id", help="Candidate ID")
+    reject_candidate_parser.add_argument(
+        "--reason", help="Optional reason for rejection"
+    )
+
+    # Edit candidate command
+    edit_candidate_parser = subparsers.add_parser(
+        "edit-candidate", help="Edit a concept candidate"
+    )
+    edit_candidate_parser.add_argument("candidate_id", help="Candidate ID")
+    edit_candidate_parser.add_argument(
+        "--text", help="New text for the candidate"
+    )
+    edit_candidate_parser.add_argument(
+        "--domain", help="New domain for the candidate"
+    )
+    edit_candidate_parser.add_argument(
+        "--prereqs", help="Comma-separated list of prerequisite concept IDs"
+    )
+    edit_candidate_parser.add_argument(
+        "--related", help="Comma-separated list of related concept IDs"
+    )
+
+    # Delete candidate command
+    delete_candidate_parser = subparsers.add_parser(
+        "delete-candidate", help="Delete a concept candidate"
+    )
+    delete_candidate_parser.add_argument("candidate_id", help="Candidate ID")
 
     # Parse arguments
     args = parser.parse_args()
@@ -1209,12 +1873,26 @@ Examples:
         cli.add_representation(args)
     elif args.command == "add-relationship":
         cli.add_relationship(args)
+    elif args.command == "edit-concept":
+        cli.edit_concept(args)
     elif args.command == "candidates":
         cli.find_candidates(args)
     elif args.command == "stats":
         cli.get_statistics(args)
     elif args.command == "find-path":
         cli.find_path(args)
+    elif args.command == "list-candidates":
+        cli.list_candidates(args)
+    elif args.command == "candidate":
+        cli.view_candidate(args)
+    elif args.command == "approve-candidate":
+        cli.approve_candidate(args)
+    elif args.command == "reject-candidate":
+        cli.reject_candidate(args)
+    elif args.command == "edit-candidate":
+        cli.edit_candidate(args)
+    elif args.command == "delete-candidate":
+        cli.delete_candidate(args)
     else:
         parser.print_help()
 

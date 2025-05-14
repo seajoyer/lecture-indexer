@@ -189,6 +189,10 @@ class ConceptRepository:
         # Ensure representations exist and are properly structured
         if 'representations' not in concept:
             concept['representations'] = {}
+        else:
+            # Ensure all representations are lowercase
+            for lang, texts in concept['representations'].items():
+                concept['representations'][lang] = [text.lower() for text in texts]
 
         # Ensure prerequisites and related lists exist
         if 'prerequisites' not in concept:
@@ -793,10 +797,16 @@ class ConceptRepository:
             logger.warning(f"Concept ID {concept_id} already exists")
             return None
 
+        # Lowercase all representations
+        lowercased_representations = {}
+        if representations:
+            for lang, texts in representations.items():
+                lowercased_representations[lang] = [text.lower() for text in texts]
+
         # Create concept structure
         concept = {
             'concept_id': concept_id,
-            'representations': representations or {},
+            'representations': lowercased_representations or {},
             'prerequisites': prerequisites or [],
             'related': related or [],
             'metadata': {
@@ -875,6 +885,9 @@ class ConceptRepository:
         # Ensure language list exists
         if language not in concept['representations']:
             concept['representations'][language] = []
+
+        # Convert text to lowercase
+        text = text.lower()
 
         # Check if representation already exists
         if text in concept['representations'][language]:
@@ -1066,6 +1079,310 @@ class ConceptRepository:
 
         # Return list of concepts
         return paginated
+
+    def edit_concept(
+        self,
+        concept_id: str,
+        new_concept_id: Optional[str] = None,
+        add_representations: Optional[Dict[str, List[str]]] = None,
+        remove_representations: Optional[Dict[str, List[str]]] = None,
+        add_prerequisites: Optional[List[str]] = None,
+        remove_prerequisites: Optional[List[str]] = None,
+        add_related: Optional[List[str]] = None,
+        remove_related: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        file_category: Optional[str] = None
+    ) -> bool:
+        """
+        Edit a concept with comprehensive modifications.
+
+        Args:
+            concept_id: Current concept ID
+            new_concept_id: Optional new concept ID to rename
+            add_representations: Dict of language -> list of representations to add
+            remove_representations: Dict of language -> list of representations to remove
+            add_prerequisites: List of prerequisite concept IDs to add
+            remove_prerequisites: List of prerequisite concept IDs to remove
+            add_related: List of related concept IDs to add
+            remove_related: List of related concept IDs to remove
+            metadata: Dict of metadata to update/add
+            file_category: Optional new file category
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Check if concept exists
+        concept = self.get_concept(concept_id)
+        if not concept:
+            logger.warning(f"Concept {concept_id} not found")
+            return False
+
+        try:
+            # Handle ID change if requested
+            current_concept_id = concept_id
+            if new_concept_id and new_concept_id != concept_id:
+                # Check if new ID already exists
+                if new_concept_id in self.concepts:
+                    logger.warning(f"Cannot rename to {new_concept_id} - ID already exists")
+                    return False
+
+                # Update concept ID
+                concept['concept_id'] = new_concept_id
+
+                # Remove old concept from repository
+                del self.concepts[concept_id]
+
+                # Add with new ID
+                self.concepts[new_concept_id] = concept
+
+                # Update current ID for saving later
+                current_concept_id = new_concept_id
+
+                logger.info(f"Renamed concept from {concept_id} to {new_concept_id}")
+
+            # Handle adding representations
+            if add_representations:
+                for language, texts in add_representations.items():
+                    # Ensure language entry exists
+                    if language not in concept['representations']:
+                        concept['representations'][language] = []
+
+                    # Add each representation (ensuring lowercase)
+                    for text in texts:
+                        # Skip empty texts
+                        if not text:
+                            continue
+
+                        text = text.lower()  # Ensure lowercase
+
+                        # Skip if already exists
+                        if text in concept['representations'][language]:
+                            logger.info(f"Representation '{text}' already exists - skipping")
+                            continue
+
+                        # Add representation
+                        concept['representations'][language].append(text)
+
+                        # Update indices
+                        self.language_index[language].add(current_concept_id)
+
+                        normalized_text = self._normalize_text(text, language)
+                        if normalized_text not in self.representation_index:
+                            self.representation_index[normalized_text] = set()
+                        self.representation_index[normalized_text].add(current_concept_id)
+
+                        # Update variant index
+                        variants = self._generate_variants(text, language)
+                        for variant in variants:
+                            variant_normalized = self._normalize_text(variant, language)
+                            if variant_normalized:
+                                self.variant_index[variant_normalized].add(current_concept_id)
+
+                        logger.info(f"Added representation '{text}' in language '{language}'")
+
+            # Handle removing representations
+            if remove_representations:
+                for language, texts in remove_representations.items():
+                    # Skip if language doesn't exist
+                    if language not in concept['representations']:
+                        continue
+
+                    # Convert all texts to lowercase for comparison
+                    texts_lower = [t.lower() for t in texts]
+
+                    # Remove each representation
+                    for text_lower in texts_lower:
+                        if text_lower in concept['representations'][language]:
+                            # Remove from concept
+                            concept['representations'][language].remove(text_lower)
+
+                            # If no more representations in this language, remove from language index
+                            if not concept['representations'][language]:
+                                if current_concept_id in self.language_index.get(language, set()):
+                                    self.language_index[language].remove(current_concept_id)
+
+                            logger.info(f"Removed representation '{text_lower}' in language '{language}'")
+
+            # Handle adding prerequisites
+            if add_prerequisites:
+                for prereq_id in add_prerequisites:
+                    # Skip if already exists
+                    if prereq_id in concept.get('prerequisites', []):
+                        continue
+
+                    # Check if target concept exists
+                    if prereq_id not in self.concepts:
+                        logger.warning(f"Prerequisite concept {prereq_id} not found - skipping")
+                        continue
+
+                    # Add prerequisite
+                    if 'prerequisites' not in concept:
+                        concept['prerequisites'] = []
+                    concept['prerequisites'].append(prereq_id)
+
+                    logger.info(f"Added prerequisite {prereq_id}")
+
+            # Handle removing prerequisites
+            if remove_prerequisites:
+                for prereq_id in remove_prerequisites:
+                    # Skip if not in prerequisites
+                    if prereq_id not in concept.get('prerequisites', []):
+                        continue
+
+                    # Remove prerequisite
+                    concept['prerequisites'].remove(prereq_id)
+
+                    logger.info(f"Removed prerequisite {prereq_id}")
+
+            # Handle adding related concepts
+            if add_related:
+                for related_id in add_related:
+                    # Skip if already exists
+                    if related_id in concept.get('related', []):
+                        continue
+
+                    # Check if target concept exists
+                    if related_id not in self.concepts:
+                        logger.warning(f"Related concept {related_id} not found - skipping")
+                        continue
+
+                    # Add related concept
+                    if 'related' not in concept:
+                        concept['related'] = []
+                    concept['related'].append(related_id)
+
+                    logger.info(f"Added related concept {related_id}")
+
+            # Handle removing related concepts
+            if remove_related:
+                for related_id in remove_related:
+                    # Skip if not in related
+                    if related_id not in concept.get('related', []):
+                        continue
+
+                    # Remove related concept
+                    concept['related'].remove(related_id)
+
+                    logger.info(f"Removed related concept {related_id}")
+
+            # Update metadata
+            if metadata:
+                if 'metadata' not in concept:
+                    concept['metadata'] = {}
+
+                # Update each metadata field
+                for key, value in metadata.items():
+                    concept['metadata'][key] = value
+
+                logger.info(f"Updated metadata: {', '.join(metadata.keys())}")
+
+            # Always update last_updated timestamp
+            if 'metadata' not in concept:
+                concept['metadata'] = {}
+            concept['metadata']['last_updated'] = datetime.now().isoformat()
+
+            # Save changes
+            save_file_category = file_category or self._get_concept_file_category(current_concept_id)
+
+            # If ID changed, delete old concept file
+            if new_concept_id and new_concept_id != concept_id:
+                self._delete_concept_from_file(concept_id, self._get_concept_file_category(concept_id))
+
+            # Save updated concept
+            self._save_concept(concept, save_file_category)
+
+            # If ID changed or representations changed, rebuild indices
+            if new_concept_id or add_representations or remove_representations:
+                # Clear and rebuild indices for this concept
+                self._rebuild_indices_for_concept(current_concept_id, concept)
+
+            logger.info(f"Successfully edited concept {current_concept_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error editing concept {concept_id}: {e}")
+            return False
+
+    def _rebuild_indices_for_concept(self, concept_id: str, concept: Dict):
+        """
+        Rebuild indices for a specific concept.
+
+        Args:
+            concept_id: Concept ID
+            concept: Concept dictionary
+        """
+        # Clear existing entries for this concept
+        for lang_set in self.language_index.values():
+            if concept_id in lang_set:
+                lang_set.remove(concept_id)
+
+        for rep_set in self.representation_index.values():
+            if concept_id in rep_set:
+                rep_set.remove(concept_id)
+
+        for var_set in self.variant_index.values():
+            if concept_id in var_set:
+                var_set.remove(concept_id)
+
+        # Rebuild indices
+        self._index_concept_representations(concept_id, concept)
+
+        # Rebuild variant index for this concept
+        self._update_variant_index_for_concept(concept_id, concept)
+
+    def _delete_concept_from_file(self, concept_id: str, file_category: str) -> bool:
+        """
+        Delete a concept from its file.
+
+        Args:
+            concept_id: Concept ID
+            file_category: File category
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Ensure file category is valid
+        if not file_category or not file_category.endswith('.jsonl'):
+            file_category = f"{file_category}.jsonl"
+
+        file_path = os.path.join(self.concepts_dir, file_category)
+
+        try:
+            # Skip if file doesn't exist
+            if not os.path.exists(file_path):
+                return True
+
+            # Read all concepts from the file
+            concepts = []
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        concepts.append(line)  # Preserve comments and empty lines
+                        continue
+
+                    try:
+                        existing = json.loads(line)
+                        existing_id = existing.get('concept_id')
+
+                        if existing_id and existing_id != concept_id:
+                            # Keep all concepts except the one to delete
+                            concepts.append(line)
+                    except json.JSONDecodeError:
+                        # Keep invalid lines as-is
+                        concepts.append(line)
+
+            # Write the updated file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                for line in concepts:
+                    f.write(line + '\n')
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error deleting concept {concept_id} from file: {e}")
+            return False
 
     def find_concept_candidates(self, threshold: float = 0.7) -> List[Dict]:
         """

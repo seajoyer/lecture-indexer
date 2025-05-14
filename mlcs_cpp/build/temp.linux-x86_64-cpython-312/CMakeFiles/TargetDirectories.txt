@@ -1,0 +1,13 @@
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/mlcs_cpp.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/edit_cache.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/rebuild_cache.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/list_install_components.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/install.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/install/local.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/CMakeFiles/install/strip.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/edit_cache.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/rebuild_cache.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/list_install_components.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/install.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/install/local.dir
+/home/dmitry/Projects/MEPhI/97kaf/prog/lecture-indexer/mlcs_cpp/build/temp.linux-x86_64-cpython-312/pybind11/CMakeFiles/install/strip.dir
