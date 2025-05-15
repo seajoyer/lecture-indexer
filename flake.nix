@@ -174,7 +174,7 @@
             else
               echo "Warning: YOUTUBE_API_KEY is not set in environment"
               # You can set a default key for development here if needed
-              # export YOUTUBE_API_KEY="your-default-key-for-dev"
+              # export YOUTUBE_API_KEY="AIzaSyA5n2hS2aVYrm7HeHP7u0iM7ubOyVTGQ-o"
             fi
 
             # Create data directories if they don't exist
