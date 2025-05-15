@@ -50,7 +50,7 @@ from performance_utils import time_function, Timer
 logger = logging.getLogger(__name__)
 
 # Cache version - increment when processing logic changes
-CACHE_VERSION = "2.0.0"
+CACHE_VERSION = "2.0.1"
 
 class TranscriptProcessor:
     """
@@ -75,6 +75,16 @@ class TranscriptProcessor:
 
         # Set maximum workers for parallel processing
         self.max_workers = os.cpu_count() or 4
+
+        # Cache for Russian language operations
+        self._russian_normalization_cache = {}
+        self._russian_sentence_cache = {}
+
+        # OPTIMIZATION: Add language-specific processing flags
+        self.simplified_mode = {
+            'en': False,  # Full processing for English
+            'ru': True    # Simplified processing for Russian
+        }
 
         logger.info("TranscriptProcessor initialized with global processing approach")
 
@@ -110,6 +120,30 @@ class TranscriptProcessor:
             "ru": ["важный", "существенный", "ключевой", "фундаментальный", "основной", "критический"]
         }
 
+        # Russian common phrases to optimize normalization
+        self.russian_noise_patterns = [
+            (r'\bэто\s+', ''),   # "это " (this is)
+            (r'\bвот\s+', ''),   # "вот " (here)
+            (r'\bда\s+', ''),    # "да " (yes)
+            (r'\bну\s+', ''),    # "ну " (well)
+            (r'^то\s+', ''),     # "то " at beginning (then/that)
+            (r'^у\s+нас\s+', ''),  # "у нас " (we have)
+            (r'^просто\s+', ''), # "просто " (just)
+            (r'^давайте\s+', ''), # "давайте " (let's)
+            (r'^это\s+', ''),    # "это " (this)
+            (r'^такое\s+', ''),  # "такое " (such)
+            (r'^такой\s+', ''),  # "такой " (such)
+            (r'^такая\s+', ''),  # "такая " (such)
+            (r'^такие\s+', '')   # "такие " (such)
+        ]
+
+        # Compile Russian noise patterns for faster processing
+        self.compiled_russian_noise_patterns = [(re.compile(pattern), repl) for pattern, repl in self.russian_noise_patterns]
+
+        # OPTIMIZATION: Pre-compile frequently used regex patterns
+        self.sentence_boundary_pattern = re.compile(r'(?<=[.!?])\s+')
+        self.russian_sentence_pattern = re.compile(r'(?<=[.!?…])\s+(?=[А-ЯЁ])')
+
     def _ensure_nlp_resources(self, language: str = 'en'):
         """
         Ensure NLP resources are available for the specified language.
@@ -118,6 +152,10 @@ class TranscriptProcessor:
         Args:
             language: Two-letter language code
         """
+        # OPTIMIZATION: Skip NLP initialization for Russian if in simplified mode
+        if language == 'ru' and self.simplified_mode['ru']:
+            return
+
         if self._nlp_initialized:
             return
 
@@ -253,8 +291,24 @@ class TranscriptProcessor:
         global_text = " ".join([s.get("text", "") for s in raw_segments if s.get("text")])
 
         # 1.1: Language Detection (using the full text for better accuracy)
-        language = self._detect_language(global_text)
+        # OPTIMIZATION: Fast language detection using character ratios
+        language = self._detect_language_fast(global_text)
         logger.info(f"Detected language: {language}")
+
+        # OPTIMIZATION: Special processing path for Russian
+        if language == 'ru':
+            logger.info("Using optimized Russian transcript processing")
+            result = self._process_transcript_russian(raw_segments, video_metadata, global_text)
+
+            process_time = process_timer.stop() / 1000  # Convert to seconds
+            logger.info(f"Processed Russian transcript for video {video_id} in {process_time:.2f}s")
+
+            # Cache the result
+            cache_set("transcript", cache_key, result)
+
+            return result
+
+        # Standard processing for non-Russian languages
 
         # 1.2: Ensure NLP resources are loaded for this language
         self._ensure_nlp_resources(language)
@@ -308,10 +362,73 @@ class TranscriptProcessor:
 
         return result
 
-    def _detect_language(self, text: str) -> str:
+    def _process_transcript_russian(self, raw_segments: List[Dict], video_metadata: Dict, global_text: str) -> Dict:
+        """
+        Optimized processing for Russian transcripts.
+        Uses simplified algorithms and skips expensive NLP operations.
+
+        Args:
+            raw_segments: List of raw transcript segments
+            video_metadata: Video metadata dictionary
+            global_text: Combined text from all segments
+
+        Returns:
+            Dictionary containing processed transcript data
+        """
+        video_id = video_metadata.get("video_id", "unknown")
+
+        # OPTIMIZATION: Minimal domain detection for Russian
+        domain = video_metadata.get("domain", "unknown")
+        if domain == "unknown":
+            # Use keyword-based detection only (skip TF-IDF)
+            domain = self._detect_domain_simple(global_text, 'ru')
+            logger.info(f"Detected domain: {domain}")
+
+        # OPTIMIZATION: Use simplified global analysis for Russian
+        # Avoiding heavy NLP processing
+        start_time = time.time()
+        global_analysis = self._analyze_global_text_russian_simple(global_text)
+        analysis_time = time.time() - start_time
+        logger.info(f"Performed simplified Russian global analysis in {analysis_time:.2f}s")
+
+        # Calculate theory/practice ratio (simplified)
+        theory_practice_ratio = self._calculate_theory_practice_ratio(global_analysis)
+
+        # OPTIMIZATION: Super-fast normalization for Russian
+        # Uses caching and minimal processing
+        normalized_segments = self._normalize_segments_russian_fast(raw_segments)
+
+        # OPTIMIZATION: Fast sentence segmentation for Russian
+        # Uses regex instead of NLP libraries
+        sentence_segments = self._create_sentence_segments_russian_fast(normalized_segments)
+
+        # OPTIMIZATION: Simple educational value calculation for Russian
+        processed_segments = self._process_segments_educational_value_simple(sentence_segments)
+
+        # Prepare result
+        result = {
+            "segments": processed_segments,
+            "global_analysis": {
+                "language": "ru",
+                "domain": domain,
+                "word_count": global_analysis.get("word_count", 0),
+                "sentence_count": global_analysis.get("sentence_count", 0),
+                "key_terms": global_analysis.get("key_terms", []),
+                "theoretical_indicators": global_analysis.get("theoretical_indicators", 0),
+                "practical_indicators": global_analysis.get("practical_indicators", 0),
+                "theory_practice_ratio": theory_practice_ratio
+            },
+            "language": "ru",
+            "domain": domain,
+            "video_id": video_id
+        }
+
+        return result
+
+    def _detect_language_fast(self, text: str) -> str:
         """
         Detect text language using character frequency analysis.
-        Enhanced to be more accurate with mixed-language text.
+        Optimized for speed with early return for clear cases.
 
         Args:
             text: Text to analyze
@@ -322,48 +439,77 @@ class TranscriptProcessor:
         if not text:
             return 'en'  # Default to English for empty text
 
+        # Take a sample to speed up detection
+        sample = text[:2000] if len(text) > 2000 else text
+
         # Count character frequencies
-        latin_chars = len(re.findall(r'[a-zA-Z]', text))
-        cyrillic_chars = len(re.findall(r'[а-яА-ЯёЁ]', text))
+        latin_chars = len(re.findall(r'[a-zA-Z]', sample))
+        cyrillic_chars = len(re.findall(r'[а-яА-ЯёЁ]', sample))
 
-        # Calculate ratios
-        total_chars = max(1, len(re.findall(r'[a-zA-Zа-яА-ЯёЁ]', text)))
-        latin_ratio = latin_chars / total_chars
-        cyrillic_ratio = cyrillic_chars / total_chars
-
-        # Use thresholds to determine language
-        if cyrillic_ratio > 0.4:  # If text is at least 40% Cyrillic
+        # Early return for clear cases
+        if cyrillic_chars > 0 and latin_chars == 0:
             return 'ru'
-        elif latin_ratio > 0.4:  # If text is at least 40% Latin
+        if latin_chars > 0 and cyrillic_chars == 0:
             return 'en'
 
-        # If no clear pattern, try additional detection methods
-        if SPACY_AVAILABLE:
-            # Use spaCy's language detection if available
-            try:
-                # Sample the text (for performance)
-                sample = text[:1000]
-                from spacy.language import Language
-                from spacy_langdetect import LanguageDetector
+        # Calculate ratios for mixed text
+        total_chars = latin_chars + cyrillic_chars
+        if total_chars == 0:
+            return 'en'  # Default to English if no recognizable chars
 
-                # Only set up language detector if needed
-                if not hasattr(self, 'language_detector'):
-                    Language.factory("language_detector", func=lambda nlp, name: LanguageDetector())
-                    # Use English model as base
-                    if 'en' not in self._spacy_models:
-                        self._spacy_models['en'] = spacy.load("en_core_web_sm")
-                    self._spacy_models['en'].add_pipe('language_detector', last=True)
+        # Use threshold for faster decision
+        if cyrillic_chars / total_chars > 0.5:
+            return 'ru'
+        else:
+            return 'en'
 
-                doc = self._spacy_models['en'](sample)
-                detected_lang = doc._.language.get('language')
+    def _detect_domain_simple(self, text: str, language: str) -> str:
+        """
+        Simplified domain detection using keyword counting.
+        Much faster than the full domain detection.
 
-                if detected_lang in ['en', 'ru']:
-                    return detected_lang
-            except:
-                logger.warning("spaCy language detection failed, using character-based fallback")
+        Args:
+            text: Text to analyze
+            language: Language code
 
-        # Default to English if detection is inconclusive
-        return 'en'
+        Returns:
+            Domain name
+        """
+        if not text:
+            return 'unknown'
+
+        # Basic keyword-based detection
+        domain_keywords = {
+            "mathematics": {
+                "en": ["math", "mathematics", "calculus", "algebra", "geometry", "theorem", "equation"],
+                "ru": ["математика", "алгебра", "геометрия", "теорема", "уравнение"]
+            },
+            "physics": {
+                "en": ["physics", "quantum", "mechanics", "energy", "force", "particle", "wave"],
+                "ru": ["физика", "квантовый", "механика", "энергия", "сила", "частица", "волна"]
+            },
+            "programming": {
+                "en": ["programming", "code", "algorithm", "function", "class", "object", "data"],
+                "ru": ["программирование", "код", "алгоритм", "функция", "класс", "объект", "данные"]
+            }
+        }
+
+        # Get keywords for detected language
+        lang_key = language if language in ["en", "ru"] else "en"
+
+        # Count keyword occurrences
+        domain_scores = {domain: 0 for domain in domain_keywords}
+        lowered_text = text.lower()
+
+        for domain, keywords_dict in domain_keywords.items():
+            keywords = keywords_dict.get(lang_key, keywords_dict.get("en", []))
+            domain_scores[domain] = sum(lowered_text.count(keyword.lower()) for keyword in keywords)
+
+        # Return domain with highest score
+        if sum(domain_scores.values()) > 0:
+            return max(domain_scores.items(), key=lambda x: x[1])[0]
+
+        return 'unknown'
 
     def _detect_domain(self, text: str, language: str) -> str:
         """
@@ -400,46 +546,7 @@ class TranscriptProcessor:
                 logger.warning(f"TF-IDF domain detection failed: {e}")
 
         # Fallback: Keyword-based detection
-        domain_keywords = {
-            "mathematics": {
-                "en": ["math", "mathematics", "calculus", "algebra", "geometry", "theorem", "equation"],
-                "ru": ["математика", "алгебра", "геометрия", "теорема", "уравнение"]
-            },
-            "physics": {
-                "en": ["physics", "quantum", "mechanics", "energy", "force", "particle", "wave"],
-                "ru": ["физика", "квантовый", "механика", "энергия", "сила", "частица", "волна"]
-            },
-            "programming": {
-                "en": ["programming", "code", "algorithm", "function", "class", "object", "data"],
-                "ru": ["программирование", "код", "алгоритм", "функция", "класс", "объект", "данные"]
-            }
-        }
-
-        # Get keywords for detected language, fallback to English if needed
-        lang_key = language if language in ["en", "ru"] else "en"
-
-        # Count keyword occurrences with improved algorithm
-        domain_scores = {domain: 0 for domain in domain_keywords}
-        lowered_text = text.lower()
-
-        for domain, keywords_dict in domain_keywords.items():
-            keywords = keywords_dict.get(lang_key, keywords_dict.get("en", []))
-
-            for keyword in keywords:
-                # Count occurrences
-                count = lowered_text.count(keyword.lower())
-
-                # Weigh multi-word terms higher (they're more specific)
-                if " " in keyword:
-                    count *= 2
-
-                domain_scores[domain] += count
-
-        # Return domain with highest score
-        if sum(domain_scores.values()) > 0:
-            return max(domain_scores.items(), key=lambda x: x[1])[0]
-
-        return 'unknown'
+        return self._detect_domain_simple(text, language)
 
     def _analyze_global_text(self, text: str, language: str, domain: str) -> Dict[str, Any]:
         """
@@ -485,7 +592,7 @@ class TranscriptProcessor:
                 key_terms = []
 
                 # Check if noun_chunks attribute is available for this language
-                has_noun_chunks = False
+                has_noun_chunks = True
                 try:
                     # Just test if we can iterate through noun chunks
                     next(iter(doc.noun_chunks), None)
@@ -561,6 +668,133 @@ class TranscriptProcessor:
         analysis["theoretical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in theoretical_patterns)
         analysis["practical_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in practical_patterns)
         analysis["educational_indicators"] = sum(text_lower.count(pattern.lower()) for pattern in educational_indicators)
+
+        return analysis
+
+    def _analyze_global_text_russian_simple(self, text: str) -> Dict[str, Any]:
+        """
+        Ultra-optimized analysis for Russian text.
+        Uses only basic regex operations for maximum speed.
+
+        Args:
+            text: Full Russian transcript text
+
+        Returns:
+            Dictionary of global text features
+        """
+        # Initialize result structure
+        analysis = {
+            "word_count": 0,
+            "sentence_count": 0,
+            "key_terms": [],
+            "theoretical_indicators": 0,
+            "practical_indicators": 0,
+            "educational_indicators": 0,
+            "term_frequencies": {}
+        }
+
+        if not text.strip():
+            return analysis
+
+        # Ultra-fast word counting - count word boundaries rather than collecting words
+        words = re.findall(r'\b[а-яА-ЯёЁ]+\b', text)
+        analysis["word_count"] = len(words)
+
+        # Fast sentence counting - just count sentence ending punctuation
+        sentence_count = len(re.findall(r'[.!?]+', text))
+        analysis["sentence_count"] = max(1, sentence_count)  # At least 1 sentence
+
+        # Simple word frequency for key terms
+        # Take only the most frequent words that are at least 4 characters
+        word_counter = Counter([w.lower() for w in words if len(w) >= 4])
+        most_common = word_counter.most_common(20)
+
+        # Store term frequencies and key terms
+        analysis["term_frequencies"] = {term: count for term, count in most_common}
+        analysis["key_terms"] = [term for term, _ in most_common]
+
+        # Super simple indicator counting
+        text_lower = text.lower()
+
+        # Theoretical indicators for Russian (minimal set)
+        theoretical_patterns = ["определение", "концепция", "теория", "теорема"]
+
+        # Practical indicators for Russian (minimal set)
+        practical_patterns = ["пример", "применение", "практика", "давайте"]
+
+        # Count pattern occurrences - faster with direct counting
+        analysis["theoretical_indicators"] = sum(text_lower.count(pattern) for pattern in theoretical_patterns)
+        analysis["practical_indicators"] = sum(text_lower.count(pattern) for pattern in practical_patterns)
+
+        return analysis
+
+    def _analyze_global_text_russian(self, text: str) -> Dict[str, Any]:
+        """
+        Optimized analysis for Russian text.
+        Simplified to focus on essential metrics for better performance.
+
+        Args:
+            text: Full Russian transcript text
+
+        Returns:
+            Dictionary of global text features
+        """
+        # Initialize result structure
+        analysis = {
+            "word_count": 0,
+            "sentence_count": 0,
+            "key_terms": [],
+            "theoretical_indicators": 0,
+            "practical_indicators": 0,
+            "educational_indicators": 0,
+            "term_frequencies": {}
+        }
+
+        if not text.strip():
+            return analysis
+
+        # Basic word count using regex - much faster than spaCy for Russian
+        words = re.findall(r'[а-яА-ЯёЁ]+', text)
+        analysis["word_count"] = len(words)
+
+        # Simple sentence segmentation
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        analysis["sentence_count"] = len(sentences)
+
+        # Word frequency analysis - simplified for performance
+        word_counter = Counter(words)
+
+        # Filter out very short words and common Russian stopwords
+        common_stopwords = {"и", "в", "на", "с", "по", "к", "у", "от", "из", "для", "это",
+                           "так", "что", "как", "не", "а", "но", "же", "бы", "да", "ну",
+                           "вот", "то", "или", "если", "когда"}
+
+        word_counter = {word: count for word, count in word_counter.items()
+                      if len(word) > 2 and word.lower() not in common_stopwords}
+
+        # Extract key terms
+        analysis["term_frequencies"] = {term: count for term, count in word_counter.most_common(50)}
+        analysis["key_terms"] = [term for term, _ in word_counter.most_common(20)]
+
+        # Count indicators (theory/practice/educational) - simplified approach
+        text_lower = text.lower()
+
+        # Theoretical indicators for Russian
+        theoretical_patterns = ["определение", "концепция", "теория", "принцип",
+                              "определяется как", "означает", "понятие", "теорема"]
+
+        # Practical indicators for Russian
+        practical_patterns = ["пример", "применение", "практика", "как",
+                            "реализовать", "показать", "давайте", "рассмотрим"]
+
+        # Educational indicators for Russian
+        educational_patterns = ["важный", "существенный", "ключевой", "фундаментальный",
+                              "основной", "критический", "необходимо понять"]
+
+        # Count pattern occurrences - faster with direct counting
+        analysis["theoretical_indicators"] = sum(text_lower.count(pattern) for pattern in theoretical_patterns)
+        analysis["practical_indicators"] = sum(text_lower.count(pattern) for pattern in practical_patterns)
+        analysis["educational_indicators"] = sum(text_lower.count(pattern) for pattern in educational_patterns)
 
         return analysis
 
@@ -660,6 +894,65 @@ class TranscriptProcessor:
 
         return normalized_segments
 
+    def _normalize_segments_russian_fast(self, raw_segments: List[Dict]) -> List[Dict]:
+        """
+        Ultra-fast normalization for Russian segments.
+        Uses minimal processing and extensive caching.
+
+        Args:
+            raw_segments: List of raw transcript segments
+
+        Returns:
+            List of normalized segments
+        """
+        normalized_segments = []
+
+        # Prepare a batch version of the normalization cache
+        # This avoids repeated dictionary lookups in the hot loop
+        normalization_cache = self._russian_normalization_cache
+
+        for segment in raw_segments:
+            text = segment.get("text", "")
+
+            # Skip empty segments
+            if not text.strip():
+                continue
+
+            # Check cache first
+            if text in normalization_cache:
+                normalized_text = normalization_cache[text]
+            else:
+                # Ultra-simplified normalization
+                # Just clean up basic issues, no advanced processing
+
+                # Replace ё with е (common in Russian)
+                normalized = text.replace('ё', 'е').replace('Ё', 'Е')
+
+                # Remove excessive whitespace
+                normalized = re.sub(r'\s+', ' ', normalized.strip())
+
+                # Fix badly formatted punctuation
+                normalized = re.sub(r'\s+\.', '.', normalized)  # Remove space before period
+                normalized = re.sub(r'\s+,', ',', normalized)   # Remove space before comma
+
+                # Store in cache
+                normalized_text = normalized
+                normalization_cache[text] = normalized_text
+
+            # Create normalized segment
+            normalized_segment = {
+                "id": segment.get("id", str(uuid.uuid4())),
+                "start_time": segment.get("start", 0.0),
+                "end_time": segment.get("start", 0.0) + segment.get("duration", 0.0),
+                "text": normalized_text,
+                "language": "ru"
+                # Skip storing raw_data to save memory
+            }
+
+            normalized_segments.append(normalized_segment)
+
+        return normalized_segments
+
     def _create_sentence_segments(self, normalized_segments: List[Dict], language: str) -> List[Dict]:
         """
         Convert transcript segments into sentence-based segments.
@@ -734,6 +1027,110 @@ class TranscriptProcessor:
 
         return sentence_segments
 
+    def _create_sentence_segments_russian_fast(self, normalized_segments: List[Dict]) -> List[Dict]:
+        """
+        Ultra-optimized sentence segmentation for Russian text.
+        Uses pre-compiled regex patterns and caching for maximum speed.
+
+        Args:
+            normalized_segments: List of normalized transcript segments
+
+        Returns:
+            List of sentence-based segments
+        """
+        sentence_segments = []
+
+        # Get cache reference
+        sentence_cache = self._russian_sentence_cache
+
+        # Direct reference to compiled regex pattern for better performance
+        sentence_pattern = self.russian_sentence_pattern
+
+        # Process each segment
+        for segment in normalized_segments:
+            segment_id = segment.get("id", "")
+            segment_text = segment.get("text", "")
+            start_time = segment.get("start_time", 0.0)
+            end_time = segment.get("end_time", 0.0)
+
+            # Skip empty segments
+            if not segment_text.strip():
+                continue
+
+            # Check cache first
+            cache_key = segment_text[:50]  # Use beginning of segment as cache key
+            if cache_key in sentence_cache:
+                sentences = sentence_cache[cache_key]
+            else:
+                # OPTIMIZATION: Ultra-fast sentence splitting for Russian
+                # Instead of using multiple regex operations, just split on common sentence boundaries
+                # but only if the segment is long enough to likely contain multiple sentences
+                if len(segment_text) > 50 and ('.' in segment_text or '!' in segment_text or '?' in segment_text):
+                    # Split text using regex pattern
+                    split_points = list(sentence_pattern.finditer(segment_text))
+
+                    if split_points:
+                        # Extract sentences based on split points
+                        sentences = []
+                        prev_end = 0
+
+                        for match in split_points:
+                            end_pos = match.start() + 1  # Include the punctuation
+                            sentences.append(segment_text[prev_end:end_pos])
+                            prev_end = match.end() - 1  # Start from after the space
+
+                        # Add the last sentence
+                        if prev_end < len(segment_text):
+                            sentences.append(segment_text[prev_end:])
+                    else:
+                        # No sentence boundaries found, use the whole segment
+                        sentences = [segment_text]
+                else:
+                    # Short segment, treat as a single sentence
+                    sentences = [segment_text]
+
+                # Store in cache
+                sentence_cache[cache_key] = sentences
+
+            # Calculate timing for each sentence
+            segment_duration = end_time - start_time
+            total_chars = sum(len(s) for s in sentences)
+
+            current_pos = 0
+            for i, sentence in enumerate(sentences):
+                # Skip empty sentences
+                if not sentence.strip():
+                    continue
+
+                sentence_len = len(sentence)
+
+                # Calculate proportional timing
+                if total_chars > 0:
+                    sentence_portion = sentence_len / total_chars
+                    sentence_duration = segment_duration * sentence_portion
+                    sentence_start = start_time + (segment_duration * current_pos / total_chars)
+                    sentence_end = sentence_start + sentence_duration
+                    current_pos += sentence_len
+                else:
+                    # Handle empty segments gracefully
+                    sentence_start = start_time
+                    sentence_end = end_time
+
+                # Create sentence segment - minimal fields for speed
+                sentence_segment = {
+                    "id": f"{segment_id}_{i}",
+                    "start_time": sentence_start,
+                    "end_time": sentence_end,
+                    "text": sentence.strip(),
+                    "language": "ru",
+                    "segment_id": segment_id,
+                    "is_sentence": True
+                }
+
+                sentence_segments.append(sentence_segment)
+
+        return sentence_segments
+
     def _get_sentence_tokenizer(self, language: str):
         """
         Get the appropriate sentence tokenizer function for the language.
@@ -757,7 +1154,10 @@ class TranscriptProcessor:
             return lambda text: [sent.text for sent in nlp(text).sents]
 
         # Fallback to simple regex-based tokenization
-        return lambda text: re.split(r'(?<=[.!?])\s+', text)
+        if language == 'ru':
+            return lambda text: re.split(self.russian_sentence_pattern, text)
+        else:
+            return lambda text: re.split(self.sentence_boundary_pattern, text)
 
     def _process_segments_educational_value(
         self,
@@ -788,6 +1188,42 @@ class TranscriptProcessor:
                 global_analysis,
                 language
             )
+
+            # Add educational value to segment
+            processed_segment["educational_value"] = educational_value
+            processed_segment["is_educational"] = educational_value > 2.5
+
+            processed_segments.append(processed_segment)
+
+        return processed_segments
+
+    def _process_segments_educational_value_simple(
+        self,
+        segments: List[Dict]
+    ) -> List[Dict]:
+        """
+        Ultra-simplified educational value calculation for Russian segments.
+        Uses only text length as a basic heuristic to avoid pattern matching.
+
+        Args:
+            segments: List of sentence segments
+
+        Returns:
+            List of processed segments with educational values
+        """
+        processed_segments = []
+
+        # Process each segment using a very simple approach
+        for segment in segments:
+            processed_segment = segment.copy()
+
+            # Get text and word count
+            text = segment.get("text", "")
+            word_count = len(text.split())
+
+            # Simple formula based on length
+            # Longer segments tend to be more educational
+            educational_value = min(1.0 + (word_count / 20), 4.0)
 
             # Add educational value to segment
             processed_segment["educational_value"] = educational_value
@@ -907,7 +1343,7 @@ class TranscriptProcessor:
 
     def _normalize_russian_text(self, text: str) -> str:
         """
-        Normalize Russian text.
+        Normalize Russian text with optimized performance using cached patterns.
 
         Args:
             text: Input text
@@ -915,6 +1351,10 @@ class TranscriptProcessor:
         Returns:
             Normalized text
         """
+        # Check cache first
+        if text in self._russian_normalization_cache:
+            return self._russian_normalization_cache[text]
+
         # Replace all 'ё' with 'е' for better matching
         text = text.replace('ё', 'е').replace('Ё', 'Е')
 
@@ -937,17 +1377,21 @@ class TranscriptProcessor:
         text = re.sub(r'\s+,', ',', text)  # Remove space before comma
         text = re.sub(r'\s+\.', '.', text)  # Remove space before period
 
-        # Common problematic phrases in Russian transcripts
-        text = text.replace("то обсуждений давайте", "")
-        text = text.replace("то состояние второго определённо такое", "")
-        text = text.replace("некоторого некоторой", "")
-        text = text.replace("состояние едини на2", "")
-        text = text.replace("сейчас скажу", "")
-        text = text.replace("потом обсужу", "")
-        text = text.replace("можно убедиться", "")
-        text = text.replace("второго определённо", "")
+        # Apply compiled patterns for improved performance
+        for pattern, repl in self.compiled_russian_noise_patterns:
+            text = pattern.sub(repl, text)
 
-        return text.strip()
+        # Remove common problematic phrases in Russian transcripts
+        for phrase in ["то обсуждений давайте", "то состояние второго определённо такое",
+                     "некоторого некоторой", "состояние едини на2", "сейчас скажу",
+                     "потом обсужу", "можно убедиться", "второго определённо"]:
+            text = text.replace(phrase, "")
+
+        # Store in cache
+        normalized = text.strip()
+        self._russian_normalization_cache[text] = normalized
+
+        return normalized
 
 # Function to calculate video-level theory/practice ratio
 def calculate_theory_practice_ratio(global_analysis: Dict) -> Dict[str, Any]:

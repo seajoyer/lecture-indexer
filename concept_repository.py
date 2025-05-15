@@ -54,6 +54,9 @@ class ConceptRepository:
         self.language_index = defaultdict(set)  # language -> set of concept_ids
         self.variant_index = defaultdict(set)  # variant form -> set of concept_ids
 
+        # Cache for generated variants to avoid recomputation
+        self._variant_cache = {}  # (word, language) -> set of variants
+
         # Ensure concepts directory exists
         os.makedirs(self.concepts_dir, exist_ok=True)
 
@@ -96,6 +99,7 @@ class ConceptRepository:
         self.representation_index = {}
         self.language_index = defaultdict(set)
         self.variant_index = defaultdict(set)  # Clear variant index too
+        self._variant_cache = {}  # Clear variant cache
 
         # Find all JSONL files
         file_pattern = os.path.join(self.concepts_dir, "*.jsonl")
@@ -242,8 +246,10 @@ class ConceptRepository:
         """
         Build an index of morphological variants for all concepts.
         This helps in matching different forms of the same concept.
+        Optimized to use caching for Russian variants.
         """
         logger.info("Building morphological variant index...")
+        start_time = time.time()
 
         # Process each concept and its representations
         for concept_id, concept in self.concepts.items():
@@ -263,11 +269,13 @@ class ConceptRepository:
                         if variant_normalized:
                             self.variant_index[variant_normalized].add(concept_id)
 
-        logger.info(f"Variant index built with {len(self.variant_index)} entries")
+        build_time = time.time() - start_time
+        logger.info(f"Variant index built with {len(self.variant_index)} entries in {build_time:.2f}s")
 
     def _generate_variants(self, text: str, language: str) -> Set[str]:
         """
         Generate common morphological variants of a concept text.
+        Now with caching to avoid repeated work.
 
         Args:
             text: Original concept text
@@ -278,61 +286,112 @@ class ConceptRepository:
         """
         variants = {text}  # Always include the original text
 
+        # Return early for non-target languages
+        if language not in ['ru', 'en']:
+            return variants
+
+        # Check cache first
+        cache_key = (text, language)
+        if cache_key in self._variant_cache:
+            return self._variant_cache[cache_key]
+
         # Apply language-specific variant generation
         if language == 'ru':
-            # Russian has complex morphology, generate common variants
-
-            # Split into words to handle multi-word concepts
-            words = text.split()
-
-            if len(words) > 1:
-                # For multi-word concepts like "соотношение неопределенности"
-
-                # Common singular/plural and case variations for last word
-                last_word = words[-1]
-                word_variants = self._generate_russian_word_variants(last_word)
-
-                # Common case variations for all but last word
-                prefix_words = words[:-1]
-                prefix_variants = []
-
-                for i, word in enumerate(prefix_words):
-                    # Generate variants for each word in the prefix
-                    word_vars = self._generate_russian_word_variants(word)
-
-                    # For the first iteration, just add each variant
-                    if i == 0:
-                        prefix_variants = [[v] for v in word_vars]
-                    else:
-                        # Combine with existing variants
-                        new_variants = []
-                        for existing in prefix_variants:
-                            for var in word_vars:
-                                new_variants.append(existing + [var])
-                        prefix_variants = new_variants
-
-                # Combine prefix variants with last word variants
-                if prefix_variants:
-                    for prefix in prefix_variants:
-                        for last_var in word_variants:
-                            variant = ' '.join(prefix + [last_var])
-                            variants.add(variant)
-            else:
-                # For single-word concepts
-                variants.update(self._generate_russian_word_variants(text))
-
-        elif language == 'en':
-            # English has simpler morphology, but still handle common variants
-            variants.update(self._generate_english_word_variants(text))
+            variants.update(self._generate_russian_variants(text))
+        else:  # English
+            variants.update(self._generate_english_variants(text))
 
         # Add lowercase variant for all languages
         variants.add(text.lower())
+
+        # Cache the results
+        self._variant_cache[cache_key] = variants
+
+        return variants
+
+    def _generate_russian_variants(self, text: str) -> Set[str]:
+        """
+        Generate Russian morphological variants efficiently.
+        Optimized to limit the combinatorial explosion of variants.
+
+        Args:
+            text: Text to generate variants for
+
+        Returns:
+            Set of variants
+        """
+        variants = {text}
+
+        # For single words, apply simple ending transformations
+        words = text.split()
+
+        # OPTIMIZATION: If more than 3 words, only generate variants for the last word
+        # This prevents combinatorial explosion for long phrases
+        if len(words) > 3:
+            # Only generate for the last word to avoid exponential growth
+            last_word = words[-1]
+            last_word_variants = self._generate_russian_word_variants(last_word)
+
+            # Replace the last word with each variant
+            prefix = ' '.join(words[:-1])
+            for variant in last_word_variants:
+                if variant != last_word:  # Skip original to avoid duplicates
+                    variants.add(f"{prefix} {variant}")
+
+            return variants
+
+        # For 1-3 word phrases, apply optimized variant generation
+        if len(words) == 1:
+            # For single words, use word-level variant generation
+            variants.update(self._generate_russian_word_variants(words[0]))
+        elif len(words) == 2:
+            # For two-word phrases, handle first and last words separately
+            # to avoid combinatorial explosion
+            first_variants = self._generate_russian_word_variants(words[0])
+            last_variants = self._generate_russian_word_variants(words[1])
+
+            # Add variants with original first word + variant last word
+            for last_var in last_variants:
+                if last_var != words[1]:  # Skip original to avoid duplicates
+                    variants.add(f"{words[0]} {last_var}")
+
+            # Add variants with variant first word + original last word
+            for first_var in first_variants:
+                if first_var != words[0]:  # Skip original to avoid duplicates
+                    variants.add(f"{first_var} {words[1]}")
+
+            # OPTIMIZATION: Only add a limited number of combined variants
+            # This is critical to prevent exponential growth
+            combined_count = 0
+            for first_var in first_variants:
+                if first_var == words[0]:
+                    continue
+                for last_var in last_variants:
+                    if last_var == words[1]:
+                        continue
+                    # Only add up to 5 combined variants to prevent explosion
+                    if combined_count < 5:
+                        variants.add(f"{first_var} {last_var}")
+                        combined_count += 1
+                    else:
+                        break
+        elif len(words) == 3:
+            # For three-word phrases, only handle the last word to prevent explosion
+            last_word = words[-1]
+            last_word_variants = self._generate_russian_word_variants(last_word)
+
+            # Use original prefix with variant last words
+            prefix = f"{words[0]} {words[1]}"
+            for last_var in last_word_variants:
+                if last_var != last_word:  # Skip original to avoid duplicates
+                    variants.add(f"{prefix} {last_var}")
 
         return variants
 
     def _generate_russian_word_variants(self, word: str) -> Set[str]:
         """
         Generate common Russian morphological variants for a single word.
+        Optimized version with key endings only and early returns.
 
         Args:
             word: Russian word
@@ -340,82 +399,56 @@ class ConceptRepository:
         Returns:
             Set of possible variants
         """
+        # Check cache first
+        cache_key = (word, 'ru_word')
+        if cache_key in self._variant_cache:
+            return self._variant_cache[cache_key]
+
         variants = {word}
 
-        # Common singular/plural and case ending variations
-        if len(word) > 3:  # Only process words of meaningful length
-            # Handle common singular/plural alterations
-            if word.endswith('ие'):
-                variants.add(word[:-2] + 'ия')  # ие -> ия (case change)
-                variants.add(word[:-2] + 'ий')  # ие -> ий (case change)
-                variants.add(word[:-2] + 'ием')  # ие -> ием (instrumental case)
-                variants.add(word + 'м')  # +м (instrumental case)
-            elif word.endswith('ия'):
-                variants.add(word[:-2] + 'ие')  # ия -> ие
-                variants.add(word[:-2] + 'ий')  # ия -> ий
-                variants.add(word[:-2] + 'ию')  # ия -> ию (accusative)
-                variants.add(word[:-2] + 'ией')  # ия -> ией (instrumental)
-            elif word.endswith('ть'):
-                variants.add(word[:-2] + 'ти')  # ть -> ти (infinitive variant)
+        # Skip very short words
+        if len(word) <= 3:
+            self._variant_cache[cache_key] = variants
+            return variants
 
-            # Handle common plural forms
-            if word.endswith('ость'):
-                variants.add(word[:-4] + 'ости')  # ость -> ости (genitive or plural)
-                variants.add(word[:-4] + 'остей')  # ость -> остей (plural genitive)
-                variants.add(word[:-4] + 'остью')  # ость -> остью (instrumental)
-            elif word.endswith('ство'):
-                variants.add(word[:-4] + 'ства')  # ство -> ства (genitive or plural)
-                variants.add(word[:-4] + 'ствам')  # ство -> ствам (plural dative)
-            elif word.endswith('ние'):
-                variants.add(word[:-2] + 'ия')  # ние -> ния (genitive)
-                variants.add(word[:-2] + 'ий')  # ние -> ний (plural genitive)
-                variants.add(word[:-3] + 'й')  # ние -> ний (shorter form)
-                variants.add(word + 'м')  # +м (instrumental case)
-            elif word.endswith('ика'):
-                variants.add(word[:-2] + 'ике')  # ика -> ике (locative)
-                variants.add(word[:-2] + 'ику')  # ика -> ику (accusative)
-                variants.add(word[:-2] + 'ики')  # ика -> ики (plural)
-            elif word.endswith('а'):
-                variants.add(word[:-1] + 'ы')  # а -> ы (plural)
-                variants.add(word[:-1] + 'у')  # а -> у (accusative)
-                variants.add(word[:-1] + 'е')  # а -> е (locative)
-            elif word.endswith('я'):
-                variants.add(word[:-1] + 'и')  # я -> и (plural or genitive)
-                variants.add(word[:-1] + 'ю')  # я -> ю (accusative)
-                variants.add(word[:-1] + 'е')  # я -> е (locative)
-            elif word.endswith('й'):
-                variants.add(word[:-1] + 'я')  # й -> я (genitive)
-                variants.add(word[:-1] + 'ю')  # й -> ю (accusative)
-                variants.add(word[:-1] + 'и')  # й -> и (plural)
-                variants.add(word[:-1] + 'ем')  # й -> ем (instrumental)
-
-            # Special case for words like "неопределенность" -> "неопределенностей"
-            if word.endswith('ь'):
-                variants.add(word[:-1] + 'и')  # ь -> и (plural)
-                variants.add(word[:-1] + 'ей')  # ь -> ей (plural genitive)
-                variants.add(word[:-1] + 'ью')  # ь -> ью (instrumental)
-
-            # Specific to the example "неопределенности" -> "неопределенностей"
-            if word.endswith('ти'):
-                variants.add(word[:-2] + 'тей')  # ти -> тей
-                variants.add(word[:-2] + 'ть')  # ти -> ть (nominative singular)
-
-            # Handle words like "неопределенностей"
-            if word.endswith('тей'):
-                variants.add(word[:-3] + 'ть')  # тей -> ть (singular)
-                variants.add(word[:-3] + 'ти')  # тей -> ти (genitive singular)
-
-        # Handle simple 2-3 letter prepositions and connectors
+        # Skip common short words
         if word in {"от", "до", "на", "по", "за", "из", "под", "над", "при", "для",
                    "и", "а", "но", "или", "что", "как", "так", "где", "кто"}:
-            # These words are invariant, no need to generate variants
-            pass
+            self._variant_cache[cache_key] = variants
+            return variants
 
+        # OPTIMIZATION: Only check most common and productive endings
+        # instead of dozens of specific endings
+        # Key endings for cases and number in Russian
+        key_endings = {
+            'ие': ['ия', 'ий', 'ием'],
+            'ия': ['ие', 'ий', 'ию'],
+            'ть': ['ти'],
+            'ость': ['ости'],
+            'а': ['ы', 'у'],
+            'я': ['и', 'ю'],
+            'й': ['я', 'и'],
+            'ь': ['и']
+        }
+
+        # Check for these key endings only
+        for ending, replacements in key_endings.items():
+            if word.endswith(ending) and len(word) > len(ending) + 2:
+                for replacement in replacements:
+                    variants.add(word[:-len(ending)] + replacement)
+
+                # OPTIMIZATION: Once we've found a matching ending,
+                # don't check the others
+                break
+
+        # Cache results
+        self._variant_cache[cache_key] = variants
         return variants
 
-    def _generate_english_word_variants(self, text: str) -> Set[str]:
+    def _generate_english_variants(self, text: str) -> Set[str]:
         """
-        Generate common English morphological variants.
+        Generate English morphological variants.
+        Already reasonably efficient.
 
         Args:
             text: English text
@@ -428,7 +461,7 @@ class ConceptRepository:
         # Process multi-word phrases
         words = text.split()
 
-        # Simple handling for multi-word phrases - for now, just add variants with/without "the", "a", "an"
+        # Simple handling for multi-word phrases - just add variants with/without "the", "a", "an"
         if len(words) > 1:
             # Remove leading articles if present
             if words[0].lower() in {'the', 'a', 'an'}:
@@ -540,6 +573,7 @@ class ConceptRepository:
         ) -> List[Dict]:
             """
             Find concepts by text using exact and fuzzy matching.
+            Now optimized to be more efficient for Russian text.
 
             Args:
                 text: Text to search for
@@ -582,6 +616,12 @@ class ConceptRepository:
                 return combined_exact_matches[:max_results]
 
             # If no exact or variant matches, try fuzzy matching
+            # OPTIMIZATION: Limit fuzzy matching for Russian to avoid performance issues
+            # For Russian, only use fuzzy matching if we have few words
+            if language == 'ru' and len(text.split()) > 3:
+                # For long Russian phrases, skip expensive fuzzy matching
+                return []
+
             fuzzy_matches = self._find_fuzzy_matches(normalized_text, language, threshold)
 
             # Combine and sort results
@@ -664,6 +704,7 @@ class ConceptRepository:
     ) -> List[Dict]:
         """
         Find concepts that fuzzy match the text.
+        OPTIMIZATION: Limit candidate pool for languages with many variants.
 
         Args:
             normalized_text: Normalized text to match
@@ -688,6 +729,14 @@ class ConceptRepository:
         # If there are no candidates, return empty results
         if not candidate_concept_ids:
             return []
+
+        # OPTIMIZATION: Limit candidates for Russian to avoid performance issues
+        if language == 'ru' and len(candidate_concept_ids) > 200:
+            # For Russian with many concepts, just take a sample of the most relevant ones
+            # This prevents the fuzzy matching from taking too long
+            candidate_list = list(candidate_concept_ids)
+            # Take only the first 200 concepts
+            candidate_concept_ids = set(candidate_list[:200])
 
         # For each candidate, check for fuzzy matches
         for concept_id in candidate_concept_ids:
@@ -1515,7 +1564,8 @@ class ConceptRepository:
                 'prerequisites_count': 0,
                 'related_count': 0
             },
-            'variants': len(self.variant_index)
+            'variants': len(self.variant_index),
+            'variant_cache_size': len(self._variant_cache)
         }
 
         # Count concepts by language
