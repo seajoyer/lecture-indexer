@@ -180,6 +180,257 @@ class SearchEngine:
                 "message": str(e)
             }
 
+    def _apply_canonical_concept_filtering(self, search_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply canonical concept filtering to search results with improved text-based deduplication.
+        Ensures that only canonical concepts are included in results, with variants merged.
+        Also ensures concepts with the same text are properly deduplicated.
+        Preserves educational content metrics in the results.
+
+        Args:
+            search_results: Original search results
+
+        Returns:
+            Updated search results with canonical concepts only and no duplicates
+        """
+        if not search_results or not search_results.get("results"):
+            return search_results
+
+        results = search_results.get("results", [])
+
+        # For segment/occurrence results, we need to deduplicate based on segment content
+        # First group by segment_id or content to identify duplicates
+        segment_groups = {}
+        non_segment_results = []
+
+        # Separate segment-based results and other results
+        for result in results:
+            item_type = result.get("item_type", "")
+
+            if item_type in ["segment", "occurrence"]:
+                # Get segment identifier
+                if item_type == "segment":
+                    segment_id = result.get("id", "")
+                    segment_text = result.get("text", "")
+                    video_id = result.get("video_id", "")
+                else:  # occurrence
+                    occurrence = result.get("occurrence", {})
+                    segment_id = occurrence.get("segment_id", "")
+                    segment_text = occurrence.get("context_text", result.get("text", ""))
+                    video_id = result.get("video_id", "")
+
+                # Create a unique key for this segment
+                # Using both ID and content for robustness
+                key = f"{video_id}_{segment_id}_{segment_text[:50]}"
+
+                if key not in segment_groups:
+                    segment_groups[key] = {
+                        "base_result": result,
+                        "related_concepts": []
+                    }
+                elif item_type == "occurrence":
+                    # If we already have this segment, and this is an occurrence,
+                    # add the related concept information
+                    concept = result.get("concept", {})
+                    if concept:
+                        concept_id = concept.get("concept_id", "")
+                        if concept_id:
+                            segment_groups[key]["related_concepts"].append({
+                                "concept_id": concept_id,
+                                "concept": concept
+                            })
+            else:
+                # Keep non-segment results as they are
+                non_segment_results.append(result)
+
+        # Rebuild the list with deduplicated segments
+        deduplicated_results = non_segment_results.copy()
+
+        # Add one result per segment group
+        for key, group in segment_groups.items():
+            result = group["base_result"].copy()
+            related_concepts = group["related_concepts"]
+
+            # If there are related concepts, add the most relevant one to the result
+            if related_concepts:
+                best_concept = related_concepts[0]  # Just use the first one for simplicity
+
+                # If the result doesn't already have concept information, add it
+                if "concept" not in result:
+                    result["concept"] = best_concept["concept"]
+
+                # Add a field showing all related concepts
+                result["all_related_concepts"] = related_concepts
+
+            deduplicated_results.append(result)
+
+        # Process concepts and apply canonical concept filtering as before
+        concept_results = [r for r in deduplicated_results if r.get("result_type") == "concept"]
+        if concept_results:
+            # Extract concept IDs that need checking
+            concept_ids = [r.get("concept_id") for r in concept_results if r.get("concept_id")]
+
+            if concept_ids:
+                # Find canonical mappings for all these concepts
+                canonical_map = {}
+                seen_canonical_ids = set()  # Track canonical IDs we've already included
+
+                try:
+                    # First get all canonical relationships
+                    placeholders = ", ".join(["?"] * len(concept_ids))
+                    query = f"""
+                    SELECT concept_id, canonical_concept_id, text, normalized_text, language,
+                        educational_weight, is_educational
+                    FROM concepts
+                    WHERE concept_id IN ({placeholders})
+                    """
+
+                    canon_results = self.data_access.execute_query(query, tuple(concept_ids))
+
+                    # Build mapping from concept ID to canonical ID
+                    for result in canon_results:
+                        concept_id = result.get("concept_id")
+                        canonical_id = result.get("canonical_concept_id")
+
+                        if canonical_id:
+                            canonical_map[concept_id] = canonical_id
+
+                    # Now fetch canonical concepts so we have their data
+                    canonical_ids = list(set(canonical_map.values()))
+                    if canonical_ids:
+                        placeholders = ", ".join(["?"] * len(canonical_ids))
+                        query = f"""
+                        SELECT *
+                        FROM concepts
+                        WHERE concept_id IN ({placeholders})
+                        """
+                        canonical_concepts_data = self.data_access.execute_query(query, tuple(canonical_ids))
+                        canonical_concepts = {c["concept_id"]: c for c in canonical_concepts_data}
+                    else:
+                        canonical_concepts = {}
+
+                except Exception as e:
+                    logger.warning(f"Error checking canonical concepts: {e}")
+                    canonical_map = {}
+                    canonical_concepts = {}
+
+                # Filter and deduplicate results
+                filtered_concepts = []
+
+                # Dictionary to track canonical concepts by ID
+                included_canonical_concepts = {}
+
+                # Dictionary to deduplicate by text+language
+                seen_concept_texts = {}
+
+                # Process concept results
+                for result in concept_results:
+                    concept_id = result.get("concept_id")
+                    if not concept_id:
+                        filtered_concepts.append(result)
+                        continue
+
+                    # Create a unique key by text+language to avoid duplicates
+                    text_key = f"{result.get('text', '').lower()}_{result.get('language', '')}"
+
+                    # Skip if we've already seen this text
+                    if text_key in seen_concept_texts:
+                        continue
+
+                    # Check if this is a variant concept
+                    canonical_id = canonical_map.get(concept_id)
+
+                    if not canonical_id:
+                        # This is already a canonical concept or has no canonical relationship
+                        # Only include if we haven't already seen this canonical ID
+                        if concept_id not in seen_canonical_ids:
+                            filtered_concepts.append(result)
+                            seen_canonical_ids.add(concept_id)
+                            included_canonical_concepts[concept_id] = result
+                            seen_concept_texts[text_key] = True
+                        continue
+
+                    # Skip if we've already included this canonical concept
+                    if canonical_id in seen_canonical_ids:
+                        continue
+
+                    # Get canonical concept data
+                    canonical_concept = canonical_concepts.get(canonical_id)
+
+                    if canonical_concept:
+                        # Create a result entry for the canonical concept with merged metadata
+                        # Use the higher relevance score between variant and canonical
+                        relevance_score = result.get("relevance_score", 0)
+                        if canonical_id in included_canonical_concepts:
+                            # If we already have this canonical concept in results from another variant,
+                            # use the higher relevance score
+                            existing_result = included_canonical_concepts[canonical_id]
+                            if relevance_score > existing_result.get("relevance_score", 0):
+                                # Update existing result with higher score
+                                existing_result["relevance_score"] = relevance_score
+                                # Keep track of the variant that caused this result
+                                if "variant_matches" not in existing_result:
+                                    existing_result["variant_matches"] = []
+                                existing_result["variant_matches"].append(result.get("text"))
+                            continue
+                        else:
+                            # Create new canonical result with merged metadata
+                            canonical_result = {
+                                "result_type": "concept",
+                                "concept_id": canonical_id,
+                                "text": canonical_concept.get("text", result.get("text")),
+                                "domain": canonical_concept.get("domain", result.get("domain")),
+                                "language": canonical_concept.get("language", result.get("language")),
+                                "relevance_score": relevance_score,
+                                "is_canonical": True,
+                                "variant_matches": [result.get("text")],
+                                # Include educational content metrics
+                                "educational_weight": canonical_concept.get("educational_weight", 0.0),
+                                "is_educational": bool(canonical_concept.get("is_educational", 0))
+                            }
+
+                            # Copy over other fields if available
+                            if "video_id" in result:
+                                canonical_result["video_id"] = result.get("video_id")
+                            if "video_title" in result:
+                                canonical_result["video_title"] = result.get("video_title")
+
+                            filtered_concepts.append(canonical_result)
+                            seen_canonical_ids.add(canonical_id)
+                            included_canonical_concepts[canonical_id] = canonical_result
+                            # Mark the canonical concept text as seen
+                            canonical_text_key = f"{canonical_concept.get('text', '').lower()}_{canonical_concept.get('language', '')}"
+                            seen_concept_texts[canonical_text_key] = True
+                    else:
+                        # Couldn't find canonical concept, use the original
+                        filtered_concepts.append(result)
+                        seen_canonical_ids.add(concept_id)  # Mark as seen to prevent duplicates
+                        seen_concept_texts[text_key] = True
+
+                # Replace concept results with filtered ones
+                concept_indices = [i for i, r in enumerate(deduplicated_results) if r.get("result_type") == "concept"]
+                for i in range(len(concept_indices)):
+                    if i < len(filtered_concepts):
+                        deduplicated_results[concept_indices[i]] = filtered_concepts[i]
+                    else:
+                        # If we have more indices than filtered concepts, remove the extra ones later
+                        pass
+
+                # Remove any extra concept indices
+                if len(filtered_concepts) < len(concept_indices):
+                    for i in reversed(concept_indices[len(filtered_concepts):]):
+                        deduplicated_results.pop(i)
+
+        # Sort results by relevance score if available
+        if deduplicated_results:
+            deduplicated_results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+
+        # Update the search results
+        search_results["results"] = deduplicated_results
+        search_results["totalResults"] = len(deduplicated_results)
+
+        return search_results
+
     def _enhance_concept_results_with_occurrences(self, concept_results: List[Dict[str, Any]]) -> None:
         """
         Enhance concept search results with occurrence count across all videos.

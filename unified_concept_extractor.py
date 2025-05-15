@@ -215,7 +215,60 @@ class UnifiedConceptExtractor:
         # Load enhanced NLP resources
         self._load_nlp_resources()
 
+        # Domain classification patterns - for verifying domain context matches
+        self._init_domain_patterns()
+
         logger.info(f"UnifiedConceptExtractor initialized for language: {language}")
+
+    def _init_domain_patterns(self):
+        """Initialize domain classification patterns for context validation."""
+        # Domain-specific terms and phrases for verification
+        self.domain_terms = {
+            "physics": {
+                "en": [
+                    "quantum", "mechanics", "energy", "particle", "wave", "field",
+                    "relativity", "force", "matter", "momentum", "electron", "photon",
+                    "nucleus", "atom", "molecule", "quark", "boson", "fermion",
+                    "hamiltonian", "lagrangian", "symmetry", "conservation", "entropy",
+                    "thermodynamics", "electromagnetism", "nuclear", "radiation"
+                ],
+                "ru": [
+                    "квантовый", "механика", "энергия", "частица", "волна", "поле",
+                    "относительность", "сила", "материя", "импульс", "электрон", "фотон",
+                    "ядро", "атом", "молекула", "кварк", "бозон", "фермион",
+                    "гамильтониан", "лагранжиан", "симметрия", "сохранение", "энтропия",
+                    "термодинамика", "электромагнетизм", "ядерный", "излучение"
+                ]
+            },
+            "mathematics": {
+                "en": [
+                    "algebra", "calculus", "geometry", "topology", "function", "theorem",
+                    "proof", "equation", "matrix", "vector", "integral", "derivative",
+                    "differential", "series", "convergence", "set", "group", "ring",
+                    "field", "space", "manifold", "probability", "statistics"
+                ],
+                "ru": [
+                    "алгебра", "анализ", "геометрия", "топология", "функция", "теорема",
+                    "доказательство", "уравнение", "матрица", "вектор", "интеграл", "производная",
+                    "дифференциал", "ряд", "сходимость", "множество", "группа", "кольцо",
+                    "поле", "пространство", "многообразие", "вероятность", "статистика"
+                ]
+            },
+            "programming": {
+                "en": [
+                    "algorithm", "programming", "code", "function", "variable", "class",
+                    "object", "method", "interface", "inheritance", "polymorphism",
+                    "compiler", "interpreter", "syntax", "semantics", "library",
+                    "framework", "api", "database", "query", "server", "client"
+                ],
+                "ru": [
+                    "алгоритм", "программирование", "код", "функция", "переменная", "класс",
+                    "объект", "метод", "интерфейс", "наследование", "полиморфизм",
+                    "компилятор", "интерпретатор", "синтаксис", "семантика", "библиотека",
+                    "фреймворк", "апи", "база данных", "запрос", "сервер", "клиент"
+                ]
+            }
+        }
 
     def _load_nlp_resources(self):
         """Load comprehensive NLP resources including educational markers."""
@@ -352,14 +405,18 @@ class UnifiedConceptExtractor:
         # Update variant matcher language
         self.variant_matcher.language = language
 
+        # Get the detected domain
+        domain = processed_transcript.get("domain", global_analysis.get("domain", "unknown"))
+
         # Log input information
-        logger.info(f"Extracting concepts from transcript: video_id={video_id}, language={language}, segments={len(segments)}")
+        logger.info(f"Extracting concepts from transcript: video_id={video_id}, language={language}, domain={domain}, segments={len(segments)}")
 
         # Extract concepts using repository matching
         result = self.extract_concepts_from_segments(
             segments,
             video_id,
             language,
+            domain,
             global_analysis
         )
 
@@ -394,6 +451,7 @@ class UnifiedConceptExtractor:
         segments: List[Dict[str, Any]],
         video_id: str,
         language: Optional[str] = None,
+        domain: Optional[str] = None,
         global_analysis: Optional[Dict[str, Any]] = None
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -403,6 +461,7 @@ class UnifiedConceptExtractor:
             segments: List of transcript segments
             video_id: Video ID
             language: Optional language filter
+            domain: Optional domain filter
             global_analysis: Optional global text analysis data
 
         Returns:
@@ -428,7 +487,7 @@ class UnifiedConceptExtractor:
         segment_map = {segment.get("id", str(uuid.uuid4())): segment for segment in segments}
 
         # Find matching concepts
-        logger.info(f"Finding matching concepts for video {video_id} in language: {lang}")
+        logger.info(f"Finding matching concepts for video {video_id} in language: {lang}, domain: {domain}")
 
         # Track matched concepts with their occurrences
         matched_concepts = {}
@@ -446,7 +505,8 @@ class UnifiedConceptExtractor:
             segment_matches = self._find_matching_concepts_in_text(
                 segment_text,
                 language=lang,
-                threshold=0.7  # Adjust threshold as needed
+                domain=domain,
+                threshold=0.85  # Increased threshold to reduce false positives
             )
 
             # Process each matched concept
@@ -454,11 +514,33 @@ class UnifiedConceptExtractor:
                 concept_id = match.get("concept_id")
                 concept = match.get("concept")
                 similarity = match.get("similarity", 0.0)
+                concept_domain = match.get("domain", "unknown")
 
                 # Record the actual matched variant from the text
                 matched_variant = match.get("matched_variant", match.get("matched_representation", ""))
 
                 if not concept_id or not concept:
+                    continue
+
+                # Skip if domains don't match and we have domain information
+                if domain and concept_domain and domain != concept_domain and domain != "unknown" and concept_domain != "unknown":
+                    # Only combine domains within certain subject groups
+                    science_domains = {"physics", "mathematics"}
+                    computer_domains = {"programming", "computer_science"}
+
+                    # Allow matching between related domains
+                    domain_match = (
+                        (domain in science_domains and concept_domain in science_domains) or
+                        (domain in computer_domains and concept_domain in computer_domains)
+                    )
+
+                    if not domain_match:
+                        logger.debug(f"Skipping concept {concept_id} due to domain mismatch: {domain} vs {concept_domain}")
+                        continue
+
+                # Verify the match with domain context validation
+                if not self._validate_concept_in_context(segment_text, concept, domain):
+                    logger.debug(f"Skipping concept {concept_id} - failed context validation")
                     continue
 
                 # Calculate educational significance
@@ -497,6 +579,7 @@ class UnifiedConceptExtractor:
                         "text": match.get("matched_representation", ""),
                         "representations": representations,
                         "language": lang,
+                        "domain": concept_domain,
                         "occurrences": [occurrence],
                         "educational_significance": educational_significance,
                         "is_educational": educational_significance >= 2.5
@@ -534,13 +617,14 @@ class UnifiedConceptExtractor:
             "passing_concepts_count": passing_concepts
         }
 
-    def _find_matching_concepts_in_text(self, text: str, language: str, threshold: float = 0.7) -> List[Dict]:
+    def _find_matching_concepts_in_text(self, text: str, language: str, domain: Optional[str] = None, threshold: float = 0.85) -> List[Dict]:
         """
         Find matching concepts in text using the concept repository with enhanced morphological matching.
 
         Args:
             text: Text to search in
             language: Language code
+            domain: Optional domain filter
             threshold: Similarity threshold
 
         Returns:
@@ -551,12 +635,40 @@ class UnifiedConceptExtractor:
             text,
             language=language,
             threshold=threshold,
-            max_results=10  # Limit to avoid excessive processing
+            max_results=5  # Limit to avoid excessive processing
         )
+
+        # Filter matches by domain if specified
+        if domain and domain != "unknown":
+            filtered_matches = []
+            for match in matches:
+                concept = match.get("concept", {})
+                concept_domain = concept.get("metadata", {}).get("domain", "unknown")
+
+                # Allow matching within subject groups
+                science_domains = {"physics", "mathematics"}
+                computer_domains = {"programming", "computer_science"}
+
+                # Check if domains match or are in the same subject group
+                domain_match = (
+                    domain == concept_domain or
+                    concept_domain == "unknown" or
+                    (domain in science_domains and concept_domain in science_domains) or
+                    (domain in computer_domains and concept_domain in computer_domains)
+                )
+
+                if domain_match:
+                    # Add domain info to the match for later use
+                    match["domain"] = concept_domain
+                    filtered_matches.append(match)
+                else:
+                    logger.debug(f"Filtered out concept with domain {concept_domain} (video domain: {domain})")
+
+            matches = filtered_matches
 
         # If no matches from standard repository search, try morphological variant matching
         if not matches and language in ['ru', 'en']:
-            matches = self._find_morphological_variants_in_text(text, language, threshold)
+            matches = self._find_morphological_variants_in_text(text, language, domain, threshold)
 
         # Check if each matched concept exists in the database for valid foreign key relationships
         valid_matches = []
@@ -570,7 +682,56 @@ class UnifiedConceptExtractor:
 
         return valid_matches
 
-    def _find_morphological_variants_in_text(self, text: str, language: str, threshold: float = 0.7) -> List[Dict]:
+    def _validate_concept_in_context(self, text: str, concept: Dict[str, Any], domain: Optional[str] = None) -> bool:
+        """
+        Validate that the concept actually belongs in the text context by checking
+        for domain-specific context terms.
+
+        Args:
+            text: Text segment to validate
+            concept: Concept dictionary
+            domain: Optional domain filter
+
+        Returns:
+            True if the concept is validated in context, False otherwise
+        """
+        # If we don't have domain information, we can't validate
+        if not domain or domain == "unknown":
+            # Try to get domain from concept
+            concept_domain = concept.get("metadata", {}).get("domain", "unknown")
+            if concept_domain == "unknown":
+                # Without domain info, we rely on other checks
+                return True
+            domain = concept_domain
+
+        # Get domain terms for this domain
+        domain_terms = self.domain_terms.get(domain, {}).get(self.language, [])
+
+        # If we don't have terms for this domain, assume it's valid
+        if not domain_terms:
+            return True
+
+        # Check if at least one domain term is present in the text
+        text_lower = text.lower()
+
+        # Count domain terms in the text
+        term_count = sum(1 for term in domain_terms if term in text_lower)
+
+        # For physics concepts, require at least 2 domain terms to reduce false positives
+        if domain == "physics":
+            # If the concept is a common English word, require more domain context
+            concept_text = concept.get("representations", {}).get("en", [""])[0]
+            if concept_text and len(concept_text) <= 5:  # Short common words need more verification
+                # Require at least 2 domain terms for short physics concept words
+                return term_count >= 2
+
+            # For longer physics concepts, still require at least 1 domain term
+            return term_count >= 1
+
+        # For other domains, require at least 1 domain term
+        return term_count >= 1
+
+    def _find_morphological_variants_in_text(self, text: str, language: str, domain: Optional[str] = None, threshold: float = 0.85) -> List[Dict]:
         """
         Find concepts by checking for morphological variants in the text.
         This helps match concepts even when they appear in different grammatical forms.
@@ -578,6 +739,7 @@ class UnifiedConceptExtractor:
         Args:
             text: Text to search in
             language: Language code
+            domain: Optional domain filter
             threshold: Similarity threshold
 
         Returns:
@@ -595,6 +757,22 @@ class UnifiedConceptExtractor:
         # For each concept, check if any of its variants appears in the text
         for concept in concepts:
             concept_id = concept.get("concept_id")
+            concept_domain = concept.get("metadata", {}).get("domain", "unknown")
+
+            # Skip concepts from different domains
+            if domain and domain != "unknown" and concept_domain != "unknown" and domain != concept_domain:
+                # Allow matching between related domains
+                science_domains = {"physics", "mathematics"}
+                computer_domains = {"programming", "computer_science"}
+
+                domain_match = (
+                    (domain in science_domains and concept_domain in science_domains) or
+                    (domain in computer_domains and concept_domain in computer_domains)
+                )
+
+                if not domain_match:
+                    continue
+
             if not concept_id:
                 continue
 
@@ -605,12 +783,21 @@ class UnifiedConceptExtractor:
 
             # Check each representation
             for representation in representations:
+                # Skip very short terms which might cause false positives
+                if len(representation) < 4:
+                    continue
+
                 # Generate variants for this representation
                 variants = self.variant_matcher.generate_variants(representation)
 
                 # Check if any variant appears in the text
                 for variant in variants:
-                    if variant.lower() in text.lower():
+                    variant_lower = variant.lower()
+                    text_lower = text.lower()
+
+                    # Ensure this is a word boundary match, not a substring
+                    pattern = r'\b' + re.escape(variant_lower) + r'\b'
+                    if re.search(pattern, text_lower):
                         # Found a variant match
                         matches.append({
                             "concept_id": concept_id,
@@ -618,7 +805,8 @@ class UnifiedConceptExtractor:
                             "similarity": 0.9,  # High similarity for variant matches
                             "match_type": "variant",
                             "matched_representation": representation,
-                            "matched_variant": variant
+                            "matched_variant": variant,
+                            "domain": concept_domain
                         })
                         break  # Found a match for this representation
 

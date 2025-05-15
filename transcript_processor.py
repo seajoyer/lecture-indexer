@@ -485,7 +485,7 @@ class TranscriptProcessor:
                 key_terms = []
 
                 # Check if noun_chunks attribute is available for this language
-                has_noun_chunks = True
+                has_noun_chunks = False
                 try:
                     # Just test if we can iterate through noun chunks
                     next(iter(doc.noun_chunks), None)
