@@ -1,10 +1,9 @@
 # Video Lecture Content Indexer
 
-> **⚠️ DISCLAIMER ⚠️**
+> [!NOTE] 
 > 
 > *This project was developed with extensive use of AI assistance. The AI wrote almost all of the code based on specifications and requirements, implementing the complex algorithms and system architecture. Use with caution :)*
 > 
-> ---
 
 This system processes YouTube video lectures across various academic disciplines, creating a unified searchable index of concepts. It allows students to quickly find relevant educational content within a large video database by distinguishing between passing mentions and substantive explanations of concepts.
 
